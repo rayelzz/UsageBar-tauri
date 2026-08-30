@@ -14,31 +14,57 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            args: --bundles dmg,app
-          - os: windows-latest
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin --bundles dmg,app
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin --bundles dmg,app
+          - platform: windows-latest
             args: --bundles nsis
-          - os: ubuntu-22.04
+          - platform: ubuntu-22.04
             args: --bundles deb,appimage
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - name: Linux deps
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - run: npm install
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: UsageBar ${{ github.ref_name }}
+          tagName: v__VERSION__
+          releaseName: UsageBar v__VERSION__
+          releaseBody: |
+            Download the asset that matches your machine.
+
+            - **macOS Apple Silicon (M1/M2/M3/M4):** `aarch64.dmg`
+            - **macOS Intel:** `x64.dmg`
+            - **Windows:** `x64-setup.exe`
+            - **Linux:** `.AppImage` or `.deb`
+
+            First launch on macOS is unsigned. Right-click → Open, or allow it in System Settings → Privacy & Security.
+
+            UsageBar only reads local logins. Sign in to Codex / Cursor / Grok / GLM on this computer first.
+
+            ---
+
+            按自己的电脑下载对应安装包。
+
+            - **macOS 苹果芯片（M 系列）：** `aarch64.dmg`
+            - **macOS Intel：** `x64.dmg`
+            - **Windows：** `x64-setup.exe`
+            - **Linux：** `.AppImage` 或 `.deb`
+
+            macOS 第一次打开请右键 → 打开。安装包不带账号，需在本机自行登录各工具。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

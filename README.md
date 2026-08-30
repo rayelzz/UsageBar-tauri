@@ -91,8 +91,9 @@ Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed
 Needs a working Codex / Cursor / Grok / GLM login **on that same machine**. The installer does not ship anyone’s account.
 
 1. Download the latest build from [Releases](https://github.com/rayelzz/UsageBar-tauri/releases/latest).
-   - macOS: `.dmg` / `.app`
-   - Windows: NSIS installer
+   - macOS Apple Silicon (M): `aarch64.dmg`
+   - macOS Intel: `x64.dmg`
+   - Windows: `x64-setup.exe`
    - Linux: `.AppImage` or `.deb`
 2. macOS builds are unsigned (ad-hoc). First launch: right-click → Open, or allow it in **System Settings → Privacy & Security**.
 3. Sign in to Codex CLI / Cursor / Grok CLI / GLM as you already do. UsageBar will pick up those sessions.
@@ -111,7 +112,7 @@ Artifacts:
 - Windows: `src-tauri/target/release/bundle/nsis`
 - Linux: `src-tauri/target/release/bundle/appimage` or `deb`
 
-Push a `v*` tag to run GitHub Actions and publish all three platforms (see `.github/workflows/release.yml`).
+Push a `v*` tag to run GitHub Actions and publish macOS (Apple Silicon + Intel), Windows, and Linux (see `.github/workflows/release.yml`).
 
 ### Menu
 
@@ -258,8 +259,9 @@ Cursor 会话文件位置：
 对方电脑必须**自己登录** Codex / Cursor / Grok / GLM。安装包不带任何人的账号。
 
 1. 从 [Releases](https://github.com/rayelzz/UsageBar-tauri/releases/latest) 下载对应系统的包。
-   - macOS：`.dmg` / `.app`
-   - Windows：NSIS 安装包
+   - macOS 苹果芯片（M 系列）：`aarch64.dmg`
+   - macOS Intel：`x64.dmg`
+   - Windows：`x64-setup.exe`
    - Linux：`.AppImage` 或 `.deb`
 2. macOS 包是临时签名。第一次打开用右键 → 打开，或在 **系统设置 → 隐私与安全性** 里允许。
 3. 照常登录 Codex CLI / Cursor / Grok CLI / GLM，UsageBar 会读这些登录态。
@@ -278,7 +280,7 @@ npm run tauri build    # 本机安装包
 - Windows：`src-tauri/target/release/bundle/nsis`
 - Linux：`src-tauri/target/release/bundle/appimage` 或 `deb`
 
-推送 `v*` 标签会走 GitHub Actions，同时出三个平台的包。
+推送 `v*` 标签会走 GitHub Actions，同时出 macOS（苹果芯片 + Intel）、Windows 和 Linux 的包。
 
 ### 菜单
 
