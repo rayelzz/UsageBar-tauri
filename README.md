@@ -51,7 +51,7 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | Tool | Local credential | Official API | Ring / tooltip |
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | Weekly limit (and extra windows if present) |
-| **Cursor** | Cursor `state.vscdb` session | `cursor.com/api/usage-summary` | Included usage + API usage |
+| **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` | Included usage + API usage |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly allowance + extra windows |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | 5-hour window + weekly + MCP |
 
@@ -110,7 +110,7 @@ Preferences are stored at `~/.usagebar/prefs.json`.
 That tool is not signed in on this computer, or UsageBar cannot read its local credential. Sign in with the official app / CLI first, then choose **Refresh now**.
 
 **Cursor says “Cursor login not found”.**  
-UsageBar reads `cursorAuth/accessToken` and `cursorAuth/userId` from Cursor’s local `state.vscdb`. Open the **Cursor desktop app** on this machine and sign in. Installing UsageBar on another computer does not copy your Cursor session.
+UsageBar reads `cursorAuth/accessToken` from Cursor’s local `state.vscdb`, then the user id from `cursorAuth/userId` (older Cursor), or `glass.lastSignedInAuthId` / `adminSettings.cachedAuthId` / the access-token JWT `sub` (newer Cursor). Open the **Cursor desktop app** on this machine and sign in. Installing UsageBar on another computer does not copy your Cursor session.
 
 **I sent UsageBar to a friend and they see no Cursor / Codex data.**  
 Expected. Credentials stay on each machine. They need their own Cursor / Codex / Grok / GLM login.

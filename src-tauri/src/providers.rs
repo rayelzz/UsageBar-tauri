@@ -363,47 +363,135 @@ fn refresh_codex(auth: &mut Value, path: &Path) -> bool {
 
 // MARK: Cursor
 
-fn cursor_db() -> PathBuf {
-    if cfg!(target_os = "macos") {
-        home().join("Library/Application Support/Cursor/User/globalStorage/state.vscdb")
-    } else if cfg!(target_os = "windows") {
-        dirs::data_dir()
-            .unwrap_or_else(|| home().join("AppData/Roaming"))
-            .join("Cursor/User/globalStorage/state.vscdb")
+fn cursor_dbs() -> Vec<PathBuf> {
+    let names = ["Cursor", "Cursor Nightly"];
+    names
+        .into_iter()
+        .map(|name| {
+            if cfg!(target_os = "macos") {
+                home()
+                    .join("Library/Application Support")
+                    .join(name)
+                    .join("User/globalStorage/state.vscdb")
+            } else if cfg!(target_os = "windows") {
+                dirs::data_dir()
+                    .unwrap_or_else(|| home().join("AppData/Roaming"))
+                    .join(name)
+                    .join("User/globalStorage/state.vscdb")
+            } else {
+                dirs::config_dir()
+                    .unwrap_or_else(|| home().join(".config"))
+                    .join(name)
+                    .join("User/globalStorage/state.vscdb")
+            }
+        })
+        .collect()
+}
+
+fn clean_cursor_id(raw: String) -> Option<String> {
+    let id = raw.trim().trim_matches('"').trim().to_string();
+    if id.is_empty() || id.len() > 200 {
+        None
     } else {
-        dirs::config_dir()
-            .unwrap_or_else(|| home().join(".config"))
-            .join("Cursor/User/globalStorage/state.vscdb")
+        Some(id)
     }
 }
 
-fn fetch_cursor() -> ProviderSnapshot {
-    let db = cursor_db();
-    let (Some(token), Some(user_id)) = (
-        sqlite_value(&db, "cursorAuth/accessToken"),
-        sqlite_value(&db, "cursorAuth/userId"),
-    ) else {
-        return empty("cursor", "Cursor Usage", "login_not_found");
-    };
-    let cookie = format!("WorkosCursorSessionToken={user_id}%3A%3A{token}");
-    let headers = [
-        ("Accept", "application/json".into()),
-        ("User-Agent", "Mozilla/5.0 UsageBar/1.0".into()),
-        ("Origin", "https://cursor.com".into()),
-        ("Referer", "https://cursor.com/dashboard?tab=usage".into()),
-        ("Cookie", cookie),
-    ];
-    let json = match http_get_json("https://cursor.com/api/usage-summary", &headers) {
-        Ok((200, json)) => json,
-        Ok((code, _)) => {
-            return empty(
-                "cursor",
-                "Cursor Usage",
-                &format!("api_error:{code}"),
-            )
+fn jwt_sub(token: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let json = String::from_utf8(b64url_decode(payload)?).ok()?;
+    serde_json::from_str::<Value>(&json)
+        .ok()?
+        .get("sub")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+fn b64url_decode(input: &str) -> Option<Vec<u8>> {
+    fn val(c: u8) -> Option<u8> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return None,
+        })
+    }
+    let bytes: Vec<u8> = input.bytes().filter(|c| *c != b'=').collect();
+    if bytes.is_empty() {
+        return Some(Vec::new());
+    }
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        let a = val(*chunk.first()?)?;
+        let b = val(*chunk.get(1)?)?;
+        out.push((a << 2) | (b >> 4));
+        if chunk.len() >= 3 {
+            let c = val(chunk[2])?;
+            out.push(((b & 0x0f) << 4) | (c >> 2));
+            if chunk.len() == 4 {
+                let d = val(chunk[3])?;
+                out.push(((c & 0x03) << 6) | d);
+            }
         }
-        Err(e) => return empty("cursor", "Cursor Usage", &e),
+    }
+    Some(out)
+}
+
+fn cursor_user_ids(db: &Path, token: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut push = |value: Option<String>| {
+        if let Some(id) = value.and_then(clean_cursor_id) {
+            if !ids.iter().any(|existing| existing == &id) {
+                ids.push(id);
+            }
+        }
     };
+    // Old Cursor writes cursorAuth/userId. Newer builds often omit it.
+    push(sqlite_value(db, "cursorAuth/userId"));
+    push(sqlite_value(db, "glass.lastSignedInAuthId"));
+    push(sqlite_value(db, "adminSettings.cachedAuthId"));
+    push(sqlite_value(db, "cursorAuth/stripeMembershipAuthId"));
+    push(jwt_sub(token));
+    ids
+}
+
+fn cursor_session_cookie(user_id: &str, token: &str) -> String {
+    let user_id = user_id.replace('|', "%7C");
+    format!("WorkosCursorSessionToken={user_id}%3A%3A{token}")
+}
+
+fn fetch_cursor() -> ProviderSnapshot {
+    let mut last_error = "login_not_found".to_string();
+    for db in cursor_dbs() {
+        let Some(token) = sqlite_value(&db, "cursorAuth/accessToken").and_then(clean_cursor_id) else {
+            continue;
+        };
+        let ids = cursor_user_ids(&db, &token);
+        if ids.is_empty() {
+            last_error = "login_not_found".into();
+            continue;
+        }
+        for user_id in ids {
+            let headers = [
+                ("Accept", "application/json".into()),
+                ("User-Agent", "Mozilla/5.0 UsageBar/1.0".into()),
+                ("Origin", "https://cursor.com".into()),
+                ("Referer", "https://cursor.com/dashboard?tab=usage".into()),
+                ("Cookie", cursor_session_cookie(&user_id, &token)),
+            ];
+            match http_get_json("https://cursor.com/api/usage-summary", &headers) {
+                Ok((200, json)) => return parse_cursor(json),
+                Ok((code, _)) => last_error = format!("api_error:{code}"),
+                Err(e) => last_error = e,
+            }
+        }
+    }
+    empty("cursor", "Cursor Usage", &last_error)
+}
+
+fn parse_cursor(json: Value) -> ProviderSnapshot {
     let plan = json
         .pointer("/individualUsage/plan")
         .cloned()
@@ -749,4 +837,25 @@ pub fn format_reset(ms: Option<i64>) -> Option<String> {
         "Resets {}",
         dt.with_timezone(&Local).format("%a %I:%M %p")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jwt_sub_reads_auth_id() {
+        let payload = "eyJzdWIiOiJhdXRoMHx1c2VyXzEifQ";
+        let token = format!("aaa.{payload}.sig");
+        assert_eq!(jwt_sub(&token).as_deref(), Some("auth0|user_1"));
+    }
+
+    #[test]
+    fn cookie_encodes_pipe_in_auth_id() {
+        let cookie = cursor_session_cookie("google-oauth2|user_x", "tok");
+        assert_eq!(
+            cookie,
+            "WorkosCursorSessionToken=google-oauth2%7Cuser_x%3A%3Atok"
+        );
+    }
 }

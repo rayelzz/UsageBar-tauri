@@ -51,7 +51,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | 工具 | 本机凭证 | 官方接口 | 圆环 / 气泡 |
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 周额度（及额外窗口） |
-| **Cursor** | Cursor `state.vscdb` 会话 | `cursor.com/api/usage-summary` | Included usage + API usage |
+| **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` | Included usage + API usage |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | 周额度 + 额外窗口 |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | 5 小时窗口 + 周额度 + MCP |
 
@@ -103,7 +103,7 @@ npm run tauri build    # 本机安装包
 这台电脑上还没登录该工具，或读不到本机凭证。先用官方应用 / CLI 登录，再点 **立即刷新**。
 
 **Cursor 提示「未找到 Cursor 登录信息」？**  
-UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken` 和 `cursorAuth/userId`。请在**这台电脑**打开 Cursor 桌面端并登录。把 UsageBar 拷给别人，不会带上你的 Cursor 登录态。
+UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken`，用户 ID 依次尝试旧版 `cursorAuth/userId`，以及新版的 `glass.lastSignedInAuthId`、`adminSettings.cachedAuthId`、access token JWT 的 `sub`。请在**这台电脑**打开 Cursor 桌面端并登录。把 UsageBar 拷给别人，不会带上你的 Cursor 登录态。
 
 **发给朋友后，对方看不到 Cursor / Codex 用量？**  
 这是预期行为。凭证只存在各自电脑上，对方需要自己登录。
