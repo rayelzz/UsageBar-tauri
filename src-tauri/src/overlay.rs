@@ -16,7 +16,6 @@ const ICONS_H: (f64, f64) = (92.0, 26.0);
 pub static JS_LEFT: AtomicBool = AtomicBool::new(false);
 pub static MENU_OPEN: AtomicBool = AtomicBool::new(false);
 
-const PROVIDERS: [&str; 4] = ["codex", "cursor", "grok", "glm"];
 
 pub struct Overlay {
     pub prefs: Mutex<Prefs>,
@@ -236,7 +235,8 @@ fn hover_id(
     }
     let local_x = (mx - px) / scale;
     let local_y = (my - py) / scale;
-    let count = PROVIDERS.len() as f64;
+    let slots = prefs::display_slots(prefs);
+    let count = prefs::SLOT_COUNT as f64;
     if is_icons(prefs) {
         let vertical = is_vertical(&prefs.edge);
         let along = if vertical { ph / scale } else { pw / scale };
@@ -247,8 +247,8 @@ fn hover_id(
         let slot = along / count;
         let idx = (coord / slot).floor() as i32;
         let mid = (idx as f64 + 0.5) * slot;
-        if idx >= 0 && (idx as usize) < PROVIDERS.len() && (coord - mid).abs() < slot * 0.48 {
-            return Some(PROVIDERS[idx as usize].to_string());
+        if idx >= 0 && (idx as usize) < prefs::SLOT_COUNT && (coord - mid).abs() < slot * 0.48 {
+            return slots[idx as usize].clone();
         }
         return None;
     }
@@ -267,8 +267,8 @@ fn hover_id(
     let slot = inner / count;
     let idx = ((coord - inset_start) / slot).floor() as i32;
     let mid = inset_start + (idx as f64 + 0.5) * slot;
-    if idx >= 0 && (idx as usize) < PROVIDERS.len() && (coord - mid).abs() < slot * 0.48 {
-        return Some(PROVIDERS[idx as usize].to_string());
+    if idx >= 0 && (idx as usize) < prefs::SLOT_COUNT && (coord - mid).abs() < slot * 0.48 {
+        return slots[idx as usize].clone();
     }
     None
 }

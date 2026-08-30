@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README_CN.md)
 
-A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, and **GLM**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
+A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **Claude**, **Copilot**, **Gemini**, and **Antigravity**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
 
 macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
@@ -34,7 +34,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 ### Features
 
-- Four rings on one compact bar: Codex, Cursor, Grok, GLM
+- Four ring slots on one compact bar. Default: Codex, Cursor, Grok, GLM. Pick any four tools (and their order) from **Tools…**
 - Hover for included usage, API usage, weekly / 5-hour windows, and reset time
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
@@ -54,6 +54,10 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` | Included usage + API usage |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly allowance + extra windows |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | 5-hour window + weekly + MCP |
+| **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour window + weekly (+ Opus if present) |
+| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Premium requests + reset date |
+| **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
+| **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | Tightest model quota + reset |
 
 Cursor session file:
 
@@ -65,7 +69,7 @@ Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed
 
 ### Install
 
-Needs a working Codex / Cursor / Grok / GLM login **on that same machine**. The installer does not ship anyone’s account.
+Needs a working login **on that same machine** for whichever tools you show. The installer does not ship anyone’s account.
 
 1. Download the latest build from [Releases](https://github.com/rayelzz/UsageBar-tauri/releases/latest).
    - macOS Apple Silicon (M): `aarch64.dmg`
@@ -80,7 +84,7 @@ Needs a working Codex / Cursor / Grok / GLM login **on that same machine**. The 
    ```
 
    The “UsageBar.app is damaged” dialog is Gatekeeper quarantine, not a broken download. Do not move it to the Trash.
-3. Sign in to Codex CLI / Cursor / Grok CLI / GLM as you already do. UsageBar will pick up those sessions.
+3. Sign in to the tools you want to watch (Codex CLI, Cursor, Grok CLI, GLM, Claude Code, GitHub Copilot, Gemini CLI, Antigravity). UsageBar will pick up those sessions.
 
 Build from source:
 
@@ -107,6 +111,7 @@ Menu bar / tray **UB**, or right-click the bar:
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
+- **Tools…**: choose up to 4 tools and their order. Empty slots stay on the bar as **—**
 - Open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.
@@ -117,10 +122,16 @@ Preferences are stored at `~/.usagebar/prefs.json`.
 That tool is not signed in on this computer, or UsageBar cannot read its local credential. Sign in with the official app / CLI first, then choose **Refresh now**.
 
 **Cursor says “Cursor login not found”.**  
-UsageBar reads `cursorAuth/accessToken` from Cursor’s local `state.vscdb`, then the user id from `cursorAuth/userId` (older Cursor), or `glass.lastSignedInAuthId` / `adminSettings.cachedAuthId` / the access-token JWT `sub` (newer Cursor). Open the **Cursor desktop app** on this machine and sign in. Installing UsageBar on another computer does not copy your Cursor session.
+UsageBar reads `cursorAuth/accessToken` from Cursor’s local `state.vscdb` (JWTs can be several hundred characters; older builds mistakenly dropped those). Then it tries the user id from `cursorAuth/userId`, or `glass.lastSignedInAuthId` / `adminSettings.cachedAuthId` / the access-token JWT `sub`. Open the **Cursor desktop app** on this machine and sign in. Installing UsageBar on another computer does not copy your Cursor session.
+
+**Grok shows “no data” but I am signed in.**  
+Login is `~/.grok/auth.json`. Newer Grok CLI unified-billing responses dropped `creditUsagePercent`; UsageBar now also reads `/v1/billing` monthly / on-demand fields, and still shows the weekly window when Apple-style percents are missing.
 
 **I sent UsageBar to a friend and they see no Cursor / Codex data.**  
-Expected. Credentials stay on each machine. They need their own Cursor / Codex / Grok / GLM login.
+Expected. Credentials stay on each machine. They need their own logins for the tools they show.
+
+**Claude / Copilot / Gemini / Antigravity shows “no data”.**  
+Sign in with that tool’s official CLI or editor on this computer first. Claude reads Keychain / `~/.claude/.credentials.json`. Copilot reads `~/.config/github-copilot`. Gemini reads `~/.gemini/oauth_creds.json`. Antigravity reads `~/.gemini/antigravity-cli/antigravity-oauth-token`. UsageBar does not estimate tokens from local logs.
 
 **Does UsageBar upload chats or package my tokens?**  
 No. It only reads local session files / env keys and calls official usage APIs. Tokens are never bundled into the installer.

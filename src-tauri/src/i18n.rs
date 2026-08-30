@@ -104,6 +104,22 @@ pub fn language(locale: &str) -> &'static str {
     }
 }
 
+pub fn tools(locale: &str) -> &'static str {
+    if is_zh(locale) {
+        "工具…"
+    } else {
+        "Tools…"
+    }
+}
+
+pub fn tools_window(locale: &str) -> &'static str {
+    if is_zh(locale) {
+        "工具"
+    } else {
+        "Tools"
+    }
+}
+
 pub fn open_at_login(locale: &str) -> &'static str {
     if is_zh(locale) {
         "登录时打开"

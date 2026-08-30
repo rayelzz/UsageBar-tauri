@@ -12,8 +12,12 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 
 #[tauri::command]
-async fn fetch_usage() -> Vec<providers::ProviderSnapshot> {
-    tauri::async_runtime::spawn_blocking(providers::fetch_all)
+async fn fetch_usage(app: AppHandle) -> Vec<providers::ProviderSnapshot> {
+    let ids = app
+        .try_state::<Overlay>()
+        .and_then(|state| state.prefs.lock().ok().map(|p| p.visible_providers.clone()))
+        .unwrap_or_else(|| prefs::load().visible_providers);
+    tauri::async_runtime::spawn_blocking(move || providers::fetch_selected(&ids))
         .await
         .unwrap_or_default()
 }
@@ -29,7 +33,8 @@ fn get_prefs(app: AppHandle) -> Prefs {
 }
 
 #[tauri::command]
-fn set_prefs(app: AppHandle, prefs: Prefs) {
+fn set_prefs(app: AppHandle, mut prefs: Prefs) {
+    prefs.visible_providers = prefs::normalize_visible(&prefs.visible_providers);
     if let Some(state) = app.try_state::<Overlay>() {
         if let Ok(mut slot) = state.prefs.lock() {
             *slot = prefs.clone();
@@ -38,6 +43,7 @@ fn set_prefs(app: AppHandle, prefs: Prefs) {
     prefs::save(&prefs);
     apply_tray(&app, &prefs);
     let _ = overlay::place(&app);
+    let _ = app.emit("usagebar-prefs", &prefs);
 }
 
 #[tauri::command]
@@ -68,6 +74,20 @@ fn format_reset(ms: Option<i64>) -> Option<String> {
 #[tauri::command]
 fn quit(app: AppHandle) {
     app.exit(0);
+}
+
+#[tauri::command]
+fn open_settings(app: AppHandle) {
+    let loc = app
+        .try_state::<Overlay>()
+        .and_then(|state| state.prefs.lock().ok().map(|p| p.locale.clone()))
+        .unwrap_or_else(|| prefs::load().locale);
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.set_title(i18n::tools_window(&loc));
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+    }
 }
 
 #[tauri::command]
@@ -196,6 +216,7 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
     let lang_zh = CheckMenuItem::with_id(app, "locale:zh", "中文", true, zh, None::<&str>)?;
     let lang_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&lang_en, &lang_zh];
     let lang_sub = Submenu::with_id_and_items(app, "language", i18n::language(loc), true, &lang_refs)?;
+    let tools = MenuItem::with_id(app, "tools", i18n::tools(loc), true, None::<&str>)?;
     let login = CheckMenuItem::with_id(
         app,
         "login",
@@ -221,6 +242,7 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
             &bottom,
             &style_sub,
             &lang_sub,
+            &tools,
             &sep,
             &login,
             &sep,
@@ -306,7 +328,8 @@ pub fn run() {
             format_reset,
             quit,
             os_name,
-            tray_rect
+            tray_rect,
+            open_settings
         ])
         .setup(|app| {
             for (label, win) in app.webview_windows() {
@@ -332,6 +355,15 @@ pub fn run() {
                 {
                     let _ = tip.set_visible_on_all_workspaces(true);
                 }
+            }
+            if let Some(settings) = app.get_webview_window("settings") {
+                let hide = settings.clone();
+                settings.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = hide.hide();
+                    }
+                });
             }
 
             let prefs = prefs::load();

@@ -325,3 +325,131 @@ html.dragging, html.dragging * {
 }
 
 .menu .sub:hover .sub-list { display: block; }
+
+.cell.empty-slot,
+.mini-ring.empty-slot {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+html.settings,
+html.settings body {
+  overflow: auto;
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.settings,
+  html.settings body {
+    background: #1c1c1e;
+    color: #f5f5f7;
+  }
+}
+
+#settings-root {
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.settings-page {
+  padding: 22px 22px 28px;
+  box-sizing: border-box;
+}
+
+.settings-page h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.settings-hint,
+.settings-count {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6e6e73;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-hint,
+  .settings-count {
+    color: #a1a1a6;
+  }
+}
+
+.settings-count.warn {
+  color: #c9342a;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-row {
+    background: rgba(44, 44, 46, 0.92);
+  }
+}
+
+.settings-row label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.settings-row .name {
+  font-size: 14px;
+  font-weight: 560;
+}
+
+.settings-row .icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+}
+
+.settings-row .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.settings-row .icon .glyph {
+  fill: currentColor;
+}
+
+.settings-row button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-row button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-row button {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}

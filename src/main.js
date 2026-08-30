@@ -28,6 +28,34 @@ const ICONS = {
       "M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z",
     ],
   },
+  claude: {
+    viewBox: "0 0 24 24",
+    evenOdd: false,
+    d: [
+      "M13.827 3.52h3.603L24 20.48h-3.603l-6.57-16.96zm-7.258 0h3.767L16.906 20.48h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.135 9.798L7.863 7.698 5.017 13.317h5.687z",
+    ],
+  },
+  copilot: {
+    viewBox: "0 0 24 24",
+    evenOdd: false,
+    d: [
+      "M8 3.5h8A2.5 2.5 0 0 1 18.5 6v1.6h1.1A1.4 1.4 0 0 1 21 9v4.4a5.6 5.6 0 0 1-5.6 5.6H8.6A5.6 5.6 0 0 1 3 13.4V9a1.4 1.4 0 0 1 1.4-1.4h1.1V6A2.5 2.5 0 0 1 8 3.5zm2.3 8.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm5.4-1.6a1.6 1.6 0 1 0-3.2 0 1.6 1.6 0 0 0 3.2 0z",
+    ],
+  },
+  gemini: {
+    viewBox: "0 0 24 24",
+    evenOdd: false,
+    d: [
+      "M11.685 5.655 12 2.19l.315 3.465c.257 2.827 2.503 5.073 5.33 5.33L21.11 11.3l-3.465.315c-2.827.257-5.073 2.503-5.33 5.33L12 20.41l-.315-3.465c-.257-2.827-2.503-5.073-5.33-5.33L2.89 11.3l3.465-.315c2.827-.257 5.073-2.503 5.33-5.33z",
+    ],
+  },
+  antigravity: {
+    viewBox: "0 0 24 24",
+    evenOdd: true,
+    d: [
+      "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2.4a7.6 7.6 0 1 1 0 15.2 7.6 7.6 0 0 1 0-15.2zM3.2 12c2.2-3.6 6.2-5.8 8.8-5.8s6.6 2.2 8.8 5.8c-2.2 3.6-6.2 5.8-8.8 5.8S5.4 15.6 3.2 12z",
+    ],
+  },
 };
 
 const SIZES = {
@@ -40,7 +68,19 @@ const ICONS_SIZE = {
 };
 const SNAP = 32;
 const REFRESH_SECS = [15, 30, 60, 120, 300, 600, 0];
-const VENDORS = { codex: "Codex", cursor: "Cursor", grok: "Grok", glm: "GLM" };
+const VENDORS = {
+  codex: "Codex",
+  cursor: "Cursor",
+  grok: "Grok",
+  glm: "GLM",
+  claude: "Claude",
+  copilot: "Copilot",
+  gemini: "Gemini",
+  antigravity: "Antigravity",
+};
+const CATALOG_IDS = Object.keys(VENDORS);
+const SLOT_COUNT = 4;
+const DEFAULT_VISIBLE = ["codex", "cursor", "grok", "glm"];
 const METRIC_LABELS = {
   en: {
     "Included usage": "Included usage",
@@ -49,8 +89,12 @@ const METRIC_LABELS = {
     "Weekly allowance": "Weekly allowance",
     "5-hour window": "5-hour window",
     "Monthly limit": "Monthly limit",
+    "On-demand": "On-demand",
     "Current window": "Current window",
     "MCP tools": "MCP tools",
+    "Weekly Opus": "Weekly Opus",
+    "Weekly Sonnet": "Weekly Sonnet",
+    "Premium requests": "Premium requests",
     Usage: "Usage",
   },
   zh: {
@@ -60,8 +104,12 @@ const METRIC_LABELS = {
     "Weekly allowance": "周额度",
     "5-hour window": "5 小时窗口",
     "Monthly limit": "月额度",
+    "On-demand": "按需用量",
     "Current window": "当前窗口",
     "MCP tools": "MCP 工具",
+    "Weekly Opus": "Weekly Opus",
+    "Weekly Sonnet": "Weekly Sonnet",
+    "Premium requests": "Premium 请求",
     Usage: "用量",
   },
 };
@@ -88,6 +136,13 @@ function t() {
         language: "语言",
         openAtLogin: "登录时打开",
         quit: "退出 UsageBar",
+        tools: "工具…",
+        toolsTitle: "工具",
+        toolsHint: "最多显示 4 个。顺序即圆环从左到右 / 从上到下的顺序。没登录的工具显示暂无数据。",
+        toolsMax: "已经选了 4 个，请先取消一个再勾选。",
+        moveUp: "上移",
+        moveDown: "下移",
+        selectedCount: (n) => `已选 ${n} / 4`,
         off: "关闭",
         noData: "暂无数据",
         days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
@@ -108,6 +163,13 @@ function t() {
         language: "Language",
         openAtLogin: "Open at login",
         quit: "Quit UsageBar",
+        tools: "Tools…",
+        toolsTitle: "Tools",
+        toolsHint: "Show up to 4 tools. Order is left-to-right / top-to-bottom on the bar. Unsigned-in tools show No data.",
+        toolsMax: "4 tools already selected. Uncheck one first.",
+        moveUp: "Move up",
+        moveDown: "Move down",
+        selectedCount: (n) => `${n} / 4 selected`,
         off: "Off",
         noData: "No data",
         days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -130,6 +192,29 @@ function intervalLabel(sec) {
 
 function vendorName(id) {
   return VENDORS[id] || id;
+}
+
+function normalizeVisible(ids) {
+  const out = [];
+  for (const id of ids || []) {
+    if (CATALOG_IDS.includes(id) && !out.includes(id)) out.push(id);
+    if (out.length === SLOT_COUNT) break;
+  }
+  return out.length ? out : DEFAULT_VISIBLE.slice();
+}
+
+function emptySnap(id) {
+  if (!id) return { id: "", title: "", headlinePercent: null, metrics: [], error: null };
+  return { id, title: usageTitle(id), headlinePercent: null, metrics: [], error: null };
+}
+
+function slotsFrom(got) {
+  const vis = normalizeVisible(prefs.visibleProviders);
+  const byId = Object.fromEntries((got || []).map((s) => [s.id, s]));
+  return Array.from({ length: SLOT_COUNT }, (_, i) => {
+    const id = vis[i] || "";
+    return id ? byId[id] || emptySnap(id) : emptySnap("");
+  });
 }
 
 function usageTitle(id) {
@@ -211,6 +296,7 @@ function formatReset(ms) {
 
 function glyph(id, size) {
   const spec = ICONS[id];
+  if (!spec) return "";
   const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
   return `<svg class="glyph" width="${size}" height="${size}" viewBox="${spec.viewBox}">${spec.d
     .map((p) => `<path ${rule} d="${p}"/>`)
@@ -400,6 +486,7 @@ let prefs = {
   screenName: "",
   displayStyle: "full",
   locale: "en",
+  visibleProviders: DEFAULT_VISIBLE.slice(),
 };
 let osName = "macos";
 let snaps = [
@@ -432,12 +519,20 @@ function renderIconCells() {
     .map((s) => {
       const unknown = s.headlinePercent == null;
       const spec = ICONS[s.id];
-      const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
+      const empty = !s.id || !spec;
       const c = 8;
       const r = 6.2;
       const circ = 2 * Math.PI * r;
-      const color = unknown ? "transparent" : usageColor(s.headlinePercent);
-      const dash = unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
+      const dash = empty || unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      if (empty) {
+        return `<div class="mini-ring empty-slot unknown">
+          <svg viewBox="0 0 16 16">
+            <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.22" stroke-width="1.6"/>
+          </svg>
+        </div>`;
+      }
+      const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
       return `<div class="mini-ring${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}" data-id="${s.id}">
         <svg viewBox="0 0 16 16">
           <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.22" stroke-width="1.6"/>
@@ -476,12 +571,23 @@ function renderBar() {
       const unknown = s.headlinePercent == null;
       const text = unknown ? "—" : `${Math.round(s.headlinePercent)}%`;
       const spec = ICONS[s.id];
-      const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
+      const empty = !s.id || !spec;
       const c = 13;
       const r = 10.25;
       const circ = 2 * Math.PI * r;
-      const color = unknown ? "transparent" : usageColor(s.headlinePercent);
-      const dash = unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
+      const dash = empty || unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      if (empty) {
+        return `<div class="cell empty-slot unknown">
+          <div class="ring">
+            <svg viewBox="0 0 26 26">
+              <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <div class="pct">—</div>
+        </div>`;
+      }
+      const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
       return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}" data-id="${s.id}">
         <div class="ring">
           <svg viewBox="0 0 26 26">
@@ -651,7 +757,11 @@ async function savePrefs() {
 }
 
 async function refresh() {
-  snaps = await invoke("fetch_usage");
+  const got = await invoke("fetch_usage");
+  snaps = slotsFrom(got);
+  if (hovered && !snaps.some((s) => s.id === hovered)) {
+    await setHovered(null);
+  }
   renderBar();
   if (hovered) await renderTip();
 }
@@ -742,6 +852,9 @@ async function onNativeMenu(id) {
       prefs.launchAtLogin = !prefs.launchAtLogin;
     }
     await savePrefs();
+  } else if (id === "tools") {
+    await invoke("open_settings");
+    return;
   } else if (id === "quit") {
     await invoke("quit");
     return;
@@ -783,6 +896,7 @@ async function showNativeMenu() {
     check("snap:bottom", ui.snapBottom, prefs.edge === "bottom"),
     Submenu.new({ text: ui.displayStyle, items: styleItems }),
     Submenu.new({ text: ui.language, items: langItems }),
+    item("tools", ui.tools),
     PredefinedMenuItem.new({ item: "Separator" }),
     check("login", ui.openAtLogin, !!prefs.launchAtLogin),
     PredefinedMenuItem.new({ item: "Separator" }),
@@ -820,6 +934,8 @@ async function startBar() {
   prefs = await invoke("get_prefs");
   if (prefs.displayStyle !== "icons") prefs.displayStyle = "full";
   prefs.locale = prefs.locale === "zh" ? "zh" : "en";
+  prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+  snaps = slotsFrom([]);
   applyLocale();
   try {
     if (api().autostart) {
@@ -851,6 +967,20 @@ async function startBar() {
   await api().event.listen("usagebar-layout", (e) => {
     applyLayout(e.payload).catch((err) => console.error(err));
   });
+  await api().event.listen("usagebar-prefs", (e) => {
+    if (!e.payload) return;
+    const prev = (prefs.visibleProviders || []).join(",");
+    prefs = { ...prefs, ...e.payload };
+    if (prefs.displayStyle !== "icons") prefs.displayStyle = "full";
+    prefs.locale = prefs.locale === "zh" ? "zh" : "en";
+    prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+    applyLocale();
+    if (prev !== prefs.visibleProviders.join(",")) {
+      snaps = slotsFrom(snaps.filter((s) => s.id));
+      renderBar();
+      refresh().catch((err) => console.error(err));
+    }
+  });
   await api().event.listen("usagebar-hover", (e) => {
     if (menuOpen || dragging) {
       if (hovered) setHovered(null).catch((err) => console.error(err));
@@ -866,6 +996,7 @@ function paintTip(payload) {
   applyLocale();
   const snap = payload.snap;
   const spec = ICONS[snap.id];
+  if (!spec) return;
   const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
   const metricsHtml = !snap.metrics?.length
     ? `<div class="empty">${localizeError(snap)}</div>`
@@ -893,6 +1024,101 @@ async function startTip() {
   await api().event.listen("usagebar-tip", (e) => paintTip(e.payload));
 }
 
+function renderSettings() {
+  const ui = t();
+  const vis = normalizeVisible(prefs.visibleProviders);
+  const selected = new Set(vis);
+  document.getElementById("settings-title").textContent = ui.toolsTitle;
+  document.getElementById("settings-hint").textContent = ui.toolsHint;
+  const count = document.getElementById("settings-count");
+  count.textContent = vis.length >= SLOT_COUNT ? ui.toolsMax : ui.selectedCount(vis.length);
+  count.classList.toggle("warn", vis.length >= SLOT_COUNT);
+  const rest = CATALOG_IDS.filter((id) => !selected.has(id));
+  const rows = [...vis, ...rest]
+    .map((id) => {
+      const on = selected.has(id);
+      const idx = vis.indexOf(id);
+      const upOff = !on || idx <= 0;
+      const downOff = !on || idx < 0 || idx >= vis.length - 1;
+      const spec = ICONS[id];
+      const rule = spec?.evenOdd ? 'fill-rule="evenodd"' : "";
+      const icon = spec
+        ? `<span class="icon"><svg class="glyph" viewBox="${spec.viewBox}">${spec.d
+            .map((p) => `<path ${rule} d="${p}"/>`)
+            .join("")}</svg></span>`
+        : "";
+      return `<div class="settings-row" data-id="${id}">
+        <label>
+          <input type="checkbox" data-toggle="${id}" ${on ? "checked" : ""} ${
+            !on && vis.length >= SLOT_COUNT ? "disabled" : ""
+          }/>
+          ${icon}
+          <span class="name">${vendorName(id)}</span>
+        </label>
+        <button type="button" data-move="${id}" data-dir="-1" ${upOff ? "disabled" : ""} title="${ui.moveUp}">↑</button>
+        <button type="button" data-move="${id}" data-dir="1" ${downOff ? "disabled" : ""} title="${ui.moveDown}">↓</button>
+      </div>`;
+    })
+    .join("");
+  document.getElementById("settings-list").innerHTML = rows;
+}
+
+async function saveVisible(next) {
+  prefs.visibleProviders = normalizeVisible(next);
+  await savePrefs();
+  renderSettings();
+}
+
+async function startSettings() {
+  document.documentElement.classList.add("settings");
+  document.getElementById("settings-root").hidden = false;
+  prefs = await invoke("get_prefs");
+  prefs.locale = prefs.locale === "zh" ? "zh" : "en";
+  prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+  applyLocale();
+  renderSettings();
+  const root = document.getElementById("settings-root");
+  root.addEventListener("change", (e) => {
+    const input = e.target.closest("input[data-toggle]");
+    if (!input) return;
+    const id = input.dataset.toggle;
+    let vis = normalizeVisible(prefs.visibleProviders);
+    if (input.checked) {
+      if (vis.includes(id)) return;
+      if (vis.length >= SLOT_COUNT) {
+        input.checked = false;
+        renderSettings();
+        return;
+      }
+      vis.push(id);
+    } else {
+      vis = vis.filter((x) => x !== id);
+    }
+    saveVisible(vis).catch((err) => console.error(err));
+  });
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-move]");
+    if (!btn || btn.disabled) return;
+    const id = btn.dataset.move;
+    const dir = Number(btn.dataset.dir);
+    const vis = normalizeVisible(prefs.visibleProviders);
+    const i = vis.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= vis.length) return;
+    [vis[i], vis[j]] = [vis[j], vis[i]];
+    saveVisible(vis).catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-prefs", (e) => {
+    if (!e.payload) return;
+    prefs = { ...prefs, ...e.payload };
+    prefs.locale = prefs.locale === "zh" ? "zh" : "en";
+    prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+    applyLocale();
+    renderSettings();
+  });
+}
+
 const kind = new URLSearchParams(location.search).get("w") || "bar";
 if (kind === "tip") startTip().catch((err) => console.error(err));
+else if (kind === "settings") startSettings().catch((err) => console.error(err));
 else startBar().catch((err) => console.error(err));

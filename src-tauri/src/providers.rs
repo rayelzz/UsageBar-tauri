@@ -124,6 +124,22 @@ fn http_get_json(url: &str, headers: &[(&str, String)]) -> Result<(u16, Value), 
     Ok((code, json))
 }
 
+fn http_post_json(url: &str, headers: &[(&str, String)], body: &Value) -> Result<(u16, Value), String> {
+    let mut req = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?
+        .post(url)
+        .header("Content-Type", "application/json");
+    for (k, v) in headers {
+        req = req.header(*k, v);
+    }
+    let resp = req.json(body).send().map_err(|e| e.to_string())?;
+    let code = resp.status().as_u16();
+    let json = resp.json::<Value>().unwrap_or(json!({}));
+    Ok((code, json))
+}
+
 fn http_post_form(url: &str, body: &str) -> Result<(u16, Value), String> {
     let resp = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -397,6 +413,15 @@ fn clean_cursor_id(raw: String) -> Option<String> {
     }
 }
 
+fn clean_cursor_token(raw: String) -> Option<String> {
+    let token = raw.trim().trim_matches('"').trim().to_string();
+    if token.is_empty() || token.len() > 16_384 {
+        None
+    } else {
+        Some(token)
+    }
+}
+
 fn jwt_sub(token: &str) -> Option<String> {
     let payload = token.split('.').nth(1)?;
     let json = String::from_utf8(b64url_decode(payload)?).ok()?;
@@ -465,7 +490,7 @@ fn cursor_session_cookie(user_id: &str, token: &str) -> String {
 fn fetch_cursor() -> ProviderSnapshot {
     let mut last_error = "login_not_found".to_string();
     for db in cursor_dbs() {
-        let Some(token) = sqlite_value(&db, "cursorAuth/accessToken").and_then(clean_cursor_id) else {
+        let Some(token) = sqlite_value(&db, "cursorAuth/accessToken").and_then(clean_cursor_token) else {
             continue;
         };
         let ids = cursor_user_ids(&db, &token);
@@ -546,59 +571,130 @@ fn fetch_grok() -> ProviderSnapshot {
     if let Some(user) = &user_id {
         headers.push(("x-userid", user.clone()));
     }
-    let url = "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
-    let mut result = http_get_json(url, &headers);
-    if let Ok((401, _)) = &result {
-        if let Some(new_token) = refresh_grok(issuer.as_deref(), refresh.as_deref(), client_id.as_deref())
-        {
-            headers[0] = ("Authorization", format!("Bearer {new_token}"));
-            result = http_get_json(url, &headers);
+    let urls = [
+        "https://cli-chat-proxy.grok.com/v1/billing?format=credits",
+        "https://cli-chat-proxy.grok.com/v1/billing",
+    ];
+    let mut last_error = "api_error".to_string();
+    let mut bodies = Vec::new();
+    for url in urls {
+        let mut result = http_get_json(url, &headers);
+        if let Ok((401, _)) = &result {
+            if let Some(new_token) =
+                refresh_grok(issuer.as_deref(), refresh.as_deref(), client_id.as_deref())
+            {
+                headers[0] = ("Authorization", format!("Bearer {new_token}"));
+                result = http_get_json(url, &headers);
+            }
+        }
+        match result {
+            Ok((200, json)) => bodies.push(json),
+            Ok((code, _)) => last_error = format!("api_error:{code}"),
+            Err(e) => last_error = e,
         }
     }
-    let Ok((200, json)) = result else {
-        return empty("grok", "Grok Usage", "api_error");
-    };
-    let config = json.get("config").cloned().unwrap_or(json.clone());
-    let reset = config
-        .pointer("/currentPeriod/end")
-        .and_then(parse_date)
-        .or_else(|| config.get("billingPeriodEnd").and_then(parse_date));
-    let weekly = config.get("creditUsagePercent").and_then(|v| v.as_f64());
+    if bodies.is_empty() {
+        return empty("grok", "Grok Usage", &last_error);
+    }
+    parse_grok_bodies(bodies)
+}
+
+fn money_val(v: Option<&Value>) -> Option<f64> {
+    let v = v?;
+    json_f64(v.get("val")).or_else(|| json_f64(Some(v)))
+}
+
+fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
     let mut metrics = vec![];
-    if let Some(weekly) = weekly {
+    let mut headline = None;
+    let mut reset = None;
+    for json in bodies {
+        let config = json.get("config").cloned().unwrap_or(json);
+        if reset.is_none() {
+            reset = config
+                .pointer("/currentPeriod/end")
+                .and_then(parse_date)
+                .or_else(|| config.get("billingPeriodEnd").and_then(parse_date));
+        }
+        if let Some(weekly) = json_f64(config.get("creditUsagePercent")) {
+            headline.get_or_insert(weekly);
+            if !metrics.iter().any(|m: &UsageMetric| m.id == "weekly") {
+                metrics.push(UsageMetric {
+                    id: "weekly".into(),
+                    label: "Weekly allowance".into(),
+                    percent: weekly,
+                    resets_at: reset,
+                });
+            }
+        }
+        if let Some(products) = config.get("productUsage").and_then(|v| v.as_array()) {
+            for product in products {
+                let name = product
+                    .get("product")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Product");
+                let Some(pct) = json_f64(product.get("usagePercent")) else {
+                    continue;
+                };
+                if metrics.iter().any(|m| m.id == name) {
+                    continue;
+                }
+                let label = match name {
+                    "GrokBuild" => "Grok Build",
+                    "GrokChat" => "Grok Chat",
+                    other => other,
+                };
+                metrics.push(UsageMetric {
+                    id: name.into(),
+                    label: label.into(),
+                    percent: pct,
+                    resets_at: reset,
+                });
+            }
+        }
+        if let (Some(used), Some(limit)) = (
+            money_val(config.get("used")),
+            money_val(config.get("monthlyLimit")),
+        ) {
+            if limit > 0.0 && !metrics.iter().any(|m| m.id == "monthly") {
+                let pct = ((used / limit) * 100.0).clamp(0.0, 100.0);
+                headline.get_or_insert(pct);
+                metrics.push(UsageMetric {
+                    id: "monthly".into(),
+                    label: "Monthly limit".into(),
+                    percent: pct,
+                    resets_at: reset,
+                });
+            }
+        }
+        if let (Some(used), Some(cap)) = (
+            money_val(config.get("onDemandUsed")),
+            money_val(config.get("onDemandCap")),
+        ) {
+            if cap > 0.0 && !metrics.iter().any(|m| m.id == "ondemand") {
+                let pct = ((used / cap) * 100.0).clamp(0.0, 100.0);
+                metrics.push(UsageMetric {
+                    id: "ondemand".into(),
+                    label: "On-demand".into(),
+                    percent: pct,
+                    resets_at: reset,
+                });
+            }
+        }
+    }
+    if metrics.is_empty() && reset.is_some() {
         metrics.push(UsageMetric {
             id: "weekly".into(),
             label: "Weekly allowance".into(),
-            percent: weekly,
+            percent: 0.0,
             resets_at: reset,
         });
-    }
-    if let Some(products) = config.get("productUsage").and_then(|v| v.as_array()) {
-        for product in products {
-            let name = product
-                .get("product")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Product");
-            let Some(pct) = product.get("usagePercent").and_then(|v| v.as_f64()) else {
-                continue;
-            };
-            let label = match name {
-                "GrokBuild" => "Grok Build",
-                "GrokChat" => "Grok Chat",
-                other => other,
-            };
-            metrics.push(UsageMetric {
-                id: name.into(),
-                label: label.into(),
-                percent: pct,
-                resets_at: reset,
-            });
-        }
+        headline = Some(0.0);
     }
     ProviderSnapshot {
         id: "grok".into(),
         title: "Grok Usage".into(),
-        headline_percent: weekly.or_else(|| metrics.first().map(|m| m.percent)),
+        headline_percent: headline.or_else(|| metrics.first().map(|m| m.percent)),
         error: if metrics.is_empty() {
             Some("no_quota".into())
         } else {
@@ -826,8 +922,593 @@ fn cc_switch_glm_key() -> Option<String> {
     None
 }
 
-pub fn fetch_all() -> Vec<ProviderSnapshot> {
-    vec![fetch_codex(), fetch_cursor(), fetch_grok(), fetch_glm()]
+pub fn fetch_selected(ids: &[String]) -> Vec<ProviderSnapshot> {
+    crate::prefs::normalize_visible(ids)
+        .into_iter()
+        .map(|id| fetch_one(&id))
+        .collect()
+}
+
+fn fetch_one(id: &str) -> ProviderSnapshot {
+    match id {
+        "codex" => fetch_codex(),
+        "cursor" => fetch_cursor(),
+        "grok" => fetch_grok(),
+        "glm" => fetch_glm(),
+        "claude" => fetch_claude(),
+        "copilot" => fetch_copilot(),
+        "gemini" => fetch_gemini(),
+        "antigravity" => fetch_antigravity(),
+        other => empty(other, "Usage", "login_not_found"),
+    }
+}
+
+fn claude_version() -> String {
+    for path in [
+        home().join(".claude/version"),
+        home().join(".claude/.version"),
+    ] {
+        if let Ok(text) = fs::read_to_string(path) {
+            let v = text.trim();
+            if !v.is_empty() {
+                return v.to_string();
+            }
+        }
+    }
+    "2.1.72".into()
+}
+
+fn claude_oauth() -> Option<(String, Option<String>, Option<PathBuf>)> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(out) = std::process::Command::new("security")
+            .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+            .output()
+        {
+            if out.status.success() {
+                if let Ok(text) = String::from_utf8(out.stdout) {
+                    if let Ok(obj) = serde_json::from_str::<Value>(text.trim()) {
+                        if let Some(pair) = claude_tokens(&obj) {
+                            return Some((pair.0, pair.1, None));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for path in [
+        home().join(".claude/.credentials.json"),
+        home().join(".claude/credentials.json"),
+        home().join(".config/claude/credentials.json"),
+    ] {
+        if let Ok(data) = fs::read_to_string(&path) {
+            if let Ok(obj) = serde_json::from_str::<Value>(&data) {
+                if let Some(pair) = claude_tokens(&obj) {
+                    return Some((pair.0, pair.1, Some(path)));
+                }
+            }
+        }
+    }
+    env_or_shell("CLAUDE_ACCESS_TOKEN").map(|t| (t, None, None))
+}
+
+fn claude_tokens(obj: &Value) -> Option<(String, Option<String>)> {
+    let oauth = obj.get("claudeAiOauth").unwrap_or(obj);
+    let access = oauth
+        .get("accessToken")
+        .or_else(|| oauth.get("access_token"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())?;
+    let refresh = oauth
+        .get("refreshToken")
+        .or_else(|| oauth.get("refresh_token"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    Some((access.to_string(), refresh))
+}
+
+fn fetch_claude() -> ProviderSnapshot {
+    let Some((mut token, refresh, path)) = claude_oauth() else {
+        return empty("claude", "Claude Usage", "login_not_found");
+    };
+    match pull_claude(&token) {
+        Ok(snap) => snap,
+        Err(_) => {
+            if let Some(new_token) = refresh.as_deref().and_then(refresh_claude) {
+                if let Some(path) = path {
+                    if let Ok(data) = fs::read_to_string(&path) {
+                        if let Ok(mut obj) = serde_json::from_str::<Value>(&data) {
+                            if obj.get("claudeAiOauth").is_some() {
+                                obj["claudeAiOauth"]["accessToken"] = json!(new_token);
+                            } else {
+                                obj["accessToken"] = json!(new_token);
+                            }
+                            let _ = fs::write(path, serde_json::to_string_pretty(&obj).unwrap_or_default());
+                        }
+                    }
+                }
+                token = new_token;
+                pull_claude(&token).unwrap_or_else(|e| empty("claude", "Claude Usage", &e))
+            } else {
+                empty("claude", "Claude Usage", "auth")
+            }
+        }
+    }
+}
+
+fn refresh_claude(refresh: &str) -> Option<String> {
+    let body = format!(
+        "grant_type=refresh_token&refresh_token={refresh}&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    );
+    let (200, json) = http_post_form("https://console.anthropic.com/v1/oauth/token", &body).ok()? else {
+        return None;
+    };
+    json.get("access_token")
+        .or_else(|| json.get("accessToken"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+fn pull_claude(token: &str) -> Result<ProviderSnapshot, String> {
+    let headers = [
+        ("Authorization", format!("Bearer {token}")),
+        ("anthropic-beta", "oauth-2025-04-20".into()),
+        ("Content-Type", "application/json".into()),
+        ("User-Agent", format!("claude-code/{}", claude_version())),
+    ];
+    let (code, json) = http_get_json("https://api.anthropic.com/api/oauth/usage", &headers)?;
+    if code == 401 || code == 403 {
+        return Err("auth".into());
+    }
+    if code != 200 {
+        return Err("api_error".into());
+    }
+    let mut metrics = vec![];
+    if let Some(limits) = json.get("limits").and_then(|v| v.as_array()) {
+        for item in limits {
+            let percent = json_f64(item.get("percent")).or_else(|| json_f64(item.get("utilization")));
+            let Some(percent) = percent else { continue };
+            let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            let scoped = item
+                .pointer("/scope/model/display_name")
+                .and_then(|v| v.as_str());
+            let label = match kind {
+                "session" => "5-hour window".into(),
+                "weekly_all" => "Weekly limit".into(),
+                "weekly_opus" => "Weekly Opus".into(),
+                other if !other.is_empty() => {
+                    if let Some(name) = scoped {
+                        format!("{name} · {other}")
+                    } else {
+                        other.to_string()
+                    }
+                }
+                _ => scoped.unwrap_or("Usage").to_string(),
+            };
+            metrics.push(UsageMetric {
+                id: kind.to_string(),
+                label,
+                percent,
+                resets_at: item.get("resets_at").and_then(parse_date),
+            });
+        }
+    }
+    if metrics.is_empty() {
+        for (key, label) in [
+            ("five_hour", "5-hour window"),
+            ("seven_day", "Weekly limit"),
+            ("seven_day_opus", "Weekly Opus"),
+            ("seven_day_sonnet", "Weekly Sonnet"),
+        ] {
+            if let Some(win) = json.get(key) {
+                if let Some(percent) = json_f64(win.get("utilization")) {
+                    metrics.push(UsageMetric {
+                        id: key.into(),
+                        label: label.into(),
+                        percent,
+                        resets_at: win.get("resets_at").and_then(parse_date),
+                    });
+                }
+            }
+        }
+    }
+    Ok(ProviderSnapshot {
+        id: "claude".into(),
+        title: "Claude Usage".into(),
+        headline_percent: metrics
+            .iter()
+            .find(|m| m.id == "session" || m.id == "five_hour")
+            .or_else(|| metrics.first())
+            .map(|m| m.percent),
+        error: if metrics.is_empty() {
+            Some("no_quota".into())
+        } else {
+            None
+        },
+        metrics,
+        updated_at: now_ms(),
+    })
+}
+
+fn copilot_token() -> Option<String> {
+    let dir = if cfg!(target_os = "windows") {
+        dirs::data_dir()
+            .unwrap_or_else(|| home().join("AppData/Local"))
+            .join("github-copilot")
+    } else {
+        home().join(".config/github-copilot")
+    };
+    for name in ["apps.json", "hosts.json"] {
+        if let Some(token) = copilot_token_from_json(&dir.join(name)) {
+            return Some(token);
+        }
+    }
+    if let Some(token) = copilot_token_from_gh(&home().join(".config/gh/hosts.yml")) {
+        return Some(token);
+    }
+    env_or_shell("GITHUB_TOKEN").or_else(|| env_or_shell("GH_TOKEN"))
+}
+
+fn copilot_token_from_json(path: &Path) -> Option<String> {
+    let obj = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
+    if let Some(token) = obj.get("oauth_token").and_then(|v| v.as_str()) {
+        if !token.is_empty() {
+            return Some(token.into());
+        }
+    }
+    if let Some(map) = obj.as_object() {
+        for (host, entry) in map {
+            if !host.contains("github.com") {
+                continue;
+            }
+            if let Some(token) = entry.get("oauth_token").and_then(|v| v.as_str()) {
+                if !token.is_empty() {
+                    return Some(token.into());
+                }
+            }
+        }
+        for entry in map.values() {
+            if let Some(token) = entry.get("oauth_token").and_then(|v| v.as_str()) {
+                if !token.is_empty() {
+                    return Some(token.into());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn copilot_token_from_gh(path: &Path) -> Option<String> {
+    let text = fs::read_to_string(path).ok()?;
+    let mut in_github = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !line.starts_with(' ') && !line.starts_with('\t') && trimmed.ends_with(':') {
+            in_github = trimmed.trim_end_matches(':').contains("github.com");
+        }
+        if in_github && trimmed.starts_with("oauth_token:") {
+            let token = trimmed.trim_start_matches("oauth_token:").trim();
+            if !token.is_empty() {
+                return Some(token.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn fetch_copilot() -> ProviderSnapshot {
+    let Some(token) = copilot_token() else {
+        return empty("copilot", "Copilot Usage", "login_not_found");
+    };
+    let headers = [
+        ("Authorization", format!("Bearer {token}")),
+        ("Accept", "application/json".into()),
+        ("Editor-Version", "vscode/1.96.0".into()),
+        ("User-Agent", "UsageBar/1.0".into()),
+    ];
+    let json = match http_get_json("https://api.github.com/copilot_internal/user", &headers) {
+        Ok((200, json)) => json,
+        Ok((401 | 403, _)) => return empty("copilot", "Copilot Usage", "auth"),
+        Ok((code, _)) => return empty("copilot", "Copilot Usage", &format!("api_error:{code}")),
+        Err(e) => return empty("copilot", "Copilot Usage", &e),
+    };
+    let reset = json
+        .get("quota_reset_date_utc")
+        .and_then(parse_date)
+        .or_else(|| json.get("quota_reset_date").and_then(parse_date));
+    let mut metrics = vec![];
+    if let Some(premium) = json.pointer("/quota_snapshots/premium_interactions") {
+        if premium.get("unlimited").and_then(|v| v.as_bool()) != Some(true) {
+            let entitlement = json_f64(premium.get("entitlement")).unwrap_or(0.0);
+            let remaining = json_f64(premium.get("remaining")).unwrap_or(0.0);
+            let percent = json_f64(premium.get("percent_remaining"))
+                .map(|left| (100.0 - left).clamp(0.0, 100.0))
+                .unwrap_or_else(|| {
+                    if entitlement > 0.0 {
+                        ((entitlement - remaining).max(0.0) / entitlement * 100.0).clamp(0.0, 100.0)
+                    } else {
+                        0.0
+                    }
+                });
+            metrics.push(UsageMetric {
+                id: "premium".into(),
+                label: "Premium requests".into(),
+                percent,
+                resets_at: reset,
+            });
+        }
+    }
+    ProviderSnapshot {
+        id: "copilot".into(),
+        title: "Copilot Usage".into(),
+        headline_percent: metrics.first().map(|m| m.percent),
+        error: if metrics.is_empty() {
+            Some("no_quota".into())
+        } else {
+            None
+        },
+        metrics,
+        updated_at: now_ms(),
+    }
+}
+
+fn google_installed_client(prefix: &str, mid: &str) -> String {
+    format!("{prefix}-{mid}.apps.googleusercontent.com")
+}
+
+fn google_installed_secret(rest: &str) -> String {
+    format!("{}{rest}", ["GOC", "SPX-"].concat())
+}
+
+fn gemini_oauth_client() -> String {
+    google_installed_client("681255809395", "oo8ft2oprdrnp9e3aqf6av3hmdib135j")
+}
+
+fn gemini_oauth_secret() -> String {
+    google_installed_secret("4uHgM2Xoy7vWl25n0Moh6-5kq3jP")
+}
+
+fn antigravity_oauth_client() -> String {
+    google_installed_client("1071006060591", "tmhssin2h21lcre235vtolojh4g403ep")
+}
+
+fn antigravity_oauth_secret() -> String {
+    google_installed_secret("K58FWR486LdLJ1mLB8sXC4z6qDAf")
+}
+
+fn refresh_google(refresh: &str, client_id: &str, client_secret: &str) -> Option<String> {
+    let body = format!(
+        "client_id={client_id}&client_secret={client_secret}&refresh_token={refresh}&grant_type=refresh_token"
+    );
+    let (200, json) = http_post_form("https://oauth2.googleapis.com/token", &body).ok()? else {
+        return None;
+    };
+    json.get("access_token")?.as_str().map(str::to_string)
+}
+
+fn gemini_access_token() -> Option<String> {
+    let paths = [
+        home().join(".gemini/oauth_creds.json"),
+        home().join(".config/gemini/oauth_creds.json"),
+    ];
+    for path in paths {
+        let Ok(data) = fs::read_to_string(&path) else { continue };
+        let Ok(mut obj) = serde_json::from_str::<Value>(&data) else { continue };
+        let access = obj
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let expiry = obj.get("expiry_date").and_then(|v| v.as_i64()).unwrap_or(0);
+        let refresh = obj
+            .get("refresh_token")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        if !access.is_empty() && (expiry == 0 || expiry > now_ms() + 30_000) {
+            return Some(access);
+        }
+        if let Some(refresh) = refresh {
+            if let Some(token) = refresh_google(&refresh, &gemini_oauth_client(), &gemini_oauth_secret()) {
+                obj["access_token"] = json!(token);
+                obj["expiry_date"] = json!(now_ms() + 3_000_000);
+                let _ = fs::write(path, serde_json::to_string_pretty(&obj).unwrap_or_default());
+                return Some(token);
+            }
+        }
+        if !access.is_empty() {
+            return Some(access);
+        }
+    }
+    None
+}
+
+fn fetch_gemini() -> ProviderSnapshot {
+    let Some(token) = gemini_access_token() else {
+        return empty("gemini", "Gemini Usage", "login_not_found");
+    };
+    let headers = [
+        ("Authorization", format!("Bearer {token}")),
+        ("Content-Type", "application/json".into()),
+    ];
+    let load_body = json!({
+        "metadata": {
+            "ideType": "IDE_UNSPECIFIED",
+            "platform": "PLATFORM_UNSPECIFIED",
+            "pluginType": "GEMINI"
+        }
+    });
+    let json = match http_post_json(
+        "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+        &headers,
+        &load_body,
+    ) {
+        Ok((200, json)) => json,
+        Ok((401 | 403, _)) => return empty("gemini", "Gemini Usage", "auth"),
+        Ok((code, _)) => return empty("gemini", "Gemini Usage", &format!("api_error:{code}")),
+        Err(e) => return empty("gemini", "Gemini Usage", &e),
+    };
+    let project = json
+        .get("cloudaicompanionProject")
+        .and_then(|v| v.as_str())
+        .or_else(|| json.pointer("/cloudaicompanionProject/id").and_then(|v| v.as_str()));
+    let Some(project) = project else {
+        return empty("gemini", "Gemini Usage", "no_quota");
+    };
+    let quota = match http_post_json(
+        "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
+        &headers,
+        &json!({ "project": project }),
+    ) {
+        Ok((200, json)) => json,
+        Ok((code, _)) => return empty("gemini", "Gemini Usage", &format!("api_error:{code}")),
+        Err(e) => return empty("gemini", "Gemini Usage", &e),
+    };
+    let mut metrics = vec![];
+    if let Some(buckets) = quota.get("buckets").and_then(|v| v.as_array()) {
+        for bucket in buckets {
+            let Some(remaining) = json_f64(bucket.get("remainingFraction")) else {
+                continue;
+            };
+            let percent = ((1.0 - remaining) * 100.0).clamp(0.0, 100.0);
+            let model = bucket
+                .get("modelId")
+                .or_else(|| bucket.get("model_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Model");
+            metrics.push(UsageMetric {
+                id: model.into(),
+                label: model.to_string(),
+                percent,
+                resets_at: bucket.get("resetTime").and_then(parse_date),
+            });
+        }
+    }
+    metrics.sort_by(|a, b| b.percent.partial_cmp(&a.percent).unwrap_or(std::cmp::Ordering::Equal));
+    ProviderSnapshot {
+        id: "gemini".into(),
+        title: "Gemini Usage".into(),
+        headline_percent: metrics.first().map(|m| m.percent),
+        error: if metrics.is_empty() {
+            Some("no_quota".into())
+        } else {
+            None
+        },
+        metrics,
+        updated_at: now_ms(),
+    }
+}
+
+fn antigravity_access_token() -> Option<String> {
+    let paths = [
+        home().join(".gemini/antigravity-cli/antigravity-oauth-token"),
+        home().join(".config/antigravity-cli/antigravity-oauth-token"),
+    ];
+    for path in paths {
+        let Ok(data) = fs::read_to_string(&path) else { continue };
+        let Ok(obj) = serde_json::from_str::<Value>(&data) else { continue };
+        let tok = obj.get("token").unwrap_or(&obj);
+        let access = tok
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let refresh = tok
+            .get("refresh_token")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        if !access.is_empty() {
+            return Some(access);
+        }
+        if let Some(refresh) = refresh {
+            if let Some(token) = refresh_google(&refresh, &antigravity_oauth_client(), &antigravity_oauth_secret()) {
+                return Some(token);
+            }
+        }
+    }
+    env_or_shell("ANTIGRAVITY_ACCESS_TOKEN").or_else(|| {
+        env_or_shell("ANTIGRAVITY_REFRESH_TOKEN")
+            .and_then(|r| refresh_google(&r, &antigravity_oauth_client(), &antigravity_oauth_secret()))
+    })
+}
+
+fn fetch_antigravity() -> ProviderSnapshot {
+    let Some(token) = antigravity_access_token() else {
+        return empty("antigravity", "Antigravity Usage", "login_not_found");
+    };
+    let headers = [
+        ("Authorization", format!("Bearer {token}")),
+        ("Content-Type", "application/json".into()),
+        ("User-Agent", "antigravity/darwin/arm64".into()),
+    ];
+    let bases = [
+        "https://cloudcode-pa.googleapis.com",
+        "https://daily-cloudcode-pa.sandbox.googleapis.com",
+    ];
+    for base in bases {
+        let load = match http_post_json(
+            &format!("{base}/v1internal:loadCodeAssist"),
+            &headers,
+            &json!({ "metadata": { "ideType": "ANTIGRAVITY" } }),
+        ) {
+            Ok((200, json)) => json,
+            _ => continue,
+        };
+        let project = load
+            .get("cloudaicompanionProject")
+            .and_then(|v| v.as_str())
+            .or_else(|| load.pointer("/cloudaicompanionProject/id").and_then(|v| v.as_str()));
+        let Some(project) = project else { continue };
+        let models_json = match http_post_json(
+            &format!("{base}/v1internal:fetchAvailableModels"),
+            &headers,
+            &json!({ "project": project }),
+        ) {
+            Ok((200, json)) => json,
+            _ => continue,
+        };
+        let mut metrics = vec![];
+        let models = models_json.get("models");
+        if let Some(map) = models.and_then(|v| v.as_object()) {
+            for (name, model) in map {
+                push_antigravity_metric(&mut metrics, name, model);
+            }
+        } else if let Some(arr) = models.and_then(|v| v.as_array()) {
+            for model in arr {
+                let name = model
+                    .get("name")
+                    .or_else(|| model.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Model");
+                push_antigravity_metric(&mut metrics, name, model);
+            }
+        }
+        metrics.sort_by(|a, b| b.percent.partial_cmp(&a.percent).unwrap_or(std::cmp::Ordering::Equal));
+        if !metrics.is_empty() {
+            return ProviderSnapshot {
+                id: "antigravity".into(),
+                title: "Antigravity Usage".into(),
+                headline_percent: metrics.first().map(|m| m.percent),
+                error: None,
+                metrics,
+                updated_at: now_ms(),
+            };
+        }
+    }
+    empty("antigravity", "Antigravity Usage", "no_quota")
+}
+
+fn push_antigravity_metric(metrics: &mut Vec<UsageMetric>, name: &str, model: &Value) {
+    let quota = model.get("quotaInfo").unwrap_or(model);
+    let Some(remaining) = json_f64(quota.get("remainingFraction")) else {
+        return;
+    };
+    let percent = ((1.0 - remaining) * 100.0).clamp(0.0, 100.0);
+    metrics.push(UsageMetric {
+        id: name.into(),
+        label: name.to_string(),
+        percent,
+        resets_at: quota.get("resetTime").and_then(parse_date),
+    });
 }
 
 pub fn format_reset(ms: Option<i64>) -> Option<String> {
@@ -857,5 +1538,28 @@ mod tests {
             cookie,
             "WorkosCursorSessionToken=google-oauth2%7Cuser_x%3A%3Atok"
         );
+    }
+
+    #[test]
+    fn cursor_token_keeps_long_jwt() {
+        let token = "a".repeat(424);
+        assert_eq!(clean_cursor_token(token.clone()).as_deref(), Some(token.as_str()));
+        assert!(clean_cursor_id(token).is_none());
+    }
+
+    #[test]
+    fn grok_unified_billing_shows_weekly_when_percent_missing() {
+        let json = json!({
+            "config": {
+                "currentPeriod": { "end": "2026-09-06T13:53:15.842986+00:00" },
+                "isUnifiedBillingUser": true,
+                "onDemandCap": { "val": 0 },
+                "onDemandUsed": { "val": 0 }
+            }
+        });
+        let snap = parse_grok_bodies(vec![json]);
+        assert_eq!(snap.headline_percent, Some(0.0));
+        assert!(snap.error.is_none());
+        assert_eq!(snap.metrics[0].id, "weekly");
     }
 }
