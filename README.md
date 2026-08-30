@@ -4,8 +4,6 @@
 
 A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, and **GLM**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
 
-This is the **cross-platform** edition (Tauri). The original native macOS app is [rayelzz/UsageBar](https://github.com/rayelzz/UsageBar).
-
 macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
 ---
@@ -149,9 +147,6 @@ If click-through is on, click empty glass around the rings may pass through. Hov
 **macOS: “UsageBar cannot be opened” / unidentified developer.**  
 The release is not Apple-notarized. Right-click the app → Open, or allow it under **Privacy & Security**.
 
-**What is the difference from the native [UsageBar](https://github.com/rayelzz/UsageBar)?**  
-Same idea and similar look. This repo runs on macOS / Windows / Linux via Tauri. The native app is macOS-only (Swift). This edition does **not** collapse into a four-ring island inside the menu bar; the tray stays the text **UB**, and the bar stays on a screen edge. **Transparent icons** is a smaller docked style, not a menu-bar embed.
-
 **Ring colors?**  
 Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.
 
@@ -179,8 +174,6 @@ Windows needs WebView2 (the installer can bootstrap it). The tray usually shows 
 [English](#english) · [中文](#中文)
 
 贴在屏幕边缘的 AI 用量圆环条。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。
-
-这是 **跨平台** 版（Tauri）。macOS 原生 Swift 版在 [rayelzz/UsageBar](https://github.com/rayelzz/UsageBar)。
 
 ### 目录
 
@@ -310,9 +303,6 @@ UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken` 和 `curso
 
 **macOS 提示无法打开 / 未识别的开发者？**  
 发布包未做 Apple 公证。请右键应用 → 打开，或到 **隐私与安全性** 允许。
-
-**和原生 [UsageBar](https://github.com/rayelzz/UsageBar) 有什么区别？**  
-用途和观感对齐。本仓库用 Tauri，支持 macOS / Windows / Linux；原生版只做 macOS（Swift）。跨平台版**不会**把四个圆环塞进菜单栏：托盘一直是文字 **UB**，用量条留在屏幕边缘。**透明图标**是更小的贴边样式，不是菜单栏嵌入。
 
 **圆环颜色？**  
 绿：已用 &lt; 60%。黄：60%–80%。红：≥ 80%。
