@@ -72,7 +72,14 @@ Needs a working Codex / Cursor / Grok / GLM login **on that same machine**. The 
    - macOS Intel: `x64.dmg`
    - Windows: `x64-setup.exe`
    - Linux: `.AppImage` or `.deb`
-2. macOS builds are unsigned (ad-hoc). First launch: right-click → Open, or allow it in **System Settings → Privacy & Security**.
+2. macOS builds are ad-hoc signed (not Apple-notarized). After dragging `UsageBar.app` into **Applications**, run this once in Terminal (required on macOS Sequoia / Tahoe; “Right-click → Open” often does nothing):
+
+   ```bash
+   xattr -cr /Applications/UsageBar.app
+   open /Applications/UsageBar.app
+   ```
+
+   The “UsageBar.app is damaged” dialog is Gatekeeper quarantine, not a broken download. Do not move it to the Trash.
 3. Sign in to Codex CLI / Cursor / Grok CLI / GLM as you already do. UsageBar will pick up those sessions.
 
 Build from source:
@@ -124,8 +131,13 @@ Turn on **Don’t block clicks below** (on by default). When the pointer is not 
 **I cannot click the bar or open the menu.**  
 If click-through is on, click empty glass around the rings may pass through. Hover a ring, or use the **UB** tray item. You can also turn click-through off, then lock the position.
 
-**macOS: “UsageBar cannot be opened” / unidentified developer.**  
-The release is not Apple-notarized. Right-click the app → Open, or allow it under **Privacy & Security**.
+**macOS: “UsageBar.app is damaged and can’t be opened” / unidentified developer.**  
+The file is not damaged. Chrome / Safari marks the download with a quarantine flag, and the release is not Apple-notarized. On Sequoia / Tahoe, right-click → Open and **Privacy & Security** usually do not help. Copy the app to `/Applications`, then:
+
+```bash
+xattr -cr /Applications/UsageBar.app
+open /Applications/UsageBar.app
+```
 
 **Ring colors?**  
 Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.

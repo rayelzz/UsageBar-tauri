@@ -51,7 +51,14 @@ jobs:
             - **Windows:** `x64-setup.exe`
             - **Linux:** `.AppImage` or `.deb`
 
-            First launch on macOS is unsigned. Right-click → Open, or allow it in System Settings → Privacy & Security.
+            macOS builds are ad-hoc signed (not notarized). After copying `UsageBar.app` to Applications, run:
+
+            ```
+            xattr -cr /Applications/UsageBar.app
+            open /Applications/UsageBar.app
+            ```
+
+            The “app is damaged” dialog is Gatekeeper quarantine, not a broken file. Do not move it to the Trash.
 
             UsageBar only reads local logins. Sign in to Codex / Cursor / Grok / GLM on this computer first.
 
@@ -64,7 +71,7 @@ jobs:
             - **Windows：** `x64-setup.exe`
             - **Linux：** `.AppImage` 或 `.deb`
 
-            macOS 第一次打开请右键 → 打开。安装包不带账号，需在本机自行登录各工具。
+            macOS 第一次请先拖到「应用程序」，再在终端执行 `xattr -cr /Applications/UsageBar.app`。弹「已损坏」是隔离标记，不是文件坏了。安装包不带账号，需在本机自行登录各工具。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

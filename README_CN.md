@@ -72,7 +72,14 @@ Cursor 会话文件位置：
    - macOS Intel：`x64.dmg`
    - Windows：`x64-setup.exe`
    - Linux：`.AppImage` 或 `.deb`
-2. macOS 包是临时签名。第一次打开用右键 → 打开，或在 **系统设置 → 隐私与安全性** 里允许。
+2. macOS 包是临时签名（未做 Apple 公证）。把 `UsageBar.app` 拖进 **应用程序** 后，在终端执行一次（Sequoia / Tahoe 上必须这样做；「右键 → 打开」常常没用）：
+
+   ```bash
+   xattr -cr /Applications/UsageBar.app
+   open /Applications/UsageBar.app
+   ```
+
+   「UsageBar.app 已损坏」是系统隔离标记，不是文件坏了。不要点「移到废纸篓」。
 3. 照常登录 Codex CLI / Cursor / Grok CLI / GLM，UsageBar 会读这些登录态。
 
 从源码打包：
@@ -117,8 +124,13 @@ UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken`，用户 I
 **点不到圆环条 / 打不开菜单？**  
 点穿开启时，点圆环周围的透明区域可能点到后面。请悬停圆环，或用托盘 **UB**。也可以先关掉点穿，再锁定位置。
 
-**macOS 提示无法打开 / 未识别的开发者？**  
-发布包未做 Apple 公证。请右键应用 → 打开，或到 **隐私与安全性** 允许。
+**macOS 提示「UsageBar.app 已损坏，无法打开」/ 未识别的开发者？**  
+文件没有损坏。Chrome / Safari 会给下载打上隔离标记，而发布包未做 Apple 公证。在 Sequoia / Tahoe 上，右键 → 打开和 **隐私与安全性** 通常无效。把应用拷到 `/Applications` 后执行：
+
+```bash
+xattr -cr /Applications/UsageBar.app
+open /Applications/UsageBar.app
+```
 
 **圆环颜色？**  
 绿：已用 &lt; 60%。黄：60%–80%。红：≥ 80%。
