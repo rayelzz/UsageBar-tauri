@@ -8,7 +8,6 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 ### 目录
 
-- [演示](#演示)
 - [功能](#功能)
 - [用量和重置时间怎么来的](#用量和重置时间怎么来的)
 - [安装](#安装)
@@ -16,20 +15,6 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 - [常见问题](#常见问题)
 - [隐私](#隐私)
 - [许可证](#许可证)
-
-### 演示
-
-<p>
-  <img src="docs/hero.png" alt="右侧贴边，悬停 Codex" width="280" />
-  &nbsp;
-  <img src="docs/dock-left.png" alt="左侧贴边" width="280" />
-</p>
-
-<p>
-  <img src="docs/dock-top.png" alt="顶部贴边" width="420" />
-  &nbsp;
-  <img src="docs/dock-bottom.png" alt="底部贴边" width="420" />
-</p>
 
 | Codex | Cursor |
 | --- | --- |

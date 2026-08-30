@@ -8,7 +8,6 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 ### Contents
 
-- [Demo](#demo)
 - [Features](#features)
 - [How usage and reset time are read](#how-usage-and-reset-time-are-read)
 - [Install](#install)
@@ -16,22 +15,6 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - [FAQ](#faq)
 - [Privacy](#privacy)
 - [License](#license)
-
-### Demo
-
-The bar stays docked to a screen edge. Hover a ring to see reset times and extra limits.
-
-<p>
-  <img src="docs/hero.png" alt="UsageBar docked on the right with Codex details" width="280" />
-  &nbsp;
-  <img src="docs/dock-left.png" alt="UsageBar docked on the left" width="280" />
-</p>
-
-<p>
-  <img src="docs/dock-top.png" alt="UsageBar docked on the top" width="420" />
-  &nbsp;
-  <img src="docs/dock-bottom.png" alt="UsageBar docked on the bottom" width="420" />
-</p>
 
 | Codex | Cursor |
 | --- | --- |
