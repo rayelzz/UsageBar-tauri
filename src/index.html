@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UsageBar</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="bar-root" hidden>
+      <div id="bar" class="bar">
+        <svg id="dock-shape" class="dock-bg" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div id="cells" class="cells"></div>
+      </div>
+      <div id="menu" class="menu" hidden></div>
+    </div>
+    <div id="tip-root" hidden>
+      <div id="tip" class="tip">
+        <div id="tip-pointer" class="pointer"></div>
+        <div id="tip-card" class="card"></div>
+      </div>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
