@@ -194,7 +194,7 @@ fn fetch_codex() -> ProviderSnapshot {
         .and_then(|t| serde_json::from_str(&t).ok())
     {
         Some(v) => v,
-        None => return empty("codex", "Codex Usage", "未找到 Codex 登录信息"),
+        None => return empty("codex", "Codex Usage", "login_not_found"),
     };
     match pull_codex(&auth) {
         Ok(snap) => snap,
@@ -202,19 +202,19 @@ fn fetch_codex() -> ProviderSnapshot {
             if refresh_codex(&mut auth, &auth_path) {
                 pull_codex(&auth).unwrap_or_else(|e| empty("codex", "Codex Usage", &e))
             } else {
-                empty("codex", "Codex Usage", "未找到 Codex 登录信息")
+                empty("codex", "Codex Usage", "login_not_found")
             }
         }
     }
 }
 
 fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
-    let tokens = auth.get("tokens").ok_or("未找到 Codex 登录信息")?;
+    let tokens = auth.get("tokens").ok_or("login_not_found")?;
     let access = tokens
         .get("access_token")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .ok_or("未找到 Codex 登录信息")?;
+        .ok_or("login_not_found")?;
     let mut headers = vec![
         ("Authorization", format!("Bearer {access}")),
         ("Accept", "application/json".into()),
@@ -228,7 +228,7 @@ fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
         return Err("auth".into());
     }
     if code != 200 {
-        return Err("Codex 接口异常".into());
+        return Err("api_error".into());
     }
     let mut metrics = vec![];
     if let Some(rate) = json.get("rate_limit") {
@@ -262,7 +262,7 @@ fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
         title: "Codex Usage".into(),
         headline_percent: headline,
         error: if metrics.is_empty() {
-            Some("无额度数据".into())
+            Some("no_quota".into())
         } else {
             None
         },
@@ -383,7 +383,7 @@ fn fetch_cursor() -> ProviderSnapshot {
         sqlite_value(&db, "cursorAuth/accessToken"),
         sqlite_value(&db, "cursorAuth/userId"),
     ) else {
-        return empty("cursor", "Cursor Usage", "未找到 Cursor 登录信息");
+        return empty("cursor", "Cursor Usage", "login_not_found");
     };
     let cookie = format!("WorkosCursorSessionToken={user_id}%3A%3A{token}");
     let headers = [
@@ -399,7 +399,7 @@ fn fetch_cursor() -> ProviderSnapshot {
             return empty(
                 "cursor",
                 "Cursor Usage",
-                &format!("Cursor 接口异常 ({code})"),
+                &format!("api_error:{code}"),
             )
         }
         Err(e) => return empty("cursor", "Cursor Usage", &e),
@@ -433,7 +433,7 @@ fn fetch_cursor() -> ProviderSnapshot {
         title: "Cursor Usage".into(),
         headline_percent: included.or(api),
         error: if metrics.is_empty() {
-            Some("无额度数据".into())
+            Some("no_quota".into())
         } else {
             None
         },
@@ -446,7 +446,7 @@ fn fetch_cursor() -> ProviderSnapshot {
 
 fn fetch_grok() -> ProviderSnapshot {
     let Some((token, refresh, user_id, issuer, client_id)) = load_grok() else {
-        return empty("grok", "Grok Usage", "未找到 Grok 登录信息");
+        return empty("grok", "Grok Usage", "login_not_found");
     };
     let mut headers = vec![
         ("Authorization", format!("Bearer {token}")),
@@ -468,7 +468,7 @@ fn fetch_grok() -> ProviderSnapshot {
         }
     }
     let Ok((200, json)) = result else {
-        return empty("grok", "Grok Usage", "Grok 接口异常");
+        return empty("grok", "Grok Usage", "api_error");
     };
     let config = json.get("config").cloned().unwrap_or(json.clone());
     let reset = config
@@ -512,7 +512,7 @@ fn fetch_grok() -> ProviderSnapshot {
         title: "Grok Usage".into(),
         headline_percent: weekly.or_else(|| metrics.first().map(|m| m.percent)),
         error: if metrics.is_empty() {
-            Some("无额度数据".into())
+            Some("no_quota".into())
         } else {
             None
         },
@@ -603,7 +603,7 @@ fn refresh_grok(issuer: Option<&str>, refresh: Option<&str>, client: Option<&str
 
 fn fetch_glm() -> ProviderSnapshot {
     let Some(key) = glm_key() else {
-        return empty("glm", "GLM Usage", "未找到 GLM 登录信息");
+        return empty("glm", "GLM Usage", "login_not_found");
     };
     let headers = [
         ("Authorization", format!("Bearer {key}")),
@@ -617,7 +617,7 @@ fn fetch_glm() -> ProviderSnapshot {
             return parse_glm(json);
         }
     }
-    empty("glm", "GLM Usage", "未找到 GLM 登录信息")
+    empty("glm", "GLM Usage", "login_not_found")
 }
 
 fn parse_glm(json: Value) -> ProviderSnapshot {
@@ -671,7 +671,7 @@ fn parse_glm(json: Value) -> ProviderSnapshot {
         title: "GLM Usage".into(),
         headline_percent: headline,
         error: if metrics.is_empty() {
-            Some("无额度数据".into())
+            Some("no_quota".into())
         } else {
             None
         },

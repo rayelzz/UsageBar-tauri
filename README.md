@@ -99,6 +99,7 @@ Menu bar / tray **UB**, or right-click the bar:
 - Lock position / click-through (**Don’t block clicks below**)
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
+- Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
 - Open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.

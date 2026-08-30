@@ -39,15 +39,143 @@ const ICONS_SIZE = {
   horizontal: { w: 92, h: 26 },
 };
 const SNAP = 32;
-const REFRESH_CHOICES = [
-  [15, "15 秒"],
-  [30, "30 秒"],
-  [60, "60 秒"],
-  [120, "2 分钟"],
-  [300, "5 分钟"],
-  [600, "10 分钟"],
-  [0, "关闭"],
-];
+const REFRESH_SECS = [15, 30, 60, 120, 300, 600, 0];
+const VENDORS = { codex: "Codex", cursor: "Cursor", grok: "Grok", glm: "GLM" };
+const METRIC_LABELS = {
+  en: {
+    "Included usage": "Included usage",
+    "API usage": "API usage",
+    "Weekly limit": "Weekly limit",
+    "Weekly allowance": "Weekly allowance",
+    "5-hour window": "5-hour window",
+    "Monthly limit": "Monthly limit",
+    "Current window": "Current window",
+    "MCP tools": "MCP tools",
+    Usage: "Usage",
+  },
+  zh: {
+    "Included usage": "套餐用量",
+    "API usage": "API 用量",
+    "Weekly limit": "周额度",
+    "Weekly allowance": "周额度",
+    "5-hour window": "5 小时窗口",
+    "Monthly limit": "月额度",
+    "Current window": "当前窗口",
+    "MCP tools": "MCP 工具",
+    Usage: "用量",
+  },
+};
+
+function isZh() {
+  return prefs.locale === "zh";
+}
+
+function t() {
+  return isZh()
+    ? {
+        refreshNow: "立即刷新",
+        autoRefresh: "自动刷新",
+        lock: "锁定位置",
+        unlock: "解锁位置",
+        clickThrough: "不阻挡下方点击",
+        snapLeft: "贴左边",
+        snapRight: "贴右边",
+        snapTop: "贴上边",
+        snapBottom: "贴下边",
+        displayStyle: "显示样式",
+        ringUsage: "圆环用量",
+        transparentIcons: "透明图标",
+        language: "语言",
+        openAtLogin: "登录时打开",
+        quit: "退出 UsageBar",
+        off: "关闭",
+        noData: "暂无数据",
+        days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
+      }
+    : {
+        refreshNow: "Refresh now",
+        autoRefresh: "Auto refresh",
+        lock: "Lock position",
+        unlock: "Unlock position",
+        clickThrough: "Don’t block clicks below",
+        snapLeft: "Snap to left",
+        snapRight: "Snap to right",
+        snapTop: "Snap to top",
+        snapBottom: "Snap to bottom",
+        displayStyle: "Display style",
+        ringUsage: "Ring usage",
+        transparentIcons: "Transparent icons",
+        language: "Language",
+        openAtLogin: "Open at login",
+        quit: "Quit UsageBar",
+        off: "Off",
+        noData: "No data",
+        days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      };
+}
+
+function intervalLabel(sec) {
+  if (sec === 0) return t().off;
+  if (isZh()) {
+    if (sec === 120) return "2 分钟";
+    if (sec === 300) return "5 分钟";
+    if (sec === 600) return "10 分钟";
+    return `${sec} 秒`;
+  }
+  if (sec === 120) return "2 minutes";
+  if (sec === 300) return "5 minutes";
+  if (sec === 600) return "10 minutes";
+  return `${sec} seconds`;
+}
+
+function vendorName(id) {
+  return VENDORS[id] || id;
+}
+
+function usageTitle(id) {
+  const name = vendorName(id);
+  return isZh() ? `${name} 用量` : `${name} Usage`;
+}
+
+function localizeMetricLabel(label) {
+  if (!label) return "";
+  const dict = isZh() ? METRIC_LABELS.zh : METRIC_LABELS.en;
+  if (dict[label]) return dict[label];
+  const idx = label.lastIndexOf(" · ");
+  if (idx >= 0) {
+    const head = label.slice(0, idx);
+    const tail = label.slice(idx + 3);
+    if (dict[tail]) return `${head} · ${dict[tail]}`;
+  }
+  return label;
+}
+
+function localizeError(snap) {
+  const name = vendorName(snap.id);
+  const err = snap.error || "";
+  if (!err || err === "no_quota") return t().noData;
+  if (err === "login_not_found") {
+    return isZh() ? `未找到 ${name} 登录信息` : `${name} login not found`;
+  }
+  if (err === "auth") {
+    return isZh() ? "登录已过期" : "Session expired";
+  }
+  if (err.startsWith("api_error")) {
+    const code = err.split(":")[1];
+    if (isZh()) return code ? `${name} 接口异常 (${code})` : `${name} 接口异常`;
+    return code ? `${name} request failed (${code})` : `${name} request failed`;
+  }
+  return err;
+}
+
+function usedText(pct) {
+  const n = Math.round(pct);
+  return isZh() ? `已用 ${n}%` : `${n}% Used`;
+}
+
+function applyLocale() {
+  document.documentElement.lang = isZh() ? "zh-CN" : "en";
+}
 
 const api = () => window.__TAURI__;
 const invoke = (cmd, args) => api().core.invoke(cmd, args);
@@ -66,13 +194,19 @@ function formatReset(ms) {
   if (ms == null) return "";
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const day = t().days[d.getDay()];
+  if (isZh()) {
+    const ap = h < 12 ? "上午" : "下午";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `重置 ${day} ${ap} ${h}:${m}`;
+  }
   const ap = h < 12 ? "AM" : "PM";
   h = h % 12;
   if (h === 0) h = 12;
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `Resets ${days[d.getDay()]} ${h}:${m} ${ap}`;
+  return `Resets ${day} ${h}:${m} ${ap}`;
 }
 
 function glyph(id, size) {
@@ -265,6 +399,7 @@ let prefs = {
   launchAtLogin: false,
   screenName: "",
   displayStyle: "full",
+  locale: "en",
 };
 let osName = "macos";
 let snaps = [
@@ -381,6 +516,7 @@ async function renderTip() {
     return;
   }
   const resets = (snap.metrics || []).map((m) => formatReset(m.resetsAt));
+  const locale = prefs.locale === "zh" ? "zh" : "en";
   const arrow =
     prefs.edge === "left"
       ? "left"
@@ -389,7 +525,7 @@ async function renderTip() {
         : prefs.edge === "bottom"
           ? "down"
           : "right";
-  await api().event.emit("usagebar-tip", { show: true, snap, resets, arrow });
+  await api().event.emit("usagebar-tip", { show: true, snap, resets, arrow, locale });
   const h = tipHeight(snap);
   try {
     await tipWin.setMinSize(new (LogicalSize())(1, 1));
@@ -528,6 +664,15 @@ function restartTimer() {
   }
 }
 
+async function setLocale(next) {
+  const locale = next === "zh" ? "zh" : "en";
+  if (prefs.locale === locale) return;
+  prefs.locale = locale;
+  applyLocale();
+  await savePrefs();
+  if (hovered) await renderTip();
+}
+
 async function setDisplayStyle(style) {
   if (prefs.displayStyle === style) return;
   await setHovered(null);
@@ -583,6 +728,9 @@ async function onNativeMenu(id) {
   } else if (id.startsWith("style:")) {
     await setDisplayStyle(id.slice(6));
     return;
+  } else if (id.startsWith("locale:")) {
+    await setLocale(id.slice(7));
+    return;
   } else if (id === "login") {
     const auto = api().autostart;
     if (auto) {
@@ -608,29 +756,37 @@ async function showNativeMenu() {
   const item = (id, text) => MenuItem.new({ id, text, action: run(id) });
   const check = (id, text, checked) =>
     CheckMenuItem.new({ id, text, checked, action: run(id) });
+  const ui = t();
   const refreshItems = await Promise.all(
-    REFRESH_CHOICES.map(([sec, title]) =>
-      check(`interval:${sec}`, title, prefs.refreshInterval === sec)
+    REFRESH_SECS.map((sec) =>
+      check(`interval:${sec}`, intervalLabel(sec), prefs.refreshInterval === sec)
     )
   );
   const styleItems = await Promise.all([
-    check("style:full", "圆环用量", !isIcons()),
-    check("style:icons", "透明图标", isIcons()),
+    check("style:full", ui.ringUsage, !isIcons()),
+    check("style:icons", ui.transparentIcons, isIcons()),
+  ]);
+  const langItems = await Promise.all([
+    check("locale:en", "English", !isZh()),
+    check("locale:zh", "中文", isZh()),
   ]);
   const items = await Promise.all([
-    item("lock", prefs.locked ? "解锁位置" : "锁定位置"),
-    item("click", prefs.clickThrough ? "✓ 不阻挡下方点击" : "不阻挡下方点击"),
+    item("refresh", ui.refreshNow),
+    Submenu.new({ text: ui.autoRefresh, items: refreshItems }),
     PredefinedMenuItem.new({ item: "Separator" }),
-    item("snap:left", prefs.edge === "left" ? "✓ 贴左边" : "贴左边"),
-    item("snap:right", prefs.edge === "right" ? "✓ 贴右边" : "贴右边"),
-    item("snap:top", prefs.edge === "top" ? "✓ 贴上边" : "贴上边"),
-    item("snap:bottom", prefs.edge === "bottom" ? "✓ 贴下边" : "贴下边"),
-    Submenu.new({ text: "显示样式", items: styleItems }),
+    item("lock", prefs.locked ? ui.unlock : ui.lock),
+    check("click", ui.clickThrough, !!prefs.clickThrough),
     PredefinedMenuItem.new({ item: "Separator" }),
-    item("refresh", "立即刷新"),
-    Submenu.new({ text: "自动刷新", items: refreshItems }),
+    check("snap:left", ui.snapLeft, prefs.edge === "left"),
+    check("snap:right", ui.snapRight, prefs.edge === "right"),
+    check("snap:top", ui.snapTop, prefs.edge === "top"),
+    check("snap:bottom", ui.snapBottom, prefs.edge === "bottom"),
+    Submenu.new({ text: ui.displayStyle, items: styleItems }),
+    Submenu.new({ text: ui.language, items: langItems }),
     PredefinedMenuItem.new({ item: "Separator" }),
-    item("quit", "退出 UsageBar"),
+    check("login", ui.openAtLogin, !!prefs.launchAtLogin),
+    PredefinedMenuItem.new({ item: "Separator" }),
+    item("quit", ui.quit),
   ]);
   const menu = await Menu.new({ items });
   menuOpen = true;
@@ -663,6 +819,8 @@ async function startBar() {
   osName = await invoke("os_name");
   prefs = await invoke("get_prefs");
   if (prefs.displayStyle !== "icons") prefs.displayStyle = "full";
+  prefs.locale = prefs.locale === "zh" ? "zh" : "en";
+  applyLocale();
   try {
     if (api().autostart) {
       prefs.launchAtLogin = await api().autostart.isEnabled();
@@ -704,25 +862,27 @@ async function startBar() {
 
 function paintTip(payload) {
   if (!payload?.show || !payload.snap) return;
+  prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  applyLocale();
   const snap = payload.snap;
   const spec = ICONS[snap.id];
   const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
   const metricsHtml = !snap.metrics?.length
-    ? `<div class="empty">${snap.error || "暂无数据"}</div>`
+    ? `<div class="empty">${localizeError(snap)}</div>`
     : snap.metrics
         .map((m, i) => {
           const color = usageColor(m.percent);
           return `<div class="metric">
-            <div class="metric-top"><span>${m.label}</span><span class="metric-reset">${payload.resets?.[i] || ""}</span></div>
+            <div class="metric-top"><span>${localizeMetricLabel(m.label)}</span><span class="metric-reset">${payload.resets?.[i] || ""}</span></div>
             <div class="track"><div class="fill" style="width:${Math.min(Math.max(m.percent, 0), 100)}%;background:${color}"></div></div>
-            <div class="used">${Math.round(m.percent)}% Used</div>
+            <div class="used">${usedText(m.percent)}</div>
           </div>`;
         })
         .join("");
   document.getElementById("tip-card").innerHTML = `
     <div class="card-head">
       <svg class="mini glyph" viewBox="${spec.viewBox}">${spec.d.map((p) => `<path ${rule} d="${p}"/>`).join("")}</svg>
-      <div class="title">${snap.title}</div>
+      <div class="title">${usageTitle(snap.id)}</div>
     </div>${metricsHtml}`;
   document.getElementById("tip").className = "tip arrow-" + (payload.arrow || "right");
 }

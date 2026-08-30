@@ -17,6 +17,12 @@ pub struct Prefs {
     pub screen_name: String,
     #[serde(default)]
     pub display_style: String,
+    #[serde(default = "default_locale")]
+    pub locale: String,
+}
+
+fn default_locale() -> String {
+    "en".into()
 }
 
 impl Default for Prefs {
@@ -32,6 +38,7 @@ impl Default for Prefs {
             launch_at_login: false,
             screen_name: String::new(),
             display_style: "full".into(),
+            locale: default_locale(),
         }
     }
 }

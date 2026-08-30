@@ -1,3 +1,4 @@
+mod i18n;
 mod overlay;
 mod prefs;
 mod providers;
@@ -104,22 +105,15 @@ fn tray_rect(app: AppHandle) -> Option<TrayRect> {
 }
 
 fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::Wry>> {
-    let refresh = MenuItem::with_id(app, "refresh", "立即刷新", true, None::<&str>)?;
-    let intervals = [
-        (15u64, "15 秒"),
-        (30, "30 秒"),
-        (60, "60 秒"),
-        (120, "2 分钟"),
-        (300, "5 分钟"),
-        (600, "10 分钟"),
-        (0, "关闭"),
-    ];
+    let loc = prefs.locale.as_str();
+    let refresh = MenuItem::with_id(app, "refresh", i18n::refresh_now(loc), true, None::<&str>)?;
+    let intervals = [15u64, 30, 60, 120, 300, 600, 0];
     let mut refresh_items = Vec::new();
-    for (sec, title) in intervals {
+    for sec in intervals {
         refresh_items.push(CheckMenuItem::with_id(
             app,
             format!("interval:{sec}"),
-            title,
+            i18n::interval_label(loc, sec),
             true,
             prefs.refresh_interval == sec,
             None::<&str>,
@@ -129,33 +123,51 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
         .iter()
         .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
         .collect();
-    let refresh_sub = Submenu::with_id_and_items(app, "auto-refresh", "自动刷新", true, &refresh_refs)?;
+    let refresh_sub =
+        Submenu::with_id_and_items(app, "auto-refresh", i18n::auto_refresh(loc), true, &refresh_refs)?;
     let lock = MenuItem::with_id(
         app,
         "lock",
-        if prefs.locked {
-            "解锁位置"
-        } else {
-            "锁定位置"
-        },
+        i18n::lock_position(loc, prefs.locked),
         true,
         None::<&str>,
     )?;
     let click = CheckMenuItem::with_id(
         app,
         "click",
-        "不阻挡下方点击",
+        i18n::click_through(loc),
         true,
         prefs.click_through,
         None::<&str>,
     )?;
-    let left = CheckMenuItem::with_id(app, "snap:left", "贴左边", true, prefs.edge == "left", None::<&str>)?;
-    let right = CheckMenuItem::with_id(app, "snap:right", "贴右边", true, prefs.edge == "right", None::<&str>)?;
-    let top = CheckMenuItem::with_id(app, "snap:top", "贴上边", true, prefs.edge == "top", None::<&str>)?;
+    let left = CheckMenuItem::with_id(
+        app,
+        "snap:left",
+        i18n::snap_left(loc),
+        true,
+        prefs.edge == "left",
+        None::<&str>,
+    )?;
+    let right = CheckMenuItem::with_id(
+        app,
+        "snap:right",
+        i18n::snap_right(loc),
+        true,
+        prefs.edge == "right",
+        None::<&str>,
+    )?;
+    let top = CheckMenuItem::with_id(
+        app,
+        "snap:top",
+        i18n::snap_top(loc),
+        true,
+        prefs.edge == "top",
+        None::<&str>,
+    )?;
     let bottom = CheckMenuItem::with_id(
         app,
         "snap:bottom",
-        "贴下边",
+        i18n::snap_bottom(loc),
         true,
         prefs.edge == "bottom",
         None::<&str>,
@@ -163,7 +175,7 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
     let style_full = CheckMenuItem::with_id(
         app,
         "style:full",
-        "圆环用量",
+        i18n::ring_usage(loc),
         true,
         prefs.display_style != "icons",
         None::<&str>,
@@ -171,22 +183,28 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
     let style_icons = CheckMenuItem::with_id(
         app,
         "style:icons",
-        "透明图标",
+        i18n::transparent_icons(loc),
         true,
         prefs.display_style == "icons",
         None::<&str>,
     )?;
     let style_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&style_full, &style_icons];
-    let style_sub = Submenu::with_id_and_items(app, "display-style", "显示样式", true, &style_refs)?;
+    let style_sub =
+        Submenu::with_id_and_items(app, "display-style", i18n::display_style(loc), true, &style_refs)?;
+    let zh = i18n::is_zh(loc);
+    let lang_en = CheckMenuItem::with_id(app, "locale:en", "English", true, !zh, None::<&str>)?;
+    let lang_zh = CheckMenuItem::with_id(app, "locale:zh", "中文", true, zh, None::<&str>)?;
+    let lang_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&lang_en, &lang_zh];
+    let lang_sub = Submenu::with_id_and_items(app, "language", i18n::language(loc), true, &lang_refs)?;
     let login = CheckMenuItem::with_id(
         app,
         "login",
-        "登录时打开",
+        i18n::open_at_login(loc),
         true,
         prefs.launch_at_login,
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "退出 UsageBar", true, Some("q"))?;
+    let quit = MenuItem::with_id(app, "quit", i18n::quit(loc), true, Some("q"))?;
     let sep = PredefinedMenuItem::separator(app)?;
     Menu::with_items(
         app,
@@ -202,6 +220,7 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
             &top,
             &bottom,
             &style_sub,
+            &lang_sub,
             &sep,
             &login,
             &sep,
