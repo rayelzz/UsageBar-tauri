@@ -24,9 +24,9 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | --- | --- |
 | <img src="docs/grok-usage.png" alt="Grok 用量" width="280" /> | <img src="docs/glm-usage.png" alt="GLM 用量" width="280" /> |
 
-| Quota reset | 额度已重置 |
-| --- | --- |
-| <img src="docs/reset-en.gif" alt="Quota reset" width="280" /> | <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
+| 额度已重置 |
+| --- |
+| <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
 
 <p>
   <img src="docs/settings-zh.png" alt="工具窗口和菜单" width="480" />
