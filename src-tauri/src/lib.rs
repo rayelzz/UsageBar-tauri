@@ -60,8 +60,13 @@ fn set_pointer(left: bool) {
 }
 
 #[tauri::command]
-fn set_menu_open(app: AppHandle, open: bool) {
+fn set_menu_open(app: AppHandle, open: bool, card: Option<[f64; 4]>) {
     overlay::MENU_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
+    if !open {
+        overlay::set_menu_card(None);
+    } else if card.is_some() {
+        overlay::set_menu_card(card);
+    }
     if open {
         if let Some(state) = app.try_state::<Overlay>() {
             state.clear_hover();
@@ -356,6 +361,8 @@ pub fn run() {
             open_settings
         ])
         .setup(|app| {
+            // 应用整体为暗色设计，原生菜单 / 设置窗口统一走暗色外观。
+            app.handle().set_theme(Some(tauri::Theme::Dark));
             for (label, win) in app.webview_windows() {
                 if label != "bar" && label != "tip" {
                     let _ = win.hide();

@@ -46,9 +46,9 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Update reminder.** About once an hour (and on launch), UsageBar checks GitHub Releases. If a newer version exists, a single line appears: **Update available x.x.x**. Click it to open the latest release page. No auto-download.
-            - **Quota reset.** When a usage window drops from a used percent back to **0%**, that tool’s icon pulses green and a tooltip stays up with **Quota reset**. Hover the card to reveal **×**, click to dismiss. It does not auto-close.
-            - **1–10 tools, bar resizes.** **Tools…** now accepts 1–10 rings (was a fixed 4 with empty **—** slots). The bar shortens or lengthens with the selection. At least one tool must stay checked.
+            - **Settings gear on the bar.** A detached gear sits past the end of the bar — the original bar shape is unchanged. Hover to show it; click to open the same dark menu as **UB**. Click outside the panel to close. No extra hint arc when idle.
+            - **Update light on the gear.** If a newer GitHub release exists, the gear shows a green dot. Click it to open the release page. No auto-download.
+            - **Dark settings UI.** The menu and **Tools…** window match the usage tooltip: dark card, not a separate light dialog.
             - Still official APIs only. Sign in on this computer first. Unsigned-in tools show No data.
 
             ### Download
@@ -71,9 +71,9 @@ jobs:
 
             ### 更新说明
 
-            - **更新提醒。** 启动时以及大约每小时检查一次 GitHub Releases。有新版本时显示一行「有新版本 x.x.x」，点击打开发布页。不会自动下载。
-            - **额度重置提醒。** 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动，并弹出「额度已重置」。鼠标悬停气泡出现 **×**，点了才关闭，不会自动收起。
-            - **1–10 个工具，条长自适应。** **工具…** 可勾 1–10 个（不再固定 4 格、不再留空的 —）。条随数量变短或变长，至少保留 1 个。
+            - **条上的设置齿轮。** 齿轮在条末端外侧单独悬空，原来的条身形状不动。悬停出现，点击打开和 **UB** 同一套深色菜单；点空白处关闭。未悬停时不再画提示弧。
+            - **更新绿灯。** 有新版本时齿轮带绿灯，点击打开发布页。不会自动下载。
+            - **深色设置界面。** 菜单和 **工具…** 窗口跟用量气泡同一套深色样式，不再是单独的浅色对话框。
             - 仍然只读本机登录态、只打官方接口。没登录显示暂无数据。
 
             ### 下载

@@ -17,9 +17,26 @@ const BAR_H_SLOT: f64 = 59.0;
 const ICONS_THICK: f64 = 26.0;
 const ICONS_BASE: f64 = 8.0;
 const ICONS_SLOT: f64 = 21.0;
+/// 圆环样式末尾追加的设置区长度：0.0.9 条身原样结束，其后留空放悬空齿轮舱。
+const GEAR_ALONG: f64 = 22.0;
+/// 浮动模式胶囊下方的预留（胶囊无贴边弧，舱体整体更靠下）。
+const GEAR_ALONG_FLOAT: f64 = 40.0;
+/// 齿轮舱横向圆心：距条内边 GEAR_CARVE（= 半径 14 + 缝隙 4.5）。
+const GEAR_CARVE: f64 = 18.5;
+/// 齿轮舱圆心距窗口末端的距离。
+const GEAR_END: f64 = 19.0;
+const GEAR_HIT: f64 = 30.0;
 
 pub static JS_LEFT: AtomicBool = AtomicBool::new(false);
 pub static MENU_OPEN: AtomicBool = AtomicBool::new(false);
+/// 菜单卡片逻辑坐标 [x, y, w, h]，用于判断点击是否落在面板上。
+pub static MENU_CARD: Mutex<Option<[f64; 4]>> = Mutex::new(None);
+
+pub fn set_menu_card(card: Option<[f64; 4]>) {
+    if let Ok(mut slot) = MENU_CARD.lock() {
+        *slot = card;
+    }
+}
 
 
 pub struct Overlay {
@@ -31,6 +48,9 @@ pub struct Overlay {
     frame: Mutex<Option<CachedFrame>>,
     hovered: Mutex<Option<String>>,
     tip_hot: Mutex<bool>,
+    bar_over: AtomicBool,
+    was_left: AtomicBool,
+    press_on_gear: AtomicBool,
 }
 
 struct CachedFrame {
@@ -88,6 +108,9 @@ impl Overlay {
             frame: Mutex::new(None),
             hovered: Mutex::new(None),
             tip_hot: Mutex::new(false),
+            bar_over: AtomicBool::new(false),
+            was_left: AtomicBool::new(false),
+            press_on_gear: AtomicBool::new(false),
         }
     }
 
@@ -156,12 +179,45 @@ fn tick(app: &AppHandle) {
         .and_then(|g| g.as_ref().map(|d| d.started))
         .unwrap_or(false);
 
-    if !left {
-        let ignore = prefs.click_through && !over && !dragging;
+    let menu_open = MENU_OPEN.load(Ordering::Relaxed);
+    if !left || menu_open {
+        let ignore = prefs.click_through && !over && !dragging && !menu_open;
         set_ignore(&state, &bar, ignore);
     }
 
-    if !prefs.locked && left && over {
+    emit_bar_over(app, state, over);
+
+    let on_gear = over
+        && over_gear(
+            &prefs.edge,
+            is_icons(&prefs),
+            scale,
+            px,
+            py,
+            pw,
+            ph,
+            cursor.x,
+            cursor.y,
+        );
+    let pressed = left && !state.was_left.swap(left, Ordering::AcqRel);
+    if !left {
+        state.press_on_gear.store(false, Ordering::Release);
+    } else if pressed && on_gear {
+        state.press_on_gear.store(true, Ordering::Release);
+    }
+
+    // 菜单打开时：点齿轮和菜单卡片以外即关闭。
+    if pressed && menu_open && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) {
+        let _ = app.emit("usagebar-menu", "close");
+    }
+
+    if !prefs.locked
+        && left
+        && over
+        && !on_gear
+        && !state.press_on_gear.load(Ordering::Relaxed)
+        && !menu_open
+    {
         let mut drag = state.drag.lock().unwrap_or_else(|e| e.into_inner());
         if drag.is_none() {
             let (scale, px, py, pw, ph) =
@@ -267,9 +323,9 @@ fn hover_id(
     }
     let vertical = is_vertical(&prefs.edge);
     let (inset_start, inset_end) = if vertical {
-        (20.0, 20.0)
+        (20.0, 20.0 + GEAR_ALONG)
     } else {
-        (18.0, 12.0)
+        (18.0, 12.0 + GEAR_ALONG)
     };
     let along = if vertical { ph / scale } else { pw / scale };
     let coord = if vertical { local_y } else { local_x };
@@ -284,6 +340,21 @@ fn hover_id(
         return Some(slots[idx as usize].clone());
     }
     None
+}
+
+fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {
+    let card = match MENU_CARD.lock() {
+        Ok(g) => *g,
+        Err(e) => *e.into_inner(),
+    };
+    let Some([x, y, w, h]) = card else {
+        return false;
+    };
+    let s = if scale > 0.0 { scale } else { 1.0 };
+    mx >= x * s - 6.0
+        && mx <= (x + w) * s + 6.0
+        && my >= y * s - 6.0
+        && my <= (y + h) * s + 6.0
 }
 
 fn over_tip(app: &AppHandle, mx: f64, my: f64) -> bool {
@@ -315,6 +386,12 @@ fn emit_tip_hot(app: &AppHandle, state: &Overlay, hot: bool) {
     }
     *slot = hot;
     let _ = app.emit("usagebar-tip-hover", hot);
+}
+
+fn emit_bar_over(app: &AppHandle, state: &Overlay, over: bool) {
+    if state.bar_over.swap(over, Ordering::AcqRel) != over {
+        let _ = app.emit("usagebar-over", over);
+    }
 }
 
 fn emit_hover(app: &AppHandle, state: &Overlay, next: Option<String>) {
@@ -665,11 +742,51 @@ fn bar_size(edge: &str, prefs: &Prefs) -> (f64, f64) {
         } else {
             (along, ICONS_THICK)
         }
-    } else if is_vertical(edge) {
-        (BAR_THICK, BAR_PAD + BAR_SLOT * n)
     } else {
-        (BAR_H_BASE + BAR_H_SLOT * n, BAR_H_THICK)
+        let g = if edge == "floating" {
+            GEAR_ALONG_FLOAT
+        } else {
+            GEAR_ALONG
+        };
+        if is_vertical(edge) {
+            (BAR_THICK, BAR_PAD + BAR_SLOT * n + g)
+        } else {
+            (BAR_H_BASE + BAR_H_SLOT * n + g, BAR_H_THICK)
+        }
     }
+}
+
+fn gear_center(edge: &str, w: f64, h: f64) -> (f64, f64) {
+    match edge {
+        "right" => (GEAR_CARVE, h - GEAR_END),
+        "left" => (w - GEAR_CARVE, h - GEAR_END),
+        "top" => (w - GEAR_END, h - GEAR_CARVE),
+        "bottom" => (w - GEAR_END, GEAR_CARVE),
+        _ => (w / 2.0, h - GEAR_END),
+    }
+}
+
+fn over_gear(
+    edge: &str,
+    icons: bool,
+    scale: f64,
+    px: f64,
+    py: f64,
+    pw: f64,
+    ph: f64,
+    mx: f64,
+    my: f64,
+) -> bool {
+    if icons {
+        return false;
+    }
+    let w = pw / scale;
+    let h = ph / scale;
+    let lx = (mx - px) / scale;
+    let ly = (my - py) / scale;
+    let (cx, cy) = gear_center(edge, w, h);
+    let r = GEAR_HIT / 2.0;
+    (lx - cx).abs() <= r && (ly - cy).abs() <= r
 }
 
 fn is_vertical(edge: &str) -> bool {

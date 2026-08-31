@@ -43,7 +43,8 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
-- Status / tray item is the text **UB** (macOS). Right-click the bar or click **UB** for the same menu
+- A detached settings gear sits past the end of the bar (the original bar shape is unchanged). Hover to show it; click to open the same dark menu as **UB**. Click outside the panel to close. A green dot on the gear means an update is available — click opens the release page
+- Status / tray item is the text **UB** (macOS). Click the gear, right-click the bar, or click **UB** for the same menu
 - Auto-refresh every 60 seconds (configurable)
 - Official brand icons; red when remaining &lt; 20% (used ≥ 80%), yellow when remaining 20%–40% (used 60%–80%), green otherwise
 
@@ -108,7 +109,7 @@ Push a `v*` tag to run GitHub Actions and publish macOS (Apple Silicon + Intel),
 
 ### Menu
 
-Menu bar / tray **UB**, or right-click the bar:
+Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 
 - Refresh now; auto-refresh 15s–10min or off
 - Lock position / click-through (**Don’t block clicks below**)

@@ -68,6 +68,14 @@ const BAR_H_SLOT = 59;
 const ICONS_THICK = 26;
 const ICONS_BASE = 8;
 const ICONS_SLOT = 21;
+const GEAR_R = 14;
+const GEAR_CARVE = GEAR_R + 4.5;
+const GEAR_END = 19;
+const GEAR_BTN = 28;
+
+function gearAlong(edge) {
+  return edge === "floating" ? 40 : 22;
+}
 const SNAP = 32;
 const REFRESH_SECS = [15, 30, 60, 120, 300, 600, 0];
 const VENDORS = {
@@ -150,6 +158,9 @@ function t() {
         selectedCount: (n) => `已选 ${n} / 10`,
         resetTitle: "额度已重置",
         updateLine: (v) => `有新版本 ${v}`,
+        settings: "设置",
+        snapGroup: "贴边",
+        edgeShort: ["左", "右", "上", "下"],
         off: "关闭",
         noData: "暂无数据",
         days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
@@ -166,7 +177,7 @@ function t() {
         snapBottom: "Snap to bottom",
         displayStyle: "Display style",
         ringUsage: "Ring usage",
-        transparentIcons: "Transparent icons",
+        transparentIcons: "Transparent",
         language: "Language",
         openAtLogin: "Open at login",
         quit: "Quit UsageBar",
@@ -180,6 +191,9 @@ function t() {
         selectedCount: (n) => `${n} / 10 selected`,
         resetTitle: "Quota reset",
         updateLine: (v) => `Update available ${v}`,
+        settings: "Settings",
+        snapGroup: "Snap edge",
+        edgeShort: ["Left", "Right", "Top", "Bottom"],
         off: "Off",
         noData: "No data",
         days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -194,10 +208,10 @@ function intervalLabel(sec) {
     if (sec === 600) return "10 分钟";
     return `${sec} 秒`;
   }
-  if (sec === 120) return "2 minutes";
-  if (sec === 300) return "5 minutes";
-  if (sec === 600) return "10 minutes";
-  return `${sec} seconds`;
+  if (sec === 120) return "2min";
+  if (sec === 300) return "5min";
+  if (sec === 600) return "10min";
+  return `${sec}s`;
 }
 
 function vendorName(id) {
@@ -272,6 +286,14 @@ function usedText(pct) {
 
 function applyLocale() {
   document.documentElement.lang = isZh() ? "zh-CN" : "en";
+  syncUpdateBadge();
+}
+
+function syncUpdateBadge() {
+  const gear = document.getElementById("gear-btn");
+  if (!gear) return;
+  gear.classList.toggle("has-update", !!updateInfo);
+  gear.setAttribute("aria-label", updateInfo ? t().updateLine(updateInfo.latest) : t().settings);
 }
 
 const api = () => window.__TAURI__;
@@ -347,27 +369,31 @@ const S = 0.72;
 
 function dockPath(w, h, edge) {
   if (edge === "floating") {
-    const r = Math.min(w, h) / 2;
-    return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${h - r} A${r},${r} 0 0 1 ${w - r},${h} H${r} A${r},${r} 0 0 1 0,${h - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
+    const hh = h - gearAlong(edge);
+    const r = Math.min(w, hh) / 2;
+    return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${hh - r} A${r},${r} 0 0 1 ${w - r},${hh} H${r} A${r},${r} 0 0 1 0,${hh - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
   }
-  const along = edge === "left" || edge === "right" ? h : w;
-  const [f, r] = radii(w, h, along);
+  const vertical = edge === "left" || edge === "right";
+  const bw = vertical ? w : w - gearAlong(edge);
+  const bh = vertical ? h - gearAlong(edge) : h;
+  const along = vertical ? bh : bw;
+  const [f, r] = radii(bw, bh, along);
   const pad = 1;
   const a = S;
   const X = (t) => (edge === "right" ? w - t : t);
   const Yh = (t) => (edge === "top" ? t : h - t);
-  if (edge === "left" || edge === "right") {
+  if (vertical) {
     return [
       `M${X(-pad)},0`,
       `L${X(0)},0`,
       `C${X(0)},${a * f} ${X((1 - a) * f)},${f} ${X(f)},${f}`,
       `L${X(w - r)},${f}`,
       `C${X(w - r + K * r)},${f} ${X(w)},${f + r - K * r} ${X(w)},${f + r}`,
-      `L${X(w)},${h - f - r}`,
-      `C${X(w)},${h - f - r + K * r} ${X(w - r + K * r)},${h - f} ${X(w - r)},${h - f}`,
-      `L${X(f)},${h - f}`,
-      `C${X((1 - a) * f)},${h - f} ${X(0)},${h - a * f} ${X(0)},${h}`,
-      `L${X(-pad)},${h}`,
+      `L${X(w)},${bh - f - r}`,
+      `C${X(w)},${bh - f - r + K * r} ${X(w - r + K * r)},${bh - f} ${X(w - r)},${bh - f}`,
+      `L${X(f)},${bh - f}`,
+      `C${X((1 - a) * f)},${bh - f} ${X(0)},${bh - a * f} ${X(0)},${bh}`,
+      `L${X(-pad)},${bh}`,
       "Z",
     ].join(" ");
   }
@@ -377,22 +403,39 @@ function dockPath(w, h, edge) {
     `C${a * f},${Yh(0)} ${f},${Yh((1 - a) * f)} ${f},${Yh(f)}`,
     `L${f},${Yh(h - r)}`,
     `C${f},${Yh(h - r + K * r)} ${f + r - K * r},${Yh(h)} ${f + r},${Yh(h)}`,
-    `L${w - f - r},${Yh(h)}`,
-    `C${w - f - r + K * r},${Yh(h)} ${w - f},${Yh(h - r + K * r)} ${w - f},${Yh(h - r)}`,
-    `L${w - f},${Yh(f)}`,
-    `C${w - f},${Yh((1 - a) * f)} ${w - a * f},${Yh(0)} ${w},${Yh(0)}`,
-    `L${w},${Yh(-pad)}`,
+    `L${bw - f - r},${Yh(h)}`,
+    `C${bw - f - r + K * r},${Yh(h)} ${bw - f},${Yh(h - r + K * r)} ${bw - f},${Yh(h - r)}`,
+    `L${bw - f},${Yh(f)}`,
+    `C${bw - f},${Yh((1 - a) * f)} ${bw - a * f},${Yh(0)} ${bw},${Yh(0)}`,
+    `L${bw},${Yh(-pad)}`,
     "Z",
   ].join(" ");
 }
 
-function padding(edge) {
+function gearCenter(w, h, edge) {
+  const cross = GEAR_CARVE;
   switch (edge) {
-    case "right": return { t: 20, b: 20, l: 6, r: 4 };
-    case "left": return { t: 20, b: 20, l: 4, r: 6 };
-    case "top": return { t: 5, b: 7, l: 18, r: 12 };
-    case "bottom": return { t: 7, b: 5, l: 18, r: 12 };
-    default: return { t: 16, b: 16, l: 5, r: 5 };
+    case "right":
+      return { x: cross, y: h - GEAR_END };
+    case "left":
+      return { x: w - cross, y: h - GEAR_END };
+    case "top":
+      return { x: w - GEAR_END, y: h - cross };
+    case "bottom":
+      return { x: w - GEAR_END, y: cross };
+    default:
+      return { x: w / 2, y: h - GEAR_END };
+  }
+}
+
+function padding(edge) {
+  const g = gearAlong(edge);
+  switch (edge) {
+    case "right": return { t: 20, b: 20 + g, l: 6, r: 4 };
+    case "left": return { t: 20, b: 20 + g, l: 4, r: 6 };
+    case "top": return { t: 5, b: 7, l: 18, r: 12 + g };
+    case "bottom": return { t: 7, b: 5, l: 18, r: 12 + g };
+    default: return { t: 16, b: 16 + g, l: 5, r: 5 };
   }
 }
 
@@ -410,8 +453,8 @@ function barSize(edge) {
     const along = ICONS_BASE + ICONS_SLOT * n;
     return isVertical(edge) ? { w: ICONS_THICK, h: along } : { w: along, h: ICONS_THICK };
   }
-  if (isVertical(edge)) return { w: BAR_THICK, h: BAR_PAD + BAR_SLOT * n };
-  return { w: BAR_H_BASE + BAR_H_SLOT * n, h: BAR_H_THICK };
+  if (isVertical(edge)) return { w: BAR_THICK, h: BAR_PAD + BAR_SLOT * n + gearAlong(edge) };
+  return { w: BAR_H_BASE + BAR_H_SLOT * n + gearAlong(edge), h: BAR_H_THICK };
 }
 
 function logicalMonitor(m) {
@@ -517,8 +560,35 @@ let menuOpen = false;
 let resetToastId = null;
 let tipHot = false;
 let updateInfo = null;
-let updateToastOpen = false;
 let updateTimer = null;
+let barHot = false;
+let pointerOver = false;
+
+function setBarHot(on) {
+  if (typeof on === "boolean") pointerOver = on;
+  const next = (pointerOver || menuOpen) && !dragging;
+  if (next === barHot) return;
+  barHot = next;
+  const barEl = document.getElementById("bar");
+  if (barEl) barEl.classList.toggle("hot", barHot);
+  paintDock(prefs.edge);
+}
+
+function placeGearBtn(edge) {
+  const btn = document.getElementById("gear-btn");
+  if (!btn) return;
+  if (isIcons()) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  const size = barSize(edge);
+  const c = gearCenter(size.w, size.h, edge);
+  btn.style.width = `${GEAR_BTN}px`;
+  btn.style.height = `${GEAR_BTN}px`;
+  btn.style.left = `${c.x - GEAR_BTN / 2}px`;
+  btn.style.top = `${c.y - GEAR_BTN / 2}px`;
+}
 
 function paintDock(edge) {
   const svg = document.getElementById("dock-shape");
@@ -529,9 +599,13 @@ function paintDock(edge) {
     return;
   }
   const size = barSize(edge);
+  const body = dockPath(size.w, size.h, edge);
+  const c = gearCenter(size.w, size.h, edge);
   svg.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
   svg.setAttribute("preserveAspectRatio", "none");
-  svg.innerHTML = `<path d="${dockPath(size.w, size.h, edge)}" />`;
+  svg.innerHTML = barHot
+    ? `<path d="${body}" /><circle class="pod" cx="${c.x}" cy="${c.y}" r="${GEAR_R}" />`
+    : `<path d="${body}" />`;
 }
 
 function renderIconCells() {
@@ -575,17 +649,19 @@ function renderBar() {
     const vertical = isVertical(edge);
     barEl.className = "bar icons";
     paintDock(edge);
+    placeGearBtn(edge);
     cells.className = "cells icons " + (vertical ? "vertical" : "horizontal");
     cells.style.padding = "5px";
     cells.innerHTML = renderIconCells();
     return;
   }
   const vertical = isVertical(edge);
-  barEl.className = "bar";
+  barEl.className = barHot ? "bar hot" : "bar";
   cells.className = "cells " + (vertical ? "vertical" : "horizontal");
   const pad = padding(edge);
   cells.style.padding = `${pad.t}px ${pad.r}px ${pad.b}px ${pad.l}px`;
   paintDock(edge);
+  placeGearBtn(edge);
   cells.innerHTML = snaps
     .map((s) => {
       const unknown = s.headlinePercent == null;
@@ -805,61 +881,13 @@ async function closeResetToast(id) {
   await tipWin?.hide();
 }
 
-async function hideUpdateToast() {
-  if (!updateToastOpen) return;
-  updateToastOpen = false;
-  if (resetToastId || hovered) return;
-  await setTipClickable(false);
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", { show: false });
-  await tipWin?.hide();
-}
-
-async function showUpdateToast() {
-  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return;
-  updateToastOpen = true;
-  await setTipClickable(true);
-  const locale = prefs.locale === "zh" ? "zh" : "en";
-  const arrow =
-    prefs.edge === "left"
-      ? "left"
-      : prefs.edge === "top"
-        ? "up"
-        : prefs.edge === "bottom"
-          ? "down"
-          : "right";
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", {
-    show: true,
-    kind: "update",
-    latest: updateInfo.latest,
-    arrow,
-    locale,
-  });
-  try {
-    await tipWin?.setMinSize(new (LogicalSize())(1, 1));
-  } catch {
-    /* older runtime */
-  }
-  await tipWin?.setSize(new (LogicalSize())(188, 52));
-  const pos = await getCurrentWindow().outerPosition();
-  const size = await getCurrentWindow().outerSize();
-  const scale = await getCurrentWindow().scaleFactor();
-  await layoutTip(
-    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
-    barSize(prefs.edge),
-    { update: true }
-  );
-}
-
 async function checkUpdate() {
   try {
     updateInfo = (await invoke("check_update")) || null;
   } catch {
     return;
   }
-  if (updateInfo) await showUpdateToast();
-  else await hideUpdateToast();
+  syncUpdateBadge();
 }
 
 function restartUpdateTimer() {
@@ -869,7 +897,6 @@ function restartUpdateTimer() {
 
 async function showResetToast(snap) {
   if (!snap?.id || menuOpen || dragging) return;
-  updateToastOpen = false;
   resetToastId = snap.id;
   hovered = snap.id;
   paintHover();
@@ -894,10 +921,8 @@ async function setHovered(id) {
     await api().event.emit("usagebar-tip", { show: false });
     await tipWin?.hide();
     await setTipClickable(false);
-    await showUpdateToast();
     return;
   }
-  updateToastOpen = false;
   await setTipClickable(false);
   await renderTip();
   const pos = await getCurrentWindow().outerPosition();
@@ -931,7 +956,6 @@ async function refresh() {
   }
   if (await maybeShowResetToast()) return;
   if (hovered) await renderTip();
-  else await showUpdateToast();
 }
 
 function restartTimer() {
@@ -982,12 +1006,10 @@ async function snapTo(edge) {
 }
 
 function hideMenu() {
-  menuOpen = false;
-  document.getElementById("menu").hidden = true;
+  closeMenuPanel().catch(() => {});
 }
 
 async function onNativeMenu(id) {
-  menuOpen = false;
   if (id === "lock") {
     prefs.locked = !prefs.locked;
     await savePrefs();
@@ -1029,55 +1051,206 @@ async function onNativeMenu(id) {
   }
 }
 
-async function showNativeMenu() {
-  const { Menu, MenuItem, CheckMenuItem, PredefinedMenuItem, Submenu } = api().menu;
-  const run = (id) => () => {
-    onNativeMenu(id).catch((err) => console.error(err));
-  };
-  const item = (id, text) => MenuItem.new({ id, text, action: run(id) });
-  const check = (id, text, checked) =>
-    CheckMenuItem.new({ id, text, checked, action: run(id) });
+const MENU_W = 216;
+let menuCardFrame = null;
+
+function menuSpec(st) {
   const ui = t();
-  const refreshItems = await Promise.all(
-    REFRESH_SECS.map((sec) =>
-      check(`interval:${sec}`, intervalLabel(sec), prefs.refreshInterval === sec)
-    )
-  );
-  const styleItems = await Promise.all([
-    check("style:full", ui.ringUsage, !isIcons()),
-    check("style:icons", ui.transparentIcons, isIcons()),
-  ]);
-  const langItems = await Promise.all([
-    check("locale:en", "English", !isZh()),
-    check("locale:zh", "中文", isZh()),
-  ]);
-  const items = await Promise.all([
-    item("refresh", ui.refreshNow),
-    Submenu.new({ text: ui.autoRefresh, items: refreshItems }),
-    PredefinedMenuItem.new({ item: "Separator" }),
-    item("lock", prefs.locked ? ui.unlock : ui.lock),
-    check("click", ui.clickThrough, !!prefs.clickThrough),
-    PredefinedMenuItem.new({ item: "Separator" }),
-    check("snap:left", ui.snapLeft, prefs.edge === "left"),
-    check("snap:right", ui.snapRight, prefs.edge === "right"),
-    check("snap:top", ui.snapTop, prefs.edge === "top"),
-    check("snap:bottom", ui.snapBottom, prefs.edge === "bottom"),
-    Submenu.new({ text: ui.displayStyle, items: styleItems }),
-    Submenu.new({ text: ui.language, items: langItems }),
-    item("tools", ui.tools),
-    PredefinedMenuItem.new({ item: "Separator" }),
-    check("login", ui.openAtLogin, !!prefs.launchAtLogin),
-    PredefinedMenuItem.new({ item: "Separator" }),
-    item("quit", ui.quit),
-  ]);
-  const menu = await Menu.new({ items });
+  const chips = (ids, labels, on) => ({ k: "chips", ids, labels, on });
+  const first = REFRESH_SECS.slice(0, 4);
+  const rest = REFRESH_SECS.slice(4);
+  const rows = [
+    { k: "row", id: "refresh", label: ui.refreshNow },
+    { k: "sep" },
+    { k: "label", label: ui.autoRefresh },
+    chips(
+      first.map((s) => `interval:${s}`),
+      first.map(intervalLabel),
+      first.map((s) => st.refreshInterval === s)
+    ),
+    chips(
+      rest.map((s) => `interval:${s}`),
+      rest.map(intervalLabel),
+      rest.map((s) => st.refreshInterval === s)
+    ),
+    { k: "sep" },
+    { k: "row", id: "lock", label: ui.lock, check: st.locked },
+    { k: "row", id: "click", label: ui.clickThrough, check: st.clickThrough },
+    { k: "sep" },
+    { k: "label", label: ui.snapGroup },
+    chips(
+      ["snap:left", "snap:right", "snap:top", "snap:bottom"],
+      ui.edgeShort,
+      ["left", "right", "top", "bottom"].map((e) => st.edge === e)
+    ),
+    { k: "label", label: ui.displayStyle },
+    chips(
+      ["style:full", "style:icons"],
+      [ui.ringUsage, ui.transparentIcons],
+      [st.displayStyle !== "icons", st.displayStyle === "icons"]
+    ),
+    { k: "label", label: ui.language },
+    chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
+    { k: "sep" },
+    { k: "row", id: "tools", label: ui.tools },
+    { k: "row", id: "login", label: ui.openAtLogin, check: st.launchAtLogin },
+  ];
+  if (st.latest) rows.push({ k: "row", id: "update", label: ui.updateLine(st.latest), cls: "update" });
+  rows.push({ k: "sep" }, { k: "row", id: "quit", label: ui.quit });
+  return rows;
+}
+
+function menuPanelHtml(st) {
+  return menuSpec(st)
+    .map((r) => {
+      if (r.k === "sep") return `<div class="m-sep"></div>`;
+      if (r.k === "label") return `<div class="m-label">${r.label}</div>`;
+      if (r.k === "chips") {
+        return `<div class="m-chips">${r.ids
+          .map(
+            (id, i) =>
+              `<button type="button" class="m-chip${r.on[i] ? " on" : ""}" data-mid="${id}">${r.labels[i]}</button>`
+          )
+          .join("")}</div>`;
+      }
+      return `<button type="button" class="m-row${r.cls ? " " + r.cls : ""}" data-mid="${r.id}"><span class="m-check">${
+        r.check ? "✓" : ""
+      }</span><span>${r.label}</span></button>`;
+    })
+    .join("");
+}
+
+function menuPanelHeight(st) {
+  const H = { row: 30, sep: 11, label: 20, chips: 30 };
+  return menuSpec(st).reduce((sum, r) => sum + H[r.k], 0) + 16;
+}
+
+function menuStateNow() {
+  return {
+    locale: isZh() ? "zh" : "en",
+    refreshInterval: prefs.refreshInterval,
+    locked: !!prefs.locked,
+    clickThrough: !!prefs.clickThrough,
+    edge: prefs.edge,
+    displayStyle: isIcons() ? "icons" : "full",
+    launchAtLogin: !!prefs.launchAtLogin,
+    latest: updateInfo?.latest || null,
+  };
+}
+
+async function showPanelMenu(reposition = true) {
+  const wasOpen = menuOpen;
   menuOpen = true;
-  await invoke("set_menu_open", { open: true });
-  await setHovered(null);
-  await menu.popup();
+  if (!wasOpen) {
+    await invoke("set_menu_open", { open: true });
+    setBarHot();
+    await setHovered(null);
+    await setTipClickable(true);
+  }
+  const st = menuStateNow();
+  const arrow =
+    prefs.edge === "left" ? "left" : prefs.edge === "top" ? "up" : prefs.edge === "bottom" ? "down" : "right";
+  const tipWin = await getWindow("tip");
+  let pointerAt = menuCardFrame?.pointerAt ?? null;
+  if (reposition || !wasOpen || !menuCardFrame) {
+    const pos = await getCurrentWindow().outerPosition();
+    const size = await getCurrentWindow().outerSize();
+    const scale = await getCurrentWindow().scaleFactor();
+    const frame = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
+    const list = await monitors();
+    const screen = await monitorAt({ x: frame.x + frame.w / 2, y: frame.y + frame.h / 2 }, list);
+    const g = gearCenter(frame.w, frame.h, prefs.edge);
+    const gx = frame.x + g.x;
+    const gy = frame.y + g.y;
+    const winW = MENU_W + 20;
+    const winH = menuPanelHeight(st) + 12;
+    let x;
+    let y;
+    if (prefs.edge === "left") x = frame.x + frame.w - 2;
+    else if (prefs.edge === "top" || prefs.edge === "bottom")
+      x = clamp(gx - winW + 26, screen.wx + 6, screen.wx + screen.ww - winW - 6);
+    else x = frame.x - winW + 2;
+    if (prefs.edge === "top") y = frame.y + frame.h - 2;
+    else if (prefs.edge === "bottom") y = frame.y - winH + 2;
+    else y = clamp(gy - winH + 26, screen.wy + 6, screen.wy + screen.wh - winH - 6);
+    pointerAt = prefs.edge === "top" || prefs.edge === "bottom" ? gx - x : gy - y;
+    menuCardFrame = {
+      x: x - screen.x,
+      y: y - screen.y,
+      w: winW,
+      h: winH,
+      pointerAt,
+    };
+    await invoke("set_menu_open", {
+      open: true,
+      card: [x, y, winW, winH],
+    });
+    try {
+      await tipWin?.setMinSize(new (LogicalSize())(1, 1));
+    } catch {
+      /* older runtime */
+    }
+    // 铺满当前屏：点卡片外的透明区域即可关闭，不依赖点穿/全局鼠标。
+    await tipWin?.setSize(new (LogicalSize())(screen.w, screen.h));
+    await tipWin?.setPosition(new (LogicalPosition())(screen.x, screen.y));
+    try {
+      await tipWin?.setAlwaysOnTop(true);
+    } catch {
+      /* optional */
+    }
+  }
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    kind: "menu",
+    state: st,
+    arrow,
+    locale: st.locale,
+    pointerAt,
+    cardX: menuCardFrame.x,
+    cardY: menuCardFrame.y,
+    cardW: menuCardFrame.w,
+    cardH: menuCardFrame.h,
+  });
+  if (!wasOpen || reposition) await tipWin?.show();
+}
+
+async function closeMenuPanel() {
+  if (!menuOpen) return;
   menuOpen = false;
+  menuCardFrame = null;
   await invoke("set_menu_open", { open: false });
-  await showUpdateToast();
+  setBarHot();
+  await setTipClickable(false);
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", { show: false });
+  await tipWin?.hide();
+}
+
+async function handleMenuAction(id) {
+  if (!id) return;
+  if (id === "close") {
+    await closeMenuPanel();
+    return;
+  }
+  if (id === "update") {
+    invoke("open_release_page").catch((err) => console.error(err));
+    await closeMenuPanel();
+    return;
+  }
+  const fromPanel = menuOpen;
+  await onNativeMenu(id);
+  if (!fromPanel) return;
+  if (
+    id === "quit" ||
+    id === "tools" ||
+    id === "refresh" ||
+    id.startsWith("snap:") ||
+    id.startsWith("style:")
+  ) {
+    await closeMenuPanel();
+  } else if (menuOpen) {
+    await showPanelMenu(false);
+  }
 }
 
 async function applyLayout(payload) {
@@ -1091,6 +1264,7 @@ async function applyLayout(payload) {
   dragging = !!payload.dragging;
   document.documentElement.classList.toggle("dragging", dragging);
   if (dragging) await setHovered(null);
+  setBarHot();
   if (edgeChanged) {
     renderBar();
     if (!dragging) await placeWindows();
@@ -1119,9 +1293,18 @@ async function startBar() {
   restartTimer();
   checkUpdate().catch((err) => console.error(err));
   restartUpdateTimer();
+  document.getElementById("gear-btn").addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+  });
+  document.getElementById("gear-btn").addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (menuOpen) closeMenuPanel().catch((err) => console.error(err));
+    else showPanelMenu().catch((err) => console.error(err));
+  });
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    showNativeMenu().catch((err) => console.error(err));
+    if (!menuOpen) showPanelMenu().catch((err) => console.error(err));
   });
   document.addEventListener("pointerdown", (e) => {
     if (e.button === 0) invoke("set_pointer", { left: true }).catch(() => {});
@@ -1133,7 +1316,7 @@ async function startBar() {
     invoke("set_pointer", { left: false }).catch(() => {});
   });
   await api().event.listen("usagebar-menu", (e) => {
-    onNativeMenu(e.payload).catch((err) => console.error(err));
+    handleMenuAction(e.payload).catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-layout", (e) => {
     applyLayout(e.payload).catch((err) => console.error(err));
@@ -1153,6 +1336,9 @@ async function startBar() {
       refresh().catch((err) => console.error(err));
     }
   });
+  await api().event.listen("usagebar-over", (e) => {
+    setBarHot(!!e.payload);
+  });
   await api().event.listen("usagebar-hover", (e) => {
     if (menuOpen || dragging) {
       if (hovered) setHovered(null).catch((err) => console.error(err));
@@ -1166,18 +1352,58 @@ async function startBar() {
   });
 }
 
+let tipMenuPointer = 24;
+
+function resetTipLayout() {
+  document.getElementById("tip-root")?.classList.remove("menu-backdrop");
+  const tip = document.getElementById("tip");
+  if (!tip) return;
+  tip.style.left = "";
+  tip.style.top = "";
+  tip.style.width = "";
+  tip.style.height = "";
+}
+
 function paintTip(payload) {
-  if (!payload?.show) return;
+  if (!payload?.show) {
+    resetTipLayout();
+    return;
+  }
   prefs.locale = payload.locale === "zh" ? "zh" : "en";
   applyLocale();
-  if (payload.kind === "update") {
+  const ptr = document.getElementById("tip-pointer");
+  if (payload.kind === "menu") {
+    const root = document.getElementById("tip-root");
+    const tip = document.getElementById("tip");
     const card = document.getElementById("tip-card");
+    root.classList.add("menu-backdrop");
     card.dataset.resetId = "";
-    card.classList.add("update-only");
-    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(payload.latest)}</button>`;
-    document.getElementById("tip").className =
-      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
+    card.classList.add("menu-card");
+    card.innerHTML = menuPanelHtml(payload.state);
+    tip.className = "tip menu-tip arrow-" + (payload.arrow || "right");
+    if (payload.cardX != null && payload.cardY != null) {
+      tip.style.left = `${payload.cardX}px`;
+      tip.style.top = `${payload.cardY}px`;
+      tip.style.width = `${payload.cardW || MENU_W + 20}px`;
+      tip.style.height = `${payload.cardH || 0}px`;
+    }
+    if (payload.pointerAt != null) tipMenuPointer = payload.pointerAt;
+    const off = `${Math.max(10, tipMenuPointer - 8)}px`;
+    if (payload.arrow === "up" || payload.arrow === "down") {
+      ptr.style.marginLeft = off;
+      ptr.style.marginTop = "";
+    } else {
+      ptr.style.marginTop = off;
+      ptr.style.marginLeft = "";
+    }
+    ptr.style.alignSelf = "flex-start";
     return;
+  }
+  resetTipLayout();
+  if (ptr) {
+    ptr.style.marginTop = "";
+    ptr.style.marginLeft = "";
+    ptr.style.alignSelf = "";
   }
   if (!payload.snap) return;
   const snap = payload.snap;
@@ -1206,6 +1432,7 @@ function paintTip(payload) {
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
   card.classList.remove("update-only");
+  card.classList.remove("menu-card");
   card.innerHTML = `
     ${close}
     <div class="card-head">
@@ -1225,6 +1452,18 @@ async function startTip() {
     document.getElementById("tip")?.classList.toggle("hot", tipHot);
   });
   document.getElementById("tip-root").addEventListener("click", (e) => {
+    const mid = e.target.closest("[data-mid]");
+    if (mid) {
+      api().event.emit("usagebar-menu", mid.dataset.mid).catch(() => {});
+      return;
+    }
+    if (
+      document.getElementById("tip")?.classList.contains("menu-tip") &&
+      !e.target.closest(".menu-card")
+    ) {
+      api().event.emit("usagebar-menu", "close").catch(() => {});
+      return;
+    }
     if (e.target.closest("[data-open-release]")) {
       invoke("open_release_page").catch((err) => console.error(err));
       return;
