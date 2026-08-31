@@ -59,14 +59,15 @@ const ICONS = {
 };
 ICONS.zcode = ICONS.glm;
 
-const SIZES = {
-  vertical: { w: 46, h: 236 },
-  horizontal: { w: 260, h: 40 },
-};
-const ICONS_SIZE = {
-  vertical: { w: 26, h: 92 },
-  horizontal: { w: 92, h: 26 },
-};
+const BAR_THICK = 46;
+const BAR_PAD = 44;
+const BAR_SLOT = 48;
+const BAR_H_THICK = 40;
+const BAR_H_BASE = 24;
+const BAR_H_SLOT = 59;
+const ICONS_THICK = 26;
+const ICONS_BASE = 8;
+const ICONS_SLOT = 21;
 const SNAP = 32;
 const REFRESH_SECS = [15, 30, 60, 120, 300, 600, 0];
 const VENDORS = {
@@ -81,7 +82,8 @@ const VENDORS = {
   antigravity: "Antigravity",
 };
 const CATALOG_IDS = Object.keys(VENDORS);
-const SLOT_COUNT = 4;
+const SLOT_MIN = 1;
+const SLOT_MAX = 10;
 const DEFAULT_VISIBLE = ["codex", "cursor", "grok", "glm"];
 const METRIC_LABELS = {
   en: {
@@ -140,11 +142,12 @@ function t() {
         quit: "退出 UsageBar",
         tools: "工具…",
         toolsTitle: "工具",
-        toolsHint: "最多显示 4 个。顺序即圆环从左到右 / 从上到下的顺序。没登录的工具显示暂无数据。",
-        toolsMax: "已经选了 4 个，请先取消一个再勾选。",
+        toolsHint: "最少 1 个，最多 10 个。条的长度随数量变化。顺序即圆环从左到右 / 从上到下。没登录的工具显示暂无数据。",
+        toolsMax: "已经选了 10 个，请先取消一个再勾选。",
+        toolsMin: "至少保留 1 个。",
         moveUp: "上移",
         moveDown: "下移",
-        selectedCount: (n) => `已选 ${n} / 4`,
+        selectedCount: (n) => `已选 ${n} / 10`,
         resetTitle: "额度已重置",
         off: "关闭",
         noData: "暂无数据",
@@ -168,11 +171,12 @@ function t() {
         quit: "Quit UsageBar",
         tools: "Tools…",
         toolsTitle: "Tools",
-        toolsHint: "Show up to 4 tools. Order is left-to-right / top-to-bottom on the bar. Unsigned-in tools show No data.",
-        toolsMax: "4 tools already selected. Uncheck one first.",
+        toolsHint: "Show 1–10 tools. The bar grows with the count. Order is left-to-right / top-to-bottom. Unsigned-in tools show No data.",
+        toolsMax: "10 tools already selected. Uncheck one first.",
+        toolsMin: "Keep at least 1 tool.",
         moveUp: "Move up",
         moveDown: "Move down",
-        selectedCount: (n) => `${n} / 4 selected`,
+        selectedCount: (n) => `${n} / 10 selected`,
         resetTitle: "Quota reset",
         off: "Off",
         noData: "No data",
@@ -202,9 +206,14 @@ function normalizeVisible(ids) {
   const out = [];
   for (const id of ids || []) {
     if (CATALOG_IDS.includes(id) && !out.includes(id)) out.push(id);
-    if (out.length === SLOT_COUNT) break;
+    if (out.length === SLOT_MAX) break;
   }
   return out.length ? out : DEFAULT_VISIBLE.slice();
+}
+
+function slotCount() {
+  const n = normalizeVisible(prefs.visibleProviders).length;
+  return Math.max(SLOT_MIN, Math.min(SLOT_MAX, n));
 }
 
 function emptySnap(id) {
@@ -215,10 +224,7 @@ function emptySnap(id) {
 function slotsFrom(got) {
   const vis = normalizeVisible(prefs.visibleProviders);
   const byId = Object.fromEntries((got || []).map((s) => [s.id, s]));
-  return Array.from({ length: SLOT_COUNT }, (_, i) => {
-    const id = vis[i] || "";
-    return id ? byId[id] || emptySnap(id) : emptySnap("");
-  });
+  return vis.map((id) => byId[id] || emptySnap(id));
 }
 
 function usageTitle(id) {
@@ -397,10 +403,13 @@ function isIcons() {
 }
 
 function barSize(edge) {
+  const n = slotCount();
   if (isIcons()) {
-    return isVertical(edge) ? ICONS_SIZE.vertical : ICONS_SIZE.horizontal;
+    const along = ICONS_BASE + ICONS_SLOT * n;
+    return isVertical(edge) ? { w: ICONS_THICK, h: along } : { w: along, h: ICONS_THICK };
   }
-  return isVertical(edge) ? SIZES.vertical : SIZES.horizontal;
+  if (isVertical(edge)) return { w: BAR_THICK, h: BAR_PAD + BAR_SLOT * n };
+  return { w: BAR_H_BASE + BAR_H_SLOT * n, h: BAR_H_THICK };
 }
 
 function logicalMonitor(m) {
@@ -1064,6 +1073,7 @@ async function startBar() {
     if (prev !== prefs.visibleProviders.join(",")) {
       snaps = slotsFrom(snaps.filter((s) => s.id));
       renderBar();
+      placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
     }
   });
@@ -1141,8 +1151,9 @@ function renderSettings() {
   document.getElementById("settings-title").textContent = ui.toolsTitle;
   document.getElementById("settings-hint").textContent = ui.toolsHint;
   const count = document.getElementById("settings-count");
-  count.textContent = vis.length >= SLOT_COUNT ? ui.toolsMax : ui.selectedCount(vis.length);
-  count.classList.toggle("warn", vis.length >= SLOT_COUNT);
+  count.textContent =
+    vis.length >= SLOT_MAX ? ui.toolsMax : vis.length <= SLOT_MIN ? ui.toolsMin : ui.selectedCount(vis.length);
+  count.classList.toggle("warn", vis.length >= SLOT_MAX || vis.length <= SLOT_MIN);
   const rest = CATALOG_IDS.filter((id) => !selected.has(id));
   const rows = [...vis, ...rest]
     .map((id) => {
@@ -1160,7 +1171,7 @@ function renderSettings() {
       return `<div class="settings-row" data-id="${id}">
         <label>
           <input type="checkbox" data-toggle="${id}" ${on ? "checked" : ""} ${
-            !on && vis.length >= SLOT_COUNT ? "disabled" : ""
+            !on && vis.length >= SLOT_MAX ? "disabled" : ""
           }/>
           ${icon}
           <span class="name">${vendorName(id)}</span>
@@ -1195,13 +1206,18 @@ async function startSettings() {
     let vis = normalizeVisible(prefs.visibleProviders);
     if (input.checked) {
       if (vis.includes(id)) return;
-      if (vis.length >= SLOT_COUNT) {
+      if (vis.length >= SLOT_MAX) {
         input.checked = false;
         renderSettings();
         return;
       }
       vis.push(id);
     } else {
+      if (vis.length <= SLOT_MIN) {
+        input.checked = true;
+        renderSettings();
+        return;
+      }
       vis = vis.filter((x) => x !== id);
     }
     saveVisible(vis).catch((err) => console.error(err));

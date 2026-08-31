@@ -26,19 +26,17 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 | Quota reset | 额度已重置 |
 | --- | --- |
-| <video src="docs/reset-en.mp4" width="280" autoplay loop muted playsinline></video> | <video src="docs/reset-zh.mp4" width="280" autoplay loop muted playsinline></video> |
+| <img src="docs/reset-en.gif" alt="Quota reset" width="280" /> | <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
 
 <p>
-  <img src="docs/menu.png" alt="右键菜单" width="240" />
-  &nbsp;
-  <img src="docs/menu-display.png" alt="显示样式子菜单" width="280" />
+  <img src="docs/settings-zh.png" alt="工具窗口和菜单" width="480" />
   &nbsp;
   <img src="docs/style-icons.png" alt="透明图标样式" width="220" />
 </p>
 
 ### 功能
 
-- 一条紧凑条上 4 个圆环槽位。默认 Codex、Cursor、Grok、GLM，可在 **工具…** 里任选最多 4 个并调整顺序
+- 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **工具…** 里勾选并调整顺序
 - 悬停显示套餐用量、API 用量、周窗口 / 5 小时窗口和重置时间
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
@@ -110,7 +108,7 @@ npm run tauri build    # 本机安装包
 
 ### 菜单
 
-菜单栏 / 托盘 **UB**，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、语言（默认 English，可切 中文；厂商和模型名保持英文）、**工具…**（最多勾 4 个并上下排序，空槽显示 —）、登录时打开、退出。
+菜单栏 / 托盘 **UB**，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、语言（默认 English，可切 中文；厂商和模型名保持英文）、**工具…**（1–10 个，上下排序，条长随数量变化）、登录时打开、退出。
 
 偏好存在 `~/.usagebar/prefs.json`。
 

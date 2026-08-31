@@ -34,7 +34,8 @@ pub const CATALOG: &[&str] = &[
     "gemini",
     "antigravity",
 ];
-pub const SLOT_COUNT: usize = 4;
+pub const SLOT_MIN: usize = 1;
+pub const SLOT_MAX: usize = 10;
 
 fn default_locale() -> String {
     "en".into()
@@ -59,7 +60,7 @@ pub fn normalize_visible(ids: &[String]) -> Vec<String> {
         if catalog_has(id) && !out.iter().any(|x| x == id) {
             out.push(id.clone());
         }
-        if out.len() == SLOT_COUNT {
+        if out.len() == SLOT_MAX {
             break;
         }
     }
@@ -70,13 +71,12 @@ pub fn normalize_visible(ids: &[String]) -> Vec<String> {
     }
 }
 
-pub fn display_slots(prefs: &Prefs) -> [Option<String>; SLOT_COUNT] {
-    let vis = normalize_visible(&prefs.visible_providers);
-    let mut slots = [None, None, None, None];
-    for (i, id) in vis.into_iter().take(SLOT_COUNT).enumerate() {
-        slots[i] = Some(id);
-    }
-    slots
+pub fn display_slots(prefs: &Prefs) -> Vec<String> {
+    normalize_visible(&prefs.visible_providers)
+}
+
+pub fn slot_count(prefs: &Prefs) -> usize {
+    display_slots(prefs).len().clamp(SLOT_MIN, SLOT_MAX)
 }
 
 impl Default for Prefs {
@@ -144,7 +144,7 @@ mod tests {
         ];
         assert_eq!(
             normalize_visible(&ids),
-            vec!["codex", "claude", "gemini", "copilot"]
+            vec!["codex", "claude", "gemini", "copilot", "glm"]
         );
     }
 
@@ -154,12 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn display_slots_pad_to_four() {
+    fn display_slots_follow_selection() {
         let mut prefs = Prefs::default();
         prefs.visible_providers = vec!["claude".into()];
-        assert_eq!(
-            display_slots(&prefs),
-            [Some("claude".into()), None, None, None]
-        );
+        assert_eq!(display_slots(&prefs), vec!["claude".to_string()]);
+        assert_eq!(slot_count(&prefs), 1);
+    }
+
+    #[test]
+    fn normalize_caps_at_ten() {
+        let ids: Vec<String> = CATALOG.iter().map(|s| (*s).to_string()).cycle().take(20).collect();
+        assert_eq!(normalize_visible(&ids).len(), CATALOG.len().min(SLOT_MAX));
     }
 }

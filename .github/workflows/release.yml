@@ -60,7 +60,7 @@ jobs:
 
             The “app is damaged” dialog is Gatekeeper quarantine, not a broken file. Do not move it to the Trash.
 
-            UsageBar only reads local logins. Sign in to the tools you show (Codex, Cursor, Grok, GLM, ZCode, Claude, Copilot, Gemini, Antigravity) on this computer first. Use **Tools…** to pick up to four rings.
+            UsageBar only reads local logins. Sign in to the tools you show (Codex, Cursor, Grok, GLM, ZCode, Claude, Copilot, Gemini, Antigravity) on this computer first. Use **Tools…** to pick 1–10 rings. The bar resizes to match.
 
             ---
 
@@ -71,7 +71,7 @@ jobs:
             - **Windows：** `x64-setup.exe`
             - **Linux：** `.AppImage` 或 `.deb`
 
-            macOS 第一次请先拖到「应用程序」，再在终端执行 `xattr -cr /Applications/UsageBar.app`。弹「已损坏」是隔离标记，不是文件坏了。安装包不带账号，需在本机自行登录要显示的工具。菜单 **工具…** 最多勾 4 个圆环。
+            macOS 第一次请先拖到「应用程序」，再在终端执行 `xattr -cr /Applications/UsageBar.app`。弹「已损坏」是隔离标记，不是文件坏了。安装包不带账号，需在本机自行登录要显示的工具。菜单 **工具…** 可勾 1–10 个圆环，条长随数量变化。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

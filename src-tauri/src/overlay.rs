@@ -8,10 +8,15 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 const SNAP: f64 = 32.0;
 const SNAP_KEEP: f64 = 48.0;
 const SNAP_SWITCH: f64 = 16.0;
-const VERTICAL: (f64, f64) = (46.0, 236.0);
-const HORIZONTAL: (f64, f64) = (260.0, 40.0);
-const ICONS_V: (f64, f64) = (26.0, 92.0);
-const ICONS_H: (f64, f64) = (92.0, 26.0);
+const BAR_THICK: f64 = 46.0;
+const BAR_PAD: f64 = 44.0;
+const BAR_SLOT: f64 = 48.0;
+const BAR_H_THICK: f64 = 40.0;
+const BAR_H_BASE: f64 = 24.0;
+const BAR_H_SLOT: f64 = 59.0;
+const ICONS_THICK: f64 = 26.0;
+const ICONS_BASE: f64 = 8.0;
+const ICONS_SLOT: f64 = 21.0;
 
 pub static JS_LEFT: AtomicBool = AtomicBool::new(false);
 pub static MENU_OPEN: AtomicBool = AtomicBool::new(false);
@@ -244,7 +249,7 @@ fn hover_id(
     let local_x = (mx - px) / scale;
     let local_y = (my - py) / scale;
     let slots = prefs::display_slots(prefs);
-    let count = prefs::SLOT_COUNT as f64;
+    let count = slots.len().max(1) as f64;
     if is_icons(prefs) {
         let vertical = is_vertical(&prefs.edge);
         let along = if vertical { ph / scale } else { pw / scale };
@@ -255,8 +260,8 @@ fn hover_id(
         let slot = along / count;
         let idx = (coord / slot).floor() as i32;
         let mid = (idx as f64 + 0.5) * slot;
-        if idx >= 0 && (idx as usize) < prefs::SLOT_COUNT && (coord - mid).abs() < slot * 0.48 {
-            return slots[idx as usize].clone();
+        if idx >= 0 && (idx as usize) < slots.len() && (coord - mid).abs() < slot * 0.48 {
+            return Some(slots[idx as usize].clone());
         }
         return None;
     }
@@ -275,8 +280,8 @@ fn hover_id(
     let slot = inner / count;
     let idx = ((coord - inset_start) / slot).floor() as i32;
     let mid = inset_start + (idx as f64 + 0.5) * slot;
-    if idx >= 0 && (idx as usize) < prefs::SLOT_COUNT && (coord - mid).abs() < slot * 0.48 {
-        return slots[idx as usize].clone();
+    if idx >= 0 && (idx as usize) < slots.len() && (coord - mid).abs() < slot * 0.48 {
+        return Some(slots[idx as usize].clone());
     }
     None
 }
@@ -652,16 +657,18 @@ fn is_icons(prefs: &Prefs) -> bool {
 }
 
 fn bar_size(edge: &str, prefs: &Prefs) -> (f64, f64) {
+    let n = prefs::slot_count(prefs) as f64;
     if is_icons(prefs) {
+        let along = ICONS_BASE + ICONS_SLOT * n;
         if is_vertical(edge) {
-            ICONS_V
+            (ICONS_THICK, along)
         } else {
-            ICONS_H
+            (along, ICONS_THICK)
         }
     } else if is_vertical(edge) {
-        VERTICAL
+        (BAR_THICK, BAR_PAD + BAR_SLOT * n)
     } else {
-        HORIZONTAL
+        (BAR_H_BASE + BAR_H_SLOT * n, BAR_H_THICK)
     }
 }
 

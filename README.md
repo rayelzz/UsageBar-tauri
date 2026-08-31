@@ -26,19 +26,17 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 | Quota reset | 额度已重置 |
 | --- | --- |
-| <video src="docs/reset-en.mp4" width="280" autoplay loop muted playsinline></video> | <video src="docs/reset-zh.mp4" width="280" autoplay loop muted playsinline></video> |
+| <img src="docs/reset-en.gif" alt="Quota reset in English" width="280" /> | <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
 
 <p>
-  <img src="docs/menu.png" alt="UsageBar context menu" width="240" />
-  &nbsp;
-  <img src="docs/menu-display.png" alt="Display style submenu" width="280" />
+  <img src="docs/settings-en.png" alt="Tools window and menu" width="480" />
   &nbsp;
   <img src="docs/style-icons.png" alt="Transparent icon style" width="220" />
 </p>
 
 ### Features
 
-- Four ring slots on one compact bar. Default: Codex, Cursor, Grok, GLM. Pick any four tools (and their order) from **Tools…**
+- The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick tools and their order from **Tools…**
 - Hover for included usage, API usage, weekly / 5-hour windows, and reset time
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
@@ -117,7 +115,7 @@ Menu bar / tray **UB**, or right-click the bar:
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
-- **Tools…**: choose up to 4 tools and their order. Empty slots stay on the bar as **—**
+- **Tools…**: choose 1–10 tools and their order. The bar shortens or lengthens to match; no empty **—** slots
 - Open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.
