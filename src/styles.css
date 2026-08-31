@@ -164,6 +164,31 @@ html.dragging, html.dragging * {
 .unknown .pct { color: rgba(255, 255, 255, 0.45); }
 .unknown .glyph { opacity: 0.45; }
 
+.cell.reset .icon,
+.mini-ring.reset .icon {
+  animation: reset-flash 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(77, 219, 107, 0.95));
+}
+
+@keyframes reset-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.18; }
+}
+
+.reset-banner {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(77, 219, 107, 0.16);
+  border: 1px solid rgba(77, 219, 107, 0.35);
+}
+
+.reset-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: rgb(150, 235, 168);
+}
+
 .glyph { fill: #fff; }
 
 .dock-svg {
@@ -186,6 +211,7 @@ html.dragging, html.dragging * {
 .tip.arrow-down { flex-direction: column-reverse; }
 
 .card {
+  position: relative;
   width: 260px;
   box-sizing: border-box;
   padding: 14px;
@@ -193,6 +219,33 @@ html.dragging, html.dragging * {
   background: rgba(0, 0, 0, 0.94);
   color: #fff;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.tip-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: 16px/22px ui-rounded, "SF Pro Rounded", sans-serif;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tip:hover .tip-close,
+.tip.hot .tip-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tip-close:hover {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .card-head {

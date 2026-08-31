@@ -25,6 +25,7 @@ pub struct Overlay {
     monitors: Mutex<(Instant, Vec<Screen>)>,
     frame: Mutex<Option<CachedFrame>>,
     hovered: Mutex<Option<String>>,
+    tip_hot: Mutex<bool>,
 }
 
 struct CachedFrame {
@@ -81,12 +82,16 @@ impl Overlay {
             monitors: Mutex::new((Instant::now() - Duration::from_secs(10), Vec::new())),
             frame: Mutex::new(None),
             hovered: Mutex::new(None),
+            tip_hot: Mutex::new(false),
         }
     }
 
     pub fn clear_hover(&self) {
         if let Ok(mut g) = self.hovered.lock() {
             *g = None;
+        }
+        if let Ok(mut g) = self.tip_hot.lock() {
+            *g = false;
         }
     }
 }
@@ -209,10 +214,13 @@ fn update_hover(
     my: f64,
 ) {
     if dragging || MENU_OPEN.load(Ordering::Relaxed) {
+        emit_tip_hot(app, state, false);
         emit_hover(app, state, None);
         return;
     }
-    if over_tip(app, mx, my) {
+    let hot = over_tip(app, mx, my);
+    emit_tip_hot(app, state, hot);
+    if hot {
         return;
     }
     let next = hover_id(prefs, over, scale, px, py, pw, ph, mx, my);
@@ -290,6 +298,18 @@ fn over_tip(app: &AppHandle, mx: f64, my: f64) -> bool {
         && mx <= pos.x as f64 + size.width as f64 + 8.0
         && my >= pos.y as f64 - 8.0
         && my <= pos.y as f64 + size.height as f64 + 8.0
+}
+
+fn emit_tip_hot(app: &AppHandle, state: &Overlay, hot: bool) {
+    let mut slot = match state.tip_hot.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    if *slot == hot {
+        return;
+    }
+    *slot = hot;
+    let _ = app.emit("usagebar-tip-hover", hot);
 }
 
 fn emit_hover(app: &AppHandle, state: &Overlay, next: Option<String>) {

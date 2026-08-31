@@ -19,6 +19,14 @@ pub struct UsageMetric {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ResetNotice {
+    pub fresh: bool,
+    pub from_percent: f64,
+    pub labels: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderSnapshot {
     pub id: String,
     pub title: String,
@@ -26,6 +34,8 @@ pub struct ProviderSnapshot {
     pub metrics: Vec<UsageMetric>,
     pub error: Option<String>,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reset_notice: Option<ResetNotice>,
 }
 
 fn now_ms() -> i64 {
@@ -163,6 +173,7 @@ fn empty(id: &str, title: &str, error: &str) -> ProviderSnapshot {
         metrics: vec![],
         error: Some(error.into()),
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -266,9 +277,9 @@ fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
     if let Some(primary) = metrics.iter().find(|m| m.id.starts_with("plan-")).cloned() {
         metrics = std::iter::once(primary.clone())
             .chain(
-                metrics
-                    .into_iter()
-                    .filter(|m| m.id != primary.id && m.percent > 0.5),
+                metrics.into_iter().filter(|m| {
+                    m.id != primary.id && (m.id.starts_with("plan-") || m.percent > 0.5)
+                }),
             )
             .collect();
     }
@@ -284,6 +295,7 @@ fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     })
 }
 
@@ -552,6 +564,7 @@ fn parse_cursor(json: Value) -> ProviderSnapshot {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -702,6 +715,7 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -877,6 +891,7 @@ fn parse_glm(id: &str, title: &str, json: Value) -> ProviderSnapshot {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -997,10 +1012,12 @@ fn cc_switch_glm_key() -> Option<String> {
 }
 
 pub fn fetch_selected(ids: &[String]) -> Vec<ProviderSnapshot> {
-    crate::prefs::normalize_visible(ids)
+    let mut snaps: Vec<ProviderSnapshot> = crate::prefs::normalize_visible(ids)
         .into_iter()
         .map(|id| fetch_one(&id))
-        .collect()
+        .collect();
+    crate::usage_state::apply(&mut snaps);
+    snaps
 }
 
 fn fetch_one(id: &str) -> ProviderSnapshot {
@@ -1202,6 +1219,7 @@ fn pull_claude(token: &str) -> Result<ProviderSnapshot, String> {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     })
 }
 
@@ -1324,6 +1342,7 @@ fn fetch_copilot() -> ProviderSnapshot {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -1470,6 +1489,7 @@ fn fetch_gemini() -> ProviderSnapshot {
         },
         metrics,
         updated_at: now_ms(),
+        reset_notice: None,
     }
 }
 
@@ -1566,6 +1586,7 @@ fn fetch_antigravity() -> ProviderSnapshot {
                 error: None,
                 metrics,
                 updated_at: now_ms(),
+                reset_notice: None,
             };
         }
     }

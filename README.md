@@ -24,6 +24,10 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 | --- | --- |
 | <img src="docs/grok-usage.png" alt="Grok usage tooltip" width="280" /> | <img src="docs/glm-usage.png" alt="GLM usage tooltip" width="280" /> |
 
+| Quota reset | 额度已重置 |
+| --- | --- |
+| <video src="docs/reset-en.mp4" width="280" autoplay loop muted playsinline></video> | <video src="docs/reset-zh.mp4" width="280" autoplay loop muted playsinline></video> |
+
 <p>
   <img src="docs/menu.png" alt="UsageBar context menu" width="240" />
   &nbsp;
@@ -36,6 +40,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 - Four ring slots on one compact bar. Default: Codex, Cursor, Grok, GLM. Pick any four tools (and their order) from **Tools…**
 - Hover for included usage, API usage, weekly / 5-hour windows, and reset time
+- When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
 - On top / bottom edges, the percent sits to the right of each ring

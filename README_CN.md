@@ -24,6 +24,10 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | --- | --- |
 | <img src="docs/grok-usage.png" alt="Grok 用量" width="280" /> | <img src="docs/glm-usage.png" alt="GLM 用量" width="280" /> |
 
+| Quota reset | 额度已重置 |
+| --- | --- |
+| <video src="docs/reset-en.mp4" width="280" autoplay loop muted playsinline></video> | <video src="docs/reset-zh.mp4" width="280" autoplay loop muted playsinline></video> |
+
 <p>
   <img src="docs/menu.png" alt="右键菜单" width="240" />
   &nbsp;
@@ -36,6 +40,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 - 一条紧凑条上 4 个圆环槽位。默认 Codex、Cursor、Grok、GLM，可在 **工具…** 里任选最多 4 个并调整顺序
 - 悬停显示套餐用量、API 用量、周窗口 / 5 小时窗口和重置时间
+- 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
 - 两种显示样式：**圆环用量**（完整圆环 + 百分比）或 **透明图标**（迷你圆环，仍贴在屏幕边缘）
 - 顶部 / 底部贴边时，百分比显示在圆环右侧

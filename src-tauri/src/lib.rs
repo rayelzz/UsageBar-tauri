@@ -2,6 +2,7 @@ mod i18n;
 mod overlay;
 mod prefs;
 mod providers;
+mod usage_state;
 
 use overlay::Overlay;
 use prefs::Prefs;
@@ -69,6 +70,11 @@ fn set_menu_open(app: AppHandle, open: bool) {
 #[tauri::command]
 fn format_reset(ms: Option<i64>) -> Option<String> {
     providers::format_reset(ms)
+}
+
+#[tauri::command]
+fn dismiss_reset_notice(id: String) {
+    usage_state::dismiss(&id);
 }
 
 #[tauri::command]
@@ -326,6 +332,7 @@ pub fn run() {
             set_pointer,
             set_menu_open,
             format_reset,
+            dismiss_reset_notice,
             quit,
             os_name,
             tray_rect,

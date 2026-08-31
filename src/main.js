@@ -145,6 +145,7 @@ function t() {
         moveUp: "上移",
         moveDown: "下移",
         selectedCount: (n) => `已选 ${n} / 4`,
+        resetTitle: "额度已重置",
         off: "关闭",
         noData: "暂无数据",
         days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
@@ -172,6 +173,7 @@ function t() {
         moveUp: "Move up",
         moveDown: "Move down",
         selectedCount: (n) => `${n} / 4 selected`,
+        resetTitle: "Quota reset",
         off: "Off",
         noData: "No data",
         days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -501,6 +503,8 @@ let hovered = null;
 let dragging = false;
 let refreshTimer = null;
 let menuOpen = false;
+let resetToastId = null;
+let tipHot = false;
 
 function paintDock(edge) {
   const svg = document.getElementById("dock-shape");
@@ -535,7 +539,7 @@ function renderIconCells() {
         </div>`;
       }
       const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
-      return `<div class="mini-ring${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}" data-id="${s.id}">
+      return `<div class="mini-ring${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice ? " reset" : ""}" data-id="${s.id}">
         <svg viewBox="0 0 16 16">
           <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.22" stroke-width="1.6"/>
           <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="1.6"
@@ -590,7 +594,7 @@ function renderBar() {
         </div>`;
       }
       const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
-      return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}" data-id="${s.id}">
+      return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice ? " reset" : ""}" data-id="${s.id}">
         <div class="ring">
           <svg viewBox="0 0 26 26">
             <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
@@ -610,10 +614,13 @@ function renderBar() {
 function tipHeight(snap) {
   const n = Math.max(snap?.metrics?.length || 1, 1);
   let h = 54 + n * 52 + 8;
+  if (snap?.resetNotice) {
+    h += 36;
+  }
   if (prefs.edge === "top" || prefs.edge === "bottom") {
     h += 12;
   }
-  return Math.min(Math.max(h, 100), 320);
+  return Math.min(Math.max(h, 100), 360);
 }
 
 async function renderTip() {
@@ -633,7 +640,14 @@ async function renderTip() {
         : prefs.edge === "bottom"
           ? "down"
           : "right";
-  await api().event.emit("usagebar-tip", { show: true, snap, resets, arrow, locale });
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    snap,
+    resets,
+    arrow,
+    locale,
+    resetNotice: snap.resetNotice || null,
+  });
   const h = tipHeight(snap);
   try {
     await tipWin.setMinSize(new (LogicalSize())(1, 1));
@@ -734,7 +748,67 @@ function paintHover() {
   });
 }
 
+async function setTipClickable(on) {
+  const tipWin = await getWindow("tip");
+  try {
+    await tipWin?.setIgnoreCursorEvents(!on);
+  } catch {
+    /* older runtime */
+  }
+}
+
+async function acknowledgeReset(id) {
+  const snap = snaps.find((s) => s.id === id);
+  if (!id || !snap?.resetNotice) return;
+  await invoke("dismiss_reset_notice", { id });
+  snaps = snaps.map((s) => (s.id === id ? { ...s, resetNotice: null } : s));
+  if (resetToastId === id) resetToastId = null;
+  await setTipClickable(false);
+  renderBar();
+}
+
+function nextResetSnap() {
+  return snaps.find((s) => s.resetNotice?.fresh) || snaps.find((s) => s.resetNotice) || null;
+}
+
+async function maybeShowResetToast() {
+  if (resetToastId || menuOpen || dragging) return false;
+  const next = nextResetSnap();
+  if (!next) return false;
+  await showResetToast(next);
+  return true;
+}
+
+async function closeResetToast(id) {
+  const target = id || resetToastId;
+  if (!target) return;
+  await acknowledgeReset(target);
+  hovered = null;
+  paintHover();
+  if (await maybeShowResetToast()) return;
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", { show: false });
+  await tipWin?.hide();
+}
+
+async function showResetToast(snap) {
+  if (!snap?.id || menuOpen || dragging) return;
+  resetToastId = snap.id;
+  hovered = snap.id;
+  paintHover();
+  await setTipClickable(true);
+  await renderTip();
+  const pos = await getCurrentWindow().outerPosition();
+  const size = await getCurrentWindow().outerSize();
+  const scale = await getCurrentWindow().scaleFactor();
+  await layoutTip(
+    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
+    barSize(prefs.edge)
+  );
+}
+
 async function setHovered(id) {
+  if (resetToastId) return;
   if (hovered === id) return;
   hovered = id;
   paintHover();
@@ -765,6 +839,16 @@ async function refresh() {
     await setHovered(null);
   }
   renderBar();
+  if (resetToastId) {
+    const current = snaps.find((s) => s.id === resetToastId);
+    if (current?.resetNotice) {
+      hovered = resetToastId;
+      await renderTip();
+      return;
+    }
+    resetToastId = null;
+  }
+  if (await maybeShowResetToast()) return;
   if (hovered) await renderTip();
 }
 
@@ -988,7 +1072,11 @@ async function startBar() {
       if (hovered) setHovered(null).catch((err) => console.error(err));
       return;
     }
+    if (resetToastId) return;
     setHovered(e.payload || null).catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-reset-ack", (e) => {
+    closeResetToast(e.payload).catch((err) => console.error(err));
   });
 }
 
@@ -1012,18 +1100,38 @@ function paintTip(payload) {
           </div>`;
         })
         .join("");
-  document.getElementById("tip-card").innerHTML = `
+  const notice = payload.resetNotice || snap.resetNotice;
+  const banner = notice
+    ? `<div class="reset-banner"><div class="reset-title">${t().resetTitle}</div></div>`
+    : "";
+  const close = notice
+    ? `<button type="button" class="tip-close" data-close-reset="${snap.id}" aria-label="Close">×</button>`
+    : "";
+  const card = document.getElementById("tip-card");
+  card.dataset.resetId = notice ? snap.id : "";
+  card.innerHTML = `
+    ${close}
     <div class="card-head">
       <svg class="mini glyph" viewBox="${spec.viewBox}">${spec.d.map((p) => `<path ${rule} d="${p}"/>`).join("")}</svg>
       <div class="title">${usageTitle(snap.id)}</div>
-    </div>${metricsHtml}`;
-  document.getElementById("tip").className = "tip arrow-" + (payload.arrow || "right");
+    </div>${banner}${metricsHtml}`;
+  document.getElementById("tip").className =
+    "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
 }
 
 async function startTip() {
   document.getElementById("tip-root").hidden = false;
   document.getElementById("tip").className = "tip arrow-right";
   await api().event.listen("usagebar-tip", (e) => paintTip(e.payload));
+  await api().event.listen("usagebar-tip-hover", (e) => {
+    tipHot = !!e.payload;
+    document.getElementById("tip")?.classList.toggle("hot", tipHot);
+  });
+  document.getElementById("tip-root").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-close-reset]");
+    if (!btn) return;
+    api().event.emit("usagebar-reset-ack", btn.dataset.closeReset).catch(() => {});
+  });
 }
 
 function renderSettings() {
