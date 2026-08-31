@@ -789,22 +789,37 @@ fn fetch_glm() -> ProviderSnapshot {
     let Some(key) = glm_key() else {
         return empty("glm", "GLM Usage", "login_not_found");
     };
+    fetch_zhipu_quota("glm", "GLM Usage", &key, &["https://api.z.ai", "https://open.bigmodel.cn"])
+}
+
+fn fetch_zcode() -> ProviderSnapshot {
+    let Some((key, host)) = zcode_coding_plan() else {
+        return empty("zcode", "ZCode Usage", "login_not_found");
+    };
+    let mut hosts = vec![host];
+    if host.contains("bigmodel") {
+        hosts.push("https://api.z.ai");
+    } else {
+        hosts.push("https://open.bigmodel.cn");
+    }
+    fetch_zhipu_quota("zcode", "ZCode Usage", &key, &hosts)
+}
+
+fn fetch_zhipu_quota(id: &str, title: &str, key: &str, hosts: &[&str]) -> ProviderSnapshot {
     let headers = [
         ("Authorization", format!("Bearer {key}")),
         ("Accept", "application/json".into()),
     ];
-    for endpoint in [
-        "https://api.z.ai/api/monitor/usage/quota/limit",
-        "https://open.bigmodel.cn/api/monitor/usage/quota/limit",
-    ] {
-        if let Ok((200, json)) = http_get_json(endpoint, &headers) {
-            return parse_glm(json);
+    for host in hosts {
+        let url = format!("{host}/api/monitor/usage/quota/limit");
+        if let Ok((200, json)) = http_get_json(&url, &headers) {
+            return parse_glm(id, title, json);
         }
     }
-    empty("glm", "GLM Usage", "login_not_found")
+    empty(id, title, "login_not_found")
 }
 
-fn parse_glm(json: Value) -> ProviderSnapshot {
+fn parse_glm(id: &str, title: &str, json: Value) -> ProviderSnapshot {
     let data = json.get("data").cloned().unwrap_or(json);
     let limits = data
         .get("limits")
@@ -820,9 +835,10 @@ fn parse_glm(json: Value) -> ProviderSnapshot {
         let unit = item.get("unit").and_then(|v| v.as_i64()).unwrap_or(0);
         let number = item.get("number").and_then(|v| v.as_i64()).unwrap_or(0);
         let reset = item.get("nextResetTime").and_then(parse_date);
-        let label = if typ == "TOKENS_LIMIT" && unit == 3 && number == 5 {
+        let tokenish = typ == "TOKENS_LIMIT" || typ == "CREDIT_LIMIT";
+        let label = if tokenish && unit == 3 && number == 5 {
             "5-hour window"
-        } else if typ == "TOKENS_LIMIT" && unit == 6 && number == 7 {
+        } else if tokenish && unit == 6 && (number == 7 || number == 1) {
             "Weekly limit"
         } else if typ == "TIME_LIMIT" {
             "MCP tools"
@@ -851,8 +867,8 @@ fn parse_glm(json: Value) -> ProviderSnapshot {
         .or_else(|| metrics.first())
         .map(|m| m.percent);
     ProviderSnapshot {
-        id: "glm".into(),
-        title: "GLM Usage".into(),
+        id: id.into(),
+        title: title.into(),
         headline_percent: headline,
         error: if metrics.is_empty() {
             Some("no_quota".into())
@@ -881,7 +897,65 @@ fn glm_key() -> Option<String> {
             }
         }
     }
-    cc_switch_glm_key()
+    cc_switch_glm_key().or_else(|| zcode_coding_plan().map(|(key, _)| key))
+}
+
+fn zcode_coding_plan() -> Option<(String, &'static str)> {
+    let path = home().join(".zcode/v2/config.json");
+    let obj = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
+    zcode_coding_plan_from(&obj)
+}
+
+fn zcode_coding_plan_from(obj: &Value) -> Option<(String, &'static str)> {
+    let providers = obj.get("provider")?.as_object()?;
+    const PREFERRED: &[&str] = &[
+        "builtin:bigmodel-coding-plan",
+        "builtin:zai-coding-plan",
+        "builtin:bigmodel-start-plan",
+        "builtin:zai-start-plan",
+        "builtin:bigmodel",
+        "builtin:zai",
+    ];
+    for id in PREFERRED {
+        if let Some(pair) = zcode_provider_key(id, providers.get(*id)?) {
+            return Some(pair);
+        }
+    }
+    for (id, provider) in providers {
+        if PREFERRED.contains(&id.as_str()) {
+            continue;
+        }
+        if let Some(pair) = zcode_provider_key(id, provider) {
+            return Some(pair);
+        }
+    }
+    None
+}
+
+fn zcode_provider_key(id: &str, provider: &Value) -> Option<(String, &'static str)> {
+    if provider.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
+        return None;
+    }
+    let key = provider
+        .pointer("/options/apiKey")
+        .or_else(|| provider.pointer("/options/api_key"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| s.len() > 8)?;
+    Some((key.to_string(), zcode_host(id, provider)))
+}
+
+fn zcode_host(id: &str, provider: &Value) -> &'static str {
+    let base = provider
+        .pointer("/options/baseURL")
+        .or_else(|| provider.pointer("/options/base_url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if base.contains("z.ai") || id.contains("zai") {
+        "https://api.z.ai"
+    } else {
+        "https://open.bigmodel.cn"
+    }
 }
 
 fn cc_switch_glm_key() -> Option<String> {
@@ -935,6 +1009,7 @@ fn fetch_one(id: &str) -> ProviderSnapshot {
         "cursor" => fetch_cursor(),
         "grok" => fetch_grok(),
         "glm" => fetch_glm(),
+        "zcode" => fetch_zcode(),
         "claude" => fetch_claude(),
         "copilot" => fetch_copilot(),
         "gemini" => fetch_gemini(),
@@ -1561,5 +1636,83 @@ mod tests {
         assert_eq!(snap.headline_percent, Some(0.0));
         assert!(snap.error.is_none());
         assert_eq!(snap.metrics[0].id, "weekly");
+    }
+
+    #[test]
+    fn zcode_prefers_enabled_bigmodel_coding_plan() {
+        let obj = json!({
+            "provider": {
+                "builtin:zai-coding-plan": {
+                    "enabled": false,
+                    "options": { "apiKey": "zzz.should-not-win" }
+                },
+                "builtin:bigmodel-coding-plan": {
+                    "enabled": true,
+                    "options": {
+                        "apiKey": "abc.coding-plan",
+                        "baseURL": "https://open.bigmodel.cn/api/anthropic"
+                    }
+                }
+            }
+        });
+        assert_eq!(
+            zcode_coding_plan_from(&obj),
+            Some(("abc.coding-plan".into(), "https://open.bigmodel.cn"))
+        );
+    }
+
+    #[test]
+    fn zcode_skips_disabled_and_empty_keys() {
+        let obj = json!({
+            "provider": {
+                "builtin:bigmodel-coding-plan": {
+                    "enabled": true,
+                    "options": { "apiKey": "" }
+                },
+                "builtin:zai-coding-plan": {
+                    "enabled": true,
+                    "options": {
+                        "apiKey": "zai.plan-key",
+                        "baseURL": "https://api.z.ai/api/anthropic"
+                    }
+                }
+            }
+        });
+        assert_eq!(
+            zcode_coding_plan_from(&obj),
+            Some(("zai.plan-key".into(), "https://api.z.ai"))
+        );
+    }
+
+    #[test]
+    fn zhipu_quota_maps_credit_limit_weekly() {
+        let snap = parse_glm(
+            "zcode",
+            "ZCode Usage",
+            json!({
+                "data": {
+                    "limits": [
+                        {
+                            "type": "CREDIT_LIMIT",
+                            "unit": 6,
+                            "number": 1,
+                            "percentage": 12.5,
+                            "nextResetTime": 1788000000000i64
+                        },
+                        {
+                            "type": "TOKENS_LIMIT",
+                            "unit": 3,
+                            "number": 5,
+                            "percentage": 40.0,
+                            "nextResetTime": 1788000000000i64
+                        }
+                    ]
+                }
+            }),
+        );
+        assert_eq!(snap.id, "zcode");
+        assert_eq!(snap.headline_percent, Some(40.0));
+        assert_eq!(snap.metrics[0].label, "5-hour window");
+        assert_eq!(snap.metrics[1].label, "Weekly limit");
     }
 }

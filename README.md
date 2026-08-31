@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README_CN.md)
 
-A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **Claude**, **Copilot**, **Gemini**, and **Antigravity**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
+A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **ZCode**, **Claude**, **Copilot**, **Gemini**, and **Antigravity**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
 
 macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
@@ -54,6 +54,7 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` | Included usage + API usage |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly allowance + extra windows |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | 5-hour window + weekly + MCP |
+| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | 5-hour window + weekly + MCP |
 | **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour window + weekly (+ Opus if present) |
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Premium requests + reset date |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
@@ -155,6 +156,9 @@ Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.
 
 **How do I set a GLM key?**  
 Export `GLM_API_KEY` (or `ZAI_API_KEY` / `Z_AI_API_KEY`) in your shell, or use `~/.zai/config.json`, or a GLM / 智谱 / z.ai provider in cc-switch.
+
+**ZCode vs GLM — same ring?**  
+No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Tools → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. UsageBar does not decrypt ZCode’s `enc:v1:` OAuth blobs.
 
 **Windows / Linux notes.**  
 Windows needs WebView2 (the installer can bootstrap it). The tray usually shows an icon instead of title-only text. Linux needs a working system tray.

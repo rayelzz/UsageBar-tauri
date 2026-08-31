@@ -28,6 +28,7 @@ pub const CATALOG: &[&str] = &[
     "cursor",
     "grok",
     "glm",
+    "zcode",
     "claude",
     "copilot",
     "gemini",
