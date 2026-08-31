@@ -28,13 +28,6 @@ const ICONS = {
       "M12.105 2L9.927 4.953H.653L2.83 2h9.276zM23.254 19.048L21.078 22h-9.242l2.174-2.952h9.244zM24 2L9.264 22H0L14.736 2H24z",
     ],
   },
-  zcode: {
-    viewBox: "0 0 24 24",
-    evenOdd: false,
-    d: [
-      "M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm2.2 4.1 3.1 3.9-3.1 3.9h2.3L14 12.9 11.4 8.1H9.2zm5.6 0L14 9.4 16.5 12 14 14.6l.8 1.3L18.1 12 14.8 8.1z",
-    ],
-  },
   claude: {
     viewBox: "0 0 24 24",
     evenOdd: false,
@@ -64,6 +57,7 @@ const ICONS = {
     ],
   },
 };
+ICONS.zcode = ICONS.glm;
 
 const SIZES = {
   vertical: { w: 46, h: 236 },
