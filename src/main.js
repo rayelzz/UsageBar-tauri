@@ -149,6 +149,7 @@ function t() {
         moveDown: "下移",
         selectedCount: (n) => `已选 ${n} / 10`,
         resetTitle: "额度已重置",
+        updateLine: (v) => `有新版本 ${v}`,
         off: "关闭",
         noData: "暂无数据",
         days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
@@ -178,6 +179,7 @@ function t() {
         moveDown: "Move down",
         selectedCount: (n) => `${n} / 10 selected`,
         resetTitle: "Quota reset",
+        updateLine: (v) => `Update available ${v}`,
         off: "Off",
         noData: "No data",
         days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -514,6 +516,9 @@ let refreshTimer = null;
 let menuOpen = false;
 let resetToastId = null;
 let tipHot = false;
+let updateInfo = null;
+let updateToastOpen = false;
+let updateTimer = null;
 
 function paintDock(edge) {
   const svg = document.getElementById("dock-shape");
@@ -717,14 +722,14 @@ async function placeWindows() {
   await layoutTip(frame, { w: frame.w, h: frame.h });
 }
 
-async function layoutTip(frame, size) {
+async function layoutTip(frame, size, opts = {}) {
   const snap = snaps.find((s) => s.id === hovered);
   const tipWin = await getWindow("tip");
-  if (!snap || !tipWin) return;
+  if (!tipWin || (!snap && !opts.update)) return;
   const idx = Math.max(0, snaps.findIndex((s) => s.id === hovered));
   const count = Math.max(snaps.length, 1);
-  const th = tipHeight(snap);
-  const tw = 280;
+  const th = opts.update ? 52 : tipHeight(snap);
+  const tw = opts.update ? 188 : 280;
   const pad = isIcons() ? { t: 5, b: 5, l: 5, r: 5 } : padding(prefs.edge);
   const start = isVertical(prefs.edge) ? pad.t : pad.l;
   const end = isVertical(prefs.edge) ? pad.b : pad.r;
@@ -800,8 +805,71 @@ async function closeResetToast(id) {
   await tipWin?.hide();
 }
 
+async function hideUpdateToast() {
+  if (!updateToastOpen) return;
+  updateToastOpen = false;
+  if (resetToastId || hovered) return;
+  await setTipClickable(false);
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", { show: false });
+  await tipWin?.hide();
+}
+
+async function showUpdateToast() {
+  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return;
+  updateToastOpen = true;
+  await setTipClickable(true);
+  const locale = prefs.locale === "zh" ? "zh" : "en";
+  const arrow =
+    prefs.edge === "left"
+      ? "left"
+      : prefs.edge === "top"
+        ? "up"
+        : prefs.edge === "bottom"
+          ? "down"
+          : "right";
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    kind: "update",
+    latest: updateInfo.latest,
+    arrow,
+    locale,
+  });
+  try {
+    await tipWin?.setMinSize(new (LogicalSize())(1, 1));
+  } catch {
+    /* older runtime */
+  }
+  await tipWin?.setSize(new (LogicalSize())(188, 52));
+  const pos = await getCurrentWindow().outerPosition();
+  const size = await getCurrentWindow().outerSize();
+  const scale = await getCurrentWindow().scaleFactor();
+  await layoutTip(
+    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
+    barSize(prefs.edge),
+    { update: true }
+  );
+}
+
+async function checkUpdate() {
+  try {
+    updateInfo = (await invoke("check_update")) || null;
+  } catch {
+    return;
+  }
+  if (updateInfo) await showUpdateToast();
+  else await hideUpdateToast();
+}
+
+function restartUpdateTimer() {
+  if (updateTimer) clearInterval(updateTimer);
+  updateTimer = setInterval(checkUpdate, 60 * 60 * 1000);
+}
+
 async function showResetToast(snap) {
   if (!snap?.id || menuOpen || dragging) return;
+  updateToastOpen = false;
   resetToastId = snap.id;
   hovered = snap.id;
   paintHover();
@@ -825,8 +893,12 @@ async function setHovered(id) {
     const tipWin = await getWindow("tip");
     await api().event.emit("usagebar-tip", { show: false });
     await tipWin?.hide();
+    await setTipClickable(false);
+    await showUpdateToast();
     return;
   }
+  updateToastOpen = false;
+  await setTipClickable(false);
   await renderTip();
   const pos = await getCurrentWindow().outerPosition();
   const size = await getCurrentWindow().outerSize();
@@ -859,6 +931,7 @@ async function refresh() {
   }
   if (await maybeShowResetToast()) return;
   if (hovered) await renderTip();
+  else await showUpdateToast();
 }
 
 function restartTimer() {
@@ -1004,6 +1077,7 @@ async function showNativeMenu() {
   await menu.popup();
   menuOpen = false;
   await invoke("set_menu_open", { open: false });
+  await showUpdateToast();
 }
 
 async function applyLayout(payload) {
@@ -1043,6 +1117,8 @@ async function startBar() {
   await placeWindows();
   refresh().catch((err) => console.error(err));
   restartTimer();
+  checkUpdate().catch((err) => console.error(err));
+  restartUpdateTimer();
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showNativeMenu().catch((err) => console.error(err));
@@ -1091,9 +1167,19 @@ async function startBar() {
 }
 
 function paintTip(payload) {
-  if (!payload?.show || !payload.snap) return;
+  if (!payload?.show) return;
   prefs.locale = payload.locale === "zh" ? "zh" : "en";
   applyLocale();
+  if (payload.kind === "update") {
+    const card = document.getElementById("tip-card");
+    card.dataset.resetId = "";
+    card.classList.add("update-only");
+    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(payload.latest)}</button>`;
+    document.getElementById("tip").className =
+      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
+    return;
+  }
+  if (!payload.snap) return;
   const snap = payload.snap;
   const spec = ICONS[snap.id];
   if (!spec) return;
@@ -1119,6 +1205,7 @@ function paintTip(payload) {
     : "";
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
+  card.classList.remove("update-only");
   card.innerHTML = `
     ${close}
     <div class="card-head">
@@ -1138,6 +1225,10 @@ async function startTip() {
     document.getElementById("tip")?.classList.toggle("hot", tipHot);
   });
   document.getElementById("tip-root").addEventListener("click", (e) => {
+    if (e.target.closest("[data-open-release]")) {
+      invoke("open_release_page").catch((err) => console.error(err));
+      return;
+    }
     const btn = e.target.closest("[data-close-reset]");
     if (!btn) return;
     api().event.emit("usagebar-reset-ack", btn.dataset.closeReset).catch(() => {});

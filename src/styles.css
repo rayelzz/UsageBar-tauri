@@ -189,6 +189,29 @@ html.dragging, html.dragging * {
   color: rgb(150, 235, 168);
 }
 
+.card.update-only {
+  padding: 4px;
+  width: 176px;
+}
+
+.update-link {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(150, 235, 168);
+  font: 650 13px/1.35 ui-rounded, "SF Pro Rounded", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.update-link:hover {
+  background: rgba(77, 219, 107, 0.16);
+}
+
 .glyph { fill: #fff; }
 
 .dock-svg {

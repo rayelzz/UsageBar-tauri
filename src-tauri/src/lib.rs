@@ -2,6 +2,7 @@ mod i18n;
 mod overlay;
 mod prefs;
 mod providers;
+mod updater;
 mod usage_state;
 
 use overlay::Overlay;
@@ -11,6 +12,7 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
 async fn fetch_usage(app: AppHandle) -> Vec<providers::ProviderSnapshot> {
@@ -75,6 +77,19 @@ fn format_reset(ms: Option<i64>) -> Option<String> {
 #[tauri::command]
 fn dismiss_reset_notice(id: String) {
     usage_state::dismiss(&id);
+}
+
+#[tauri::command]
+async fn check_update() -> Option<updater::UpdateInfo> {
+    tauri::async_runtime::spawn_blocking(updater::check)
+        .await
+        .ok()
+        .flatten()
+}
+
+#[tauri::command]
+fn open_release_page(app: AppHandle) {
+    let _ = app.opener().open_url(updater::RELEASES_PAGE, None::<&str>);
 }
 
 #[tauri::command]
@@ -333,6 +348,8 @@ pub fn run() {
             set_menu_open,
             format_reset,
             dismiss_reset_notice,
+            check_update,
+            open_release_page,
             quit,
             os_name,
             tray_rect,
