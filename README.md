@@ -44,7 +44,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
 - A detached settings gear sits past the end of the bar (the original bar shape is unchanged). Hover to show it; click to open the same dark menu as **UB**. Click outside the panel to close
-- Automatic update checks are **off** by default. Turn them on in **Tools…** or the gear menu. The Tools window shows the current version and can check for a newer release; click the latest version to open the download page. If auto-check is on and you click the update bubble, that version is skipped until a later release
+- Automatic update checks are **off** by default. The gear menu shows the current version and **Check for update**; after a check, click the latest version to download. If auto-check is on and you click the update bubble, that version is skipped until a later release
 - Status / tray item is the text **UB** (macOS). Click the gear, right-click the bar, or click **UB** for the same menu
 - Auto-refresh every 60 seconds (configurable)
 - Official brand icons; red when remaining &lt; 20% (used ≥ 80%), yellow when remaining 20%–40% (used 60%–80%), green otherwise
@@ -117,8 +117,8 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
-- **Tools…**: choose 1–10 tools and their order. The bar shortens or lengthens to match; no empty **—** slots. Also shows the current version, a manual update check, and the auto-check toggle
-- Check for updates automatically (off by default); open at login; quit
+- **Tools…**: choose 1–10 tools and their order. The bar shortens or lengthens to match; no empty **—** slots
+- Current version, **Check for update**, latest version (click to download), and auto-check (off by default); open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.
 

@@ -459,12 +459,26 @@ html.dragging, html.dragging * {
   color: rgb(150, 235, 168);
 }
 
+.m-row.dim {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .m-label {
   height: 20px;
   padding: 6px 8px 0;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.45);
   box-sizing: border-box;
+}
+
+.m-info {
+  height: 22px;
+  padding: 2px 8px 0 26px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
 }
 
 .m-chips {

@@ -162,7 +162,9 @@ function t() {
         updatesTitle: "更新",
         updatesHint: "默认关闭。开启后有新版本会弹出气泡；点气泡跳转下载后，该版本不再提醒。",
         currentVersion: "当前版本",
+        currentVersionLine: (v) => `当前版本 ${v}`,
         latestVersion: "最新版本",
+        latestVersionLine: (v) => `最新版本 ${v}`,
         checkUpdate: "检测更新",
         checkingUpdate: "正在检测…",
         updateUpToDate: "已是最新版本",
@@ -205,7 +207,9 @@ function t() {
         updatesTitle: "Updates",
         updatesHint: "Off by default. When on, a bubble appears for a new release. Clicking it opens the download page and skips that version until the next one.",
         currentVersion: "Current version",
+        currentVersionLine: (v) => `Current ${v}`,
         latestVersion: "Latest version",
+        latestVersionLine: (v) => `Latest ${v}`,
         checkUpdate: "Check for update",
         checkingUpdate: "Checking…",
         updateUpToDate: "You’re up to date",
@@ -616,6 +620,10 @@ let tipHot = false;
 let updateInfo = null;
 let updateToastOpen = false;
 let updateTimer = null;
+let appVersion = "";
+let checkedInfo = null;
+let menuChecking = false;
+let menuCheckStatus = "";
 let settingsCurrentVersion = "";
 let settingsLatest = null;
 let settingsChecking = false;
@@ -1019,6 +1027,14 @@ async function openUpdateFromPrompt() {
   await skipPromptedVersion();
 }
 
+function rememberCheck(info) {
+  if (!info?.latest) return false;
+  checkedInfo = info;
+  if (info.current) appVersion = info.current;
+  menuCheckStatus = updateHasNewer(info) ? "available" : "upToDate";
+  return true;
+}
+
 async function checkUpdate() {
   if (!prefs.autoCheckUpdate) {
     clearUpdatePrompt();
@@ -1030,10 +1046,31 @@ async function checkUpdate() {
   } catch {
     return;
   }
+  rememberCheck(info);
   updateInfo = promptableUpdate(info);
   syncUpdateBadge();
   if (updateInfo) await showUpdateToast();
   else await hideUpdateToast();
+}
+
+async function checkUpdateManual() {
+  if (menuChecking) return;
+  menuChecking = true;
+  menuCheckStatus = "checking";
+  if (menuOpen) await showPanelMenu(false);
+  try {
+    const info = await invoke("check_update");
+    if (!rememberCheck(info)) {
+      menuCheckStatus = "failed";
+    } else if (prefs.autoCheckUpdate) {
+      updateInfo = promptableUpdate(info);
+      syncUpdateBadge();
+    }
+  } catch {
+    menuCheckStatus = "failed";
+  }
+  menuChecking = false;
+  if (menuOpen) await showPanelMenu(true);
 }
 
 function stopUpdateTimer() {
@@ -1263,11 +1300,34 @@ function menuSpec(st) {
     chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
     { k: "sep" },
     { k: "row", id: "tools", label: ui.tools },
+    { k: "sep" },
+    { k: "label", label: ui.updatesTitle },
+    { k: "info", label: ui.currentVersionLine(st.current || "—") },
+    {
+      k: "row",
+      id: "checkupdate",
+      label: st.checking ? ui.checkingUpdate : ui.checkUpdate,
+      cls: st.checking ? "dim" : "",
+    },
+  ];
+  if (st.checkedLatest) {
+    rows.push({
+      k: "row",
+      id: "latest",
+      label: st.hasNewer ? ui.updateLine(st.checkedLatest) : ui.latestVersionLine(st.checkedLatest),
+      cls: st.hasNewer ? "update" : "",
+    });
+  } else if (st.checkStatus === "failed") {
+    rows.push({ k: "info", label: ui.updateCheckFailed });
+  } else if (st.checkStatus === "upToDate") {
+    rows.push({ k: "info", label: ui.updateUpToDate });
+  }
+  rows.push(
     { k: "row", id: "autoupdate", label: ui.autoCheckUpdate, check: st.autoCheckUpdate },
     { k: "row", id: "login", label: ui.openAtLogin, check: st.launchAtLogin },
-  ];
-  if (st.latest) rows.push({ k: "row", id: "update", label: ui.updateLine(st.latest), cls: "update" });
-  rows.push({ k: "sep" }, { k: "row", id: "quit", label: ui.quit });
+    { k: "sep" },
+    { k: "row", id: "quit", label: ui.quit }
+  );
   return rows;
 }
 
@@ -1276,6 +1336,7 @@ function menuPanelHtml(st) {
     .map((r) => {
       if (r.k === "sep") return `<div class="m-sep"></div>`;
       if (r.k === "label") return `<div class="m-label">${r.label}</div>`;
+      if (r.k === "info") return `<div class="m-info">${r.label}</div>`;
       if (r.k === "chips") {
         return `<div class="m-chips">${r.ids
           .map(
@@ -1292,8 +1353,8 @@ function menuPanelHtml(st) {
 }
 
 function menuPanelHeight(st) {
-  const H = { row: 30, sep: 11, label: 20, chips: 30 };
-  return menuSpec(st).reduce((sum, r) => sum + H[r.k], 0) + 16;
+  const H = { row: 30, sep: 11, label: 20, chips: 30, info: 22 };
+  return menuSpec(st).reduce((sum, r) => sum + (H[r.k] || 0), 0) + 16;
 }
 
 function menuStateNow() {
@@ -1306,6 +1367,11 @@ function menuStateNow() {
     displayStyle: isIcons() ? "icons" : "full",
     launchAtLogin: !!prefs.launchAtLogin,
     autoCheckUpdate: !!prefs.autoCheckUpdate,
+    current: appVersion || checkedInfo?.current || "",
+    checking: menuChecking,
+    checkStatus: menuCheckStatus,
+    checkedLatest: checkedInfo?.latest || null,
+    hasNewer: updateHasNewer(checkedInfo),
     latest: updateInfo?.latest || null,
   };
 }
@@ -1405,8 +1471,19 @@ async function handleMenuAction(id) {
     await closeMenuPanel();
     return;
   }
-  if (id === "update") {
-    await openUpdateFromPrompt();
+  if (id === "checkupdate") {
+    await checkUpdateManual();
+    return;
+  }
+  if (id === "update" || id === "latest") {
+    const info = checkedInfo || updateInfo;
+    if (info?.latest) {
+      await openRelease(info.url);
+      if (updateHasNewer(info)) {
+        updateInfo = info;
+        await skipPromptedVersion();
+      }
+    }
     await closeMenuPanel();
     return;
   }
@@ -1449,6 +1526,11 @@ async function startBar() {
   osName = await invoke("os_name");
   prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
   snaps = slotsFrom([]);
+  try {
+    appVersion = await invoke("app_version");
+  } catch {
+    appVersion = "";
+  }
   applyLocale();
   try {
     if (api().autostart) {

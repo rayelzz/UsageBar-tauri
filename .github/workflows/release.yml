@@ -46,9 +46,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Update checks are opt-in.** Automatic detection is off by default. Turn it on in **Tools…** or the gear menu.
-            - **Version in Tools.** The Tools window shows the current version. Check for updates to see the latest version, then click it to open the download page.
-            - **Skip this version.** If auto-check is on and you click the update bubble, that version is not shown again until a later release.
+            - **Check for update in the gear menu.** Current version, **Check for update**, and the latest version (click to download) sit in the same menu as auto-check.
+            - Automatic detection stays off by default. Clicking the update bubble still skips that version until a later release.
             - Still official APIs only. Sign in on this computer first. Unsigned-in tools show No data.
 
             ### Download
@@ -71,9 +70,8 @@ jobs:
 
             ### 更新说明
 
-            - **自动检测更新默认关闭。** 在 **工具…** 或齿轮菜单里打开后才会自动检查。
-            - **工具窗口显示版本。** 可以看到当前版本，手动检测后显示最新版本，点击跳转下载。
-            - **跳过本次版本。** 开启自动检测后，点过新版本气泡跳转下载，该版本不再提醒，等到下一个版本才会再提示。
+            - **齿轮菜单里可以直接检测更新。** 当前版本、「检测更新」、最新版本（点击下载）都在这个菜单里，不用再进「工具…」。
+            - 自动检测仍然默认关闭。点过更新气泡仍会跳过该版本，等到下一个版本再提醒。
             - 仍然只读本机登录态、只打官方接口。没登录显示暂无数据。
 
             ### 下载
