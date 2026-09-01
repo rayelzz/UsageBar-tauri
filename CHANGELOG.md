@@ -6,6 +6,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.14 — 2026-09-01
+
+- **Display value.** Choose **Used quota** (default) or **Remaining quota** in the gear menu, tray, or Providers window.
+- Rings, percents, and the detail card follow that choice. Colors still follow remaining: red ≤ 20%, yellow ≤ 40%, green otherwise.
+
 ### 0.0.13 — 2026-09-01
 
 - **Providers.** The old Tools window and menu item are now **Providers…** (English) / **提供商…** (Chinese).
@@ -68,6 +73,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.14 — 2026-09-01
+
+- **显示值。** 齿轮菜单、托盘或提供商窗口里可选 **已使用额度**（默认）或 **剩余额度**。
+- 圆环、百分比和详情都按这个值显示。颜色仍按剩余额度：剩余 ≤ 20% 红，≤ 40% 黄，其余绿。
 
 ### 0.0.13 — 2026-09-01
 

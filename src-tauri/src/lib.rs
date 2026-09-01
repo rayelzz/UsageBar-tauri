@@ -43,6 +43,7 @@ fn get_prefs(app: AppHandle) -> Prefs {
 #[tauri::command]
 fn set_prefs(app: AppHandle, mut prefs: Prefs) {
     prefs.visible_providers = prefs::normalize_visible(&prefs.visible_providers);
+    prefs.display_value = prefs::normalize_display_value(&prefs.display_value);
     if let Some(state) = app.try_state::<Overlay>() {
         if let Ok(mut slot) = state.prefs.lock() {
             *slot = prefs.clone();
@@ -252,6 +253,25 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
     let style_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&style_full, &style_icons];
     let style_sub =
         Submenu::with_id_and_items(app, "display-style", i18n::display_style(loc), true, &style_refs)?;
+    let value_used = CheckMenuItem::with_id(
+        app,
+        "value:used",
+        i18n::used_quota(loc),
+        true,
+        prefs.display_value != "remaining",
+        None::<&str>,
+    )?;
+    let value_remaining = CheckMenuItem::with_id(
+        app,
+        "value:remaining",
+        i18n::remaining_quota(loc),
+        true,
+        prefs.display_value == "remaining",
+        None::<&str>,
+    )?;
+    let value_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&value_used, &value_remaining];
+    let value_sub =
+        Submenu::with_id_and_items(app, "display-value", i18n::display_value(loc), true, &value_refs)?;
     let zh = i18n::is_zh(loc);
     let lang_en = CheckMenuItem::with_id(app, "locale:en", "English", true, !zh, None::<&str>)?;
     let lang_zh = CheckMenuItem::with_id(app, "locale:zh", "中文", true, zh, None::<&str>)?;
@@ -282,6 +302,7 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
             &top,
             &bottom,
             &style_sub,
+            &value_sub,
             &lang_sub,
             &tools,
             &sep,

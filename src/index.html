@@ -28,10 +28,20 @@
     </div>
     <div id="settings-root" hidden>
       <div class="settings-page">
-        <h1 id="settings-title"></h1>
-        <p id="settings-hint" class="settings-hint"></p>
-        <p id="settings-count" class="settings-count"></p>
-        <div id="settings-list"></div>
+        <section class="settings-block">
+          <h1 id="settings-value-title"></h1>
+          <p id="settings-value-hint" class="settings-hint"></p>
+          <div class="settings-choice" id="settings-value-choice">
+            <button type="button" data-display-value="used"></button>
+            <button type="button" data-display-value="remaining"></button>
+          </div>
+        </section>
+        <section class="settings-block">
+          <h1 id="settings-title"></h1>
+          <p id="settings-hint" class="settings-hint"></p>
+          <p id="settings-count" class="settings-count"></p>
+          <div id="settings-list"></div>
+        </section>
       </div>
     </div>
     <script type="module" src="main.js"></script>

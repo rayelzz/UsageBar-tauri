@@ -96,6 +96,30 @@ pub fn transparent_icons(locale: &str) -> &'static str {
     }
 }
 
+pub fn display_value(locale: &str) -> &'static str {
+    if is_zh(locale) {
+        "显示值"
+    } else {
+        "Display value"
+    }
+}
+
+pub fn used_quota(locale: &str) -> &'static str {
+    if is_zh(locale) {
+        "已使用额度"
+    } else {
+        "Used quota"
+    }
+}
+
+pub fn remaining_quota(locale: &str) -> &'static str {
+    if is_zh(locale) {
+        "剩余额度"
+    } else {
+        "Remaining quota"
+    }
+}
+
 pub fn language(locale: &str) -> &'static str {
     if is_zh(locale) {
         "语言"

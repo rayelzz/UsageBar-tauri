@@ -42,13 +42,14 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
+- Display value: **Used quota** (default) or **Remaining quota**. Rings, percents, and the detail card follow the choice; colors still follow remaining (red ≤ 20%, yellow ≤ 40%, green otherwise)
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
 - A detached settings gear sits past the end of the bar (the original bar shape is unchanged). Hover to show it; click to open the same dark menu as **UB**. Click outside the panel to close
 - Automatic update checks are **off** by default. The gear menu shows the current version and **Check for update**; after a check, click the latest version to download. If auto-check is on and you click the update bubble, that version is skipped until a later release
 - Status / tray item is the text **UB** (macOS). Click the gear, right-click the bar, or click **UB** for the same menu
 - Auto-refresh every 60 seconds (configurable)
-- Official brand icons; red when remaining &lt; 20% (used ≥ 80%), yellow when remaining 20%–40% (used 60%–80%), green otherwise
+- Official brand icons; red when remaining ≤ 20% (used ≥ 80%), yellow when remaining ≤ 40% (used ≥ 60%), green otherwise
 
 ### How usage and reset time are read
 
@@ -117,8 +118,9 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - Lock position / click-through (**Don’t block clicks below**)
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
+- Display value: Used quota / Remaining quota
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
-- **Providers…**: choose 1–10 providers and their order. The bar shortens or lengthens to match; no empty **—** slots
+- **Providers…**: choose 1–10 providers and their order. The bar shortens or lengthens to match; no empty **—** slots. The same window also sets the display value.
 - Current version, **Check for update**, latest version (click to download), and auto-check (off by default); open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.

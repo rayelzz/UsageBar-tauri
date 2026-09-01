@@ -145,6 +145,10 @@ function t() {
         displayStyle: "显示样式",
         ringUsage: "圆环用量",
         transparentIcons: "透明图标",
+        displayValue: "显示值",
+        usedQuota: "已使用额度",
+        remainingQuota: "剩余额度",
+        displayValueHint: "圆环、百分比和详情都按这个值显示。颜色仍按剩余额度：不足 20% 红，20%–40% 黄，其余绿。",
         language: "语言",
         openAtLogin: "登录时打开",
         quit: "退出 UsageBar",
@@ -186,6 +190,10 @@ function t() {
         displayStyle: "Display style",
         ringUsage: "Ring usage",
         transparentIcons: "Transparent",
+        displayValue: "Display value",
+        usedQuota: "Used quota",
+        remainingQuota: "Remaining quota",
+        displayValueHint: "Rings, percents, and the detail card follow this value. Colors still follow remaining: red below 20%, yellow 20–40%, green otherwise.",
         language: "Language",
         openAtLogin: "Open at login",
         quit: "Quit UsageBar",
@@ -308,8 +316,25 @@ function localizeError(snap) {
   return err;
 }
 
-function usedText(pct) {
-  const n = Math.round(pct);
+function isRemaining() {
+  return prefs.displayValue === "remaining";
+}
+
+function remainPct(used) {
+  if (used == null || Number.isNaN(Number(used))) return null;
+  return Math.max(0, Math.min(100, 100 - Number(used)));
+}
+
+function shownPct(used) {
+  if (used == null || Number.isNaN(Number(used))) return null;
+  return isRemaining() ? remainPct(used) : Number(used);
+}
+
+function quotaText(used) {
+  const shown = shownPct(used);
+  if (shown == null) return "";
+  const n = Math.round(shown);
+  if (isRemaining()) return isZh() ? `剩余 ${n}%` : `${n}% Left`;
   return isZh() ? `已用 ${n}%` : `${n}% Used`;
 }
 
@@ -321,6 +346,7 @@ function applyLocale() {
 function normalizeLoadedPrefs(p) {
   const next = { ...p };
   if (next.displayStyle !== "icons") next.displayStyle = "full";
+  next.displayValue = next.displayValue === "remaining" ? "remaining" : "used";
   next.locale = next.locale === "zh" ? "zh" : "en";
   next.visibleProviders = normalizeVisible(next.visibleProviders);
   next.autoCheckUpdate = !!next.autoCheckUpdate;
@@ -364,9 +390,11 @@ const LogicalPosition = () => api().window.LogicalPosition;
 const getCurrentWindow = () => api().window.getCurrentWindow();
 const getWindow = (label) => api().webviewWindow.WebviewWindow.getByLabel(label);
 
-function usageColor(pct) {
-  if (pct >= 80) return "rgb(242, 82, 82)";
-  if (pct >= 60) return "rgb(219, 209, 41)";
+function usageColor(used) {
+  const rem = remainPct(used);
+  if (rem == null) return "rgb(77, 219, 107)";
+  if (rem <= 20) return "rgb(242, 82, 82)";
+  if (rem <= 40) return "rgb(219, 209, 41)";
   return "rgb(77, 219, 107)";
 }
 
@@ -398,12 +426,13 @@ function glyph(id, size) {
     .join("")}</svg>`;
 }
 
-function ringSvg(pct, unknown) {
+function ringSvg(used, unknown) {
   const c = 13;
   const r = 10.25;
   const circ = 2 * Math.PI * r;
-  const color = unknown || pct == null ? "transparent" : usageColor(pct);
-  const dash = unknown || pct == null ? 0 : (Math.min(Math.max(pct, 0), 100) / 100) * circ;
+  const shown = shownPct(used);
+  const color = unknown || shown == null ? "transparent" : usageColor(used);
+  const dash = unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
   return `<svg viewBox="0 0 26 26">
     <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
     <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="2.5"
@@ -604,6 +633,7 @@ let prefs = {
   launchAtLogin: false,
   screenName: "",
   displayStyle: "full",
+  displayValue: "used",
   locale: "en",
   visibleProviders: DEFAULT_VISIBLE.slice(),
   autoCheckUpdate: false,
@@ -691,8 +721,9 @@ function renderIconCells() {
       const c = 8;
       const r = 6.2;
       const circ = 2 * Math.PI * r;
+      const shown = shownPct(s.headlinePercent);
       const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
-      const dash = empty || unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      const dash = empty || unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
       if (empty) {
         return `<div class="mini-ring empty-slot unknown">
           <svg viewBox="0 0 16 16">
@@ -739,14 +770,15 @@ function renderBar() {
   cells.innerHTML = snaps
     .map((s) => {
       const unknown = s.headlinePercent == null;
-      const text = unknown ? "—" : `${Math.round(s.headlinePercent)}%`;
+      const shown = shownPct(s.headlinePercent);
+      const text = unknown || shown == null ? "—" : `${Math.round(shown)}%`;
       const spec = ICONS[s.id];
       const empty = !s.id || !spec;
       const c = 13;
       const r = 10.25;
       const circ = 2 * Math.PI * r;
       const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
-      const dash = empty || unknown ? 0 : (Math.min(Math.max(s.headlinePercent, 0), 100) / 100) * circ;
+      const dash = empty || unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
       if (empty) {
         return `<div class="cell empty-slot unknown">
           <div class="ring">
@@ -810,6 +842,7 @@ async function renderTip() {
     resets,
     arrow,
     locale,
+    displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     resetNotice: snap.resetNotice || null,
   });
   const h = tipHeight(snap);
@@ -1251,6 +1284,18 @@ async function setDisplayStyle(style) {
   hideMenu();
 }
 
+async function setDisplayValue(value) {
+  const next = value === "remaining" ? "remaining" : "used";
+  if (prefs.displayValue === next) return;
+  prefs.displayValue = next;
+  await savePrefs();
+  if (!document.getElementById("bar-root")?.hidden) {
+    renderBar();
+    if (hovered) await renderTip();
+    if (menuOpen) await showPanelMenu(false);
+  }
+}
+
 async function snapTo(edge) {
   prefs.edge = edge;
   const pos = await getCurrentWindow().outerPosition();
@@ -1293,6 +1338,9 @@ async function onNativeMenu(id) {
     restartTimer();
   } else if (id.startsWith("style:")) {
     await setDisplayStyle(id.slice(6));
+    return;
+  } else if (id.startsWith("value:")) {
+    await setDisplayValue(id.slice(6));
     return;
   } else if (id.startsWith("locale:")) {
     await setLocale(id.slice(7));
@@ -1358,6 +1406,12 @@ function menuSpec(st) {
       ["style:full", "style:icons"],
       [ui.ringUsage, ui.transparentIcons],
       [st.displayStyle !== "icons", st.displayStyle === "icons"]
+    ),
+    { k: "label", label: ui.displayValue },
+    chips(
+      ["value:used", "value:remaining"],
+      [ui.usedQuota, ui.remainingQuota],
+      [st.displayValue !== "remaining", st.displayValue === "remaining"]
     ),
     { k: "label", label: ui.language },
     chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
@@ -1425,6 +1479,7 @@ function menuStateNow() {
     clickThrough: !!prefs.clickThrough,
     edge: prefs.edge,
     displayStyle: isIcons() ? "icons" : "full",
+    displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     launchAtLogin: !!prefs.launchAtLogin,
     autoCheckUpdate: !!prefs.autoCheckUpdate,
     current: appVersion || "",
@@ -1644,6 +1699,8 @@ async function startBar() {
     if (!e.payload) return;
     const prev = (prefs.visibleProviders || []).join(",");
     const prevAuto = !!prefs.autoCheckUpdate;
+    const prevValue = prefs.displayValue;
+    const prevStyle = prefs.displayStyle;
     prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
     if (prevAuto !== prefs.autoCheckUpdate) applyAutoUpdatePref();
@@ -1652,6 +1709,10 @@ async function startBar() {
       renderBar();
       placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
+    } else if (prevValue !== prefs.displayValue || prevStyle !== prefs.displayStyle) {
+      renderBar();
+      if (hovered) renderTip().catch((err) => console.error(err));
+      if (prevStyle !== prefs.displayStyle) placeWindows().catch((err) => console.error(err));
     }
   });
   await api().event.listen("usagebar-over", (e) => {
@@ -1718,6 +1779,9 @@ function paintTip(payload) {
     return;
   }
   prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  if (payload.displayValue) {
+    prefs.displayValue = payload.displayValue === "remaining" ? "remaining" : "used";
+  }
   applyLocale();
   const ptr = document.getElementById("tip-pointer");
   if (payload.kind === "menu") {
@@ -1772,11 +1836,12 @@ function paintTip(payload) {
     ? `<div class="empty${isQuerying(snap) ? " querying" : ""}">${localizeError(snap)}</div>`
     : snap.metrics
         .map((m, i) => {
+          const shown = shownPct(m.percent) ?? 0;
           const color = usageColor(m.percent);
           return `<div class="metric">
             <div class="metric-top"><span>${localizeMetricLabel(m.label)}</span><span class="metric-reset">${payload.resets?.[i] || ""}</span></div>
-            <div class="track"><div class="fill" style="width:${Math.min(Math.max(m.percent, 0), 100)}%;background:${color}"></div></div>
-            <div class="used">${usedText(m.percent)}</div>
+            <div class="track"><div class="fill" style="width:${Math.min(Math.max(shown, 0), 100)}%;background:${color}"></div></div>
+            <div class="used">${quotaText(m.percent)}</div>
           </div>`;
         })
         .join("");
@@ -1842,6 +1907,15 @@ function renderSettings() {
   const ui = t();
   const vis = normalizeVisible(prefs.visibleProviders);
   const selected = new Set(vis);
+  const valueTitle = document.getElementById("settings-value-title");
+  const valueHint = document.getElementById("settings-value-hint");
+  if (valueTitle) valueTitle.textContent = ui.displayValue;
+  if (valueHint) valueHint.textContent = ui.displayValueHint;
+  document.querySelectorAll("[data-display-value]").forEach((btn) => {
+    const on = btn.dataset.displayValue === (prefs.displayValue === "remaining" ? "remaining" : "used");
+    btn.classList.toggle("on", on);
+    btn.textContent = btn.dataset.displayValue === "remaining" ? ui.remainingQuota : ui.usedQuota;
+  });
   document.getElementById("settings-title").textContent = ui.toolsTitle;
   document.getElementById("settings-hint").textContent = ui.toolsHint;
   const count = document.getElementById("settings-count");
@@ -1915,6 +1989,11 @@ async function startSettings() {
     saveVisible(vis).catch((err) => console.error(err));
   });
   root.addEventListener("click", (e) => {
+    const valueBtn = e.target.closest("[data-display-value]");
+    if (valueBtn) {
+      setDisplayValue(valueBtn.dataset.displayValue).then(() => renderSettings()).catch((err) => console.error(err));
+      return;
+    }
     const btn = e.target.closest("button[data-move]");
     if (!btn || btn.disabled) return;
     const id = btn.dataset.move;

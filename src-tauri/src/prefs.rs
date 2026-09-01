@@ -17,6 +17,8 @@ pub struct Prefs {
     pub screen_name: String,
     #[serde(default)]
     pub display_style: String,
+    #[serde(default = "default_display_value")]
+    pub display_value: String,
     #[serde(default = "default_locale")]
     pub locale: String,
     #[serde(default = "default_visible_providers")]
@@ -43,6 +45,18 @@ pub const SLOT_MAX: usize = 10;
 
 fn default_locale() -> String {
     "en".into()
+}
+
+fn default_display_value() -> String {
+    "used".into()
+}
+
+pub fn normalize_display_value(value: &str) -> String {
+    if value == "remaining" {
+        "remaining".into()
+    } else {
+        "used".into()
+    }
 }
 
 pub fn default_visible_providers() -> Vec<String> {
@@ -96,6 +110,7 @@ impl Default for Prefs {
             launch_at_login: false,
             screen_name: String::new(),
             display_style: "full".into(),
+            display_value: default_display_value(),
             locale: default_locale(),
             visible_providers: default_visible_providers(),
             auto_check_update: false,
@@ -118,6 +133,7 @@ pub fn load() -> Prefs {
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default();
     prefs.visible_providers = normalize_visible(&prefs.visible_providers);
+    prefs.display_value = normalize_display_value(&prefs.display_value);
     prefs
 }
 
@@ -128,6 +144,7 @@ pub fn save(prefs: &Prefs) {
     }
     let mut copy = prefs.clone();
     copy.visible_providers = normalize_visible(&copy.visible_providers);
+    copy.display_value = normalize_display_value(&copy.display_value);
     if let Ok(text) = serde_json::to_string_pretty(&copy) {
         let _ = fs::write(path, text);
     }
@@ -184,5 +201,15 @@ mod tests {
         .unwrap();
         assert!(!parsed.auto_check_update);
         assert!(parsed.skipped_update_version.is_empty());
+        assert_eq!(parsed.display_value, "used");
+    }
+
+    #[test]
+    fn display_value_defaults_to_used() {
+        let prefs = Prefs::default();
+        assert_eq!(prefs.display_value, "used");
+        assert_eq!(normalize_display_value("remaining"), "remaining");
+        assert_eq!(normalize_display_value("used"), "used");
+        assert_eq!(normalize_display_value("nope"), "used");
     }
 }

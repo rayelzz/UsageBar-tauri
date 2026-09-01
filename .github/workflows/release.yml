@@ -46,10 +46,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Providers…** replaces **Tools…**. The window is only the provider list; check for updates stays in the gear menu.
-            - Reopening the menu clears the last check. Already latest → muted **Up to date**. Newer build → green version, click to download.
-            - Menu rows highlight on hover. The settings panel no longer draws a pointer toward the gear.
-            - Hover cards show **Checking…** while a provider is still querying, then fill in as each result arrives.
+            - **Display value:** **Used quota** (default) or **Remaining quota**, in the gear menu, tray, and Providers window.
+            - Rings, percents, and the detail card follow the choice. Colors still follow remaining: red ≤ 20%, yellow ≤ 40%, green otherwise.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -73,10 +71,8 @@ jobs:
 
             ### 更新说明
 
-            - **「工具」改为「提供商」。** 窗口只负责勾选和排序；检测更新仍在齿轮菜单。
-            - 再次打开菜单会清空上次检测。已是最新版显示灰色「已是最新版」；有新版本显示绿色版本号，点击下载。
-            - 菜单项悬停会高亮。设置面板不再朝齿轮画三角箭头。
-            - 还在请求时悬停显示「查询中」，各家结果返回后立刻填上。
+            - **显示值：** 默认 **已使用额度**，可切 **剩余额度**。齿轮菜单、托盘和提供商窗口都能改。
+            - 圆环、百分比和详情都按这个值显示。颜色仍按剩余额度：剩余 ≤ 20% 红，≤ 40% 黄，其余绿。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 
