@@ -148,9 +148,9 @@ function t() {
         language: "语言",
         openAtLogin: "登录时打开",
         quit: "退出 UsageBar",
-        tools: "工具…",
-        toolsTitle: "工具",
-        toolsHint: "最少 1 个，最多 10 个。条的长度随数量变化。顺序即圆环从左到右 / 从上到下。没登录的工具显示暂无数据。",
+        tools: "提供商…",
+        toolsTitle: "提供商",
+        toolsHint: "最少 1 个，最多 10 个。条的长度随数量变化。顺序即圆环从左到右 / 从上到下。没登录的提供商显示暂无数据。",
         toolsMax: "已经选了 10 个，请先取消一个再勾选。",
         toolsMin: "至少保留 1 个。",
         moveUp: "上移",
@@ -160,21 +160,17 @@ function t() {
         updateLine: (v) => `有新版本 ${v}`,
         autoCheckUpdate: "自动检测更新",
         updatesTitle: "更新",
-        updatesHint: "默认关闭。开启后有新版本会弹出气泡；点气泡跳转下载后，该版本不再提醒。",
-        currentVersion: "当前版本",
         currentVersionLine: (v) => `当前版本 ${v}`,
-        latestVersion: "最新版本",
-        latestVersionLine: (v) => `最新版本 ${v}`,
         checkUpdate: "检测更新",
         checkingUpdate: "正在检测…",
-        updateUpToDate: "已是最新版本",
-        updateAvailable: "有新版本，点击版本号下载",
+        updateUpToDate: "已是最新版",
         updateCheckFailed: "检测失败，请稍后重试",
         settings: "设置",
         snapGroup: "贴边",
         edgeShort: ["左", "右", "上", "下"],
         off: "关闭",
         noData: "暂无数据",
+        querying: "查询中",
         days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
       }
     : {
@@ -193,11 +189,11 @@ function t() {
         language: "Language",
         openAtLogin: "Open at login",
         quit: "Quit UsageBar",
-        tools: "Tools…",
-        toolsTitle: "Tools",
-        toolsHint: "Show 1–10 tools. The bar grows with the count. Order is left-to-right / top-to-bottom. Unsigned-in tools show No data.",
-        toolsMax: "10 tools already selected. Uncheck one first.",
-        toolsMin: "Keep at least 1 tool.",
+        tools: "Providers…",
+        toolsTitle: "Providers",
+        toolsHint: "Show 1–10 providers. The bar grows with the count. Order is left-to-right / top-to-bottom. Unsigned-in providers show No data.",
+        toolsMax: "10 providers already selected. Uncheck one first.",
+        toolsMin: "Keep at least 1 provider.",
         moveUp: "Move up",
         moveDown: "Move down",
         selectedCount: (n) => `${n} / 10 selected`,
@@ -205,21 +201,17 @@ function t() {
         updateLine: (v) => `Update available ${v}`,
         autoCheckUpdate: "Check for updates automatically",
         updatesTitle: "Updates",
-        updatesHint: "Off by default. When on, a bubble appears for a new release. Clicking it opens the download page and skips that version until the next one.",
-        currentVersion: "Current version",
         currentVersionLine: (v) => `Current ${v}`,
-        latestVersion: "Latest version",
-        latestVersionLine: (v) => `Latest ${v}`,
         checkUpdate: "Check for update",
         checkingUpdate: "Checking…",
-        updateUpToDate: "You’re up to date",
-        updateAvailable: "Update available — click the version to download",
+        updateUpToDate: "Up to date",
         updateCheckFailed: "Couldn’t check for updates. Try again later.",
         settings: "Settings",
         snapGroup: "Snap edge",
         edgeShort: ["Left", "Right", "Top", "Bottom"],
         off: "Off",
         noData: "No data",
+        querying: "Checking…",
         days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       };
 }
@@ -256,15 +248,27 @@ function slotCount() {
   return Math.max(SLOT_MIN, Math.min(SLOT_MAX, n));
 }
 
-function emptySnap(id) {
-  if (!id) return { id: "", title: "", headlinePercent: null, metrics: [], error: null };
-  return { id, title: usageTitle(id), headlinePercent: null, metrics: [], error: null };
+function emptySnap(id, loading = false) {
+  if (!id) return { id: "", title: "", headlinePercent: null, metrics: [], error: null, loading: false };
+  return { id, title: usageTitle(id), headlinePercent: null, metrics: [], error: null, loading };
 }
 
-function slotsFrom(got) {
+function pendingSnap(id) {
+  return emptySnap(id, true);
+}
+
+function slotsFrom(got, pendingIfMissing = false) {
   const vis = normalizeVisible(prefs.visibleProviders);
   const byId = Object.fromEntries((got || []).map((s) => [s.id, s]));
-  return vis.map((id) => byId[id] || emptySnap(id));
+  return vis.map((id) => byId[id] || (pendingIfMissing ? pendingSnap(id) : emptySnap(id)));
+}
+
+function hasMetrics(snap) {
+  return !!snap?.metrics?.length;
+}
+
+function isQuerying(snap) {
+  return !!snap?.loading && !hasMetrics(snap);
 }
 
 function usageTitle(id) {
@@ -286,6 +290,7 @@ function localizeMetricLabel(label) {
 }
 
 function localizeError(snap) {
+  if (isQuerying(snap)) return t().querying;
   const name = vendorName(snap.id);
   const err = snap.error || "";
   if (!err || err === "no_quota") return t().noData;
@@ -606,14 +611,17 @@ let prefs = {
 };
 let osName = "macos";
 let snaps = [
-  { id: "codex", title: "Codex Usage", headlinePercent: null, metrics: [], error: null },
-  { id: "cursor", title: "Cursor Usage", headlinePercent: null, metrics: [], error: null },
-  { id: "grok", title: "Grok Usage", headlinePercent: null, metrics: [], error: null },
-  { id: "glm", title: "GLM Usage", headlinePercent: null, metrics: [], error: null },
+  { id: "codex", title: "Codex Usage", headlinePercent: null, metrics: [], error: null, loading: true },
+  { id: "cursor", title: "Cursor Usage", headlinePercent: null, metrics: [], error: null, loading: true },
+  { id: "grok", title: "Grok Usage", headlinePercent: null, metrics: [], error: null, loading: true },
+  { id: "glm", title: "GLM Usage", headlinePercent: null, metrics: [], error: null, loading: true },
 ];
 let hovered = null;
 let dragging = false;
 let refreshTimer = null;
+let refreshGen = 0;
+let refreshing = false;
+let refreshQueued = false;
 let menuOpen = false;
 let resetToastId = null;
 let tipHot = false;
@@ -622,12 +630,11 @@ let updateToastOpen = false;
 let updateTimer = null;
 let appVersion = "";
 let checkedInfo = null;
+let menuCheckedInfo = null;
 let menuChecking = false;
 let menuCheckStatus = "";
-let settingsCurrentVersion = "";
-let settingsLatest = null;
-let settingsChecking = false;
-let settingsStatus = "";
+const JUMP_ICON =
+  '<svg class="m-jump" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11.5 11.5 5"/><path d="M7 5h4.5V9.5"/></svg>';
 let barHot = false;
 let pointerOver = false;
 
@@ -912,6 +919,12 @@ async function setTipClickable(on) {
   } catch {
     /* older runtime */
   }
+  try {
+    await tipWin?.setFocusable(!!on);
+    if (on) await tipWin?.setFocus();
+  } catch {
+    /* optional */
+  }
 }
 
 async function acknowledgeReset(id) {
@@ -1031,8 +1044,13 @@ function rememberCheck(info) {
   if (!info?.latest) return false;
   checkedInfo = info;
   if (info.current) appVersion = info.current;
-  menuCheckStatus = updateHasNewer(info) ? "available" : "upToDate";
   return true;
+}
+
+function resetMenuCheck() {
+  menuCheckedInfo = null;
+  menuChecking = false;
+  menuCheckStatus = "";
 }
 
 async function checkUpdate() {
@@ -1062,9 +1080,14 @@ async function checkUpdateManual() {
     const info = await invoke("check_update");
     if (!rememberCheck(info)) {
       menuCheckStatus = "failed";
-    } else if (prefs.autoCheckUpdate) {
-      updateInfo = promptableUpdate(info);
-      syncUpdateBadge();
+      menuCheckedInfo = null;
+    } else {
+      menuCheckedInfo = info;
+      menuCheckStatus = updateHasNewer(info) ? "available" : "upToDate";
+      if (prefs.autoCheckUpdate) {
+        updateInfo = promptableUpdate(info);
+        syncUpdateBadge();
+      }
     }
   } catch {
     menuCheckStatus = "failed";
@@ -1140,9 +1163,15 @@ async function savePrefs() {
   await invoke("set_prefs", { prefs });
 }
 
-async function refresh() {
-  const got = await invoke("fetch_usage");
-  snaps = slotsFrom(got);
+function applyIncomingSnap(snap) {
+  if (!snap?.id) return;
+  const next = { ...snap, loading: false };
+  snaps = snaps.map((s) => (s.id === next.id ? next : s));
+  renderBar();
+  if (hovered === next.id) renderTip().catch((err) => console.error(err));
+}
+
+async function finishRefreshPaint() {
   if (hovered && !snaps.some((s) => s.id === hovered)) {
     await setHovered(null);
   }
@@ -1159,6 +1188,40 @@ async function refresh() {
   if (await maybeShowResetToast()) return;
   if (hovered) await renderTip();
   else await showUpdateToast();
+}
+
+async function refresh() {
+  if (refreshing) {
+    refreshQueued = true;
+    return;
+  }
+  refreshing = true;
+  try {
+    do {
+      refreshQueued = false;
+      const gen = ++refreshGen;
+      snaps = snaps.map((s) => (hasMetrics(s) ? s : { ...s, loading: true }));
+      renderBar();
+      if (hovered) await renderTip();
+      let got = null;
+      try {
+        got = await invoke("fetch_usage");
+      } catch (err) {
+        console.error(err);
+        if (gen !== refreshGen) continue;
+        snaps = snaps.map((s) =>
+          hasMetrics(s) ? { ...s, loading: false } : { ...s, loading: false, error: s.error || "api_error" }
+        );
+      }
+      if (gen !== refreshGen) continue;
+      if (Array.isArray(got)) {
+        snaps = slotsFrom(got).map((s) => ({ ...s, loading: false }));
+      }
+      await finishRefreshPaint();
+    } while (refreshQueued);
+  } finally {
+    refreshing = false;
+  }
 }
 
 function restartTimer() {
@@ -1307,21 +1370,12 @@ function menuSpec(st) {
       k: "row",
       id: "checkupdate",
       label: st.checking ? ui.checkingUpdate : ui.checkUpdate,
+      extra: st.checkExtra || "",
+      extraKind: st.checkExtraKind || "",
+      extraId: "latest",
       cls: st.checking ? "dim" : "",
     },
   ];
-  if (st.checkedLatest) {
-    rows.push({
-      k: "row",
-      id: "latest",
-      label: st.hasNewer ? ui.updateLine(st.checkedLatest) : ui.latestVersionLine(st.checkedLatest),
-      cls: st.hasNewer ? "update" : "",
-    });
-  } else if (st.checkStatus === "failed") {
-    rows.push({ k: "info", label: ui.updateCheckFailed });
-  } else if (st.checkStatus === "upToDate") {
-    rows.push({ k: "info", label: ui.updateUpToDate });
-  }
   rows.push(
     { k: "row", id: "autoupdate", label: ui.autoCheckUpdate, check: st.autoCheckUpdate },
     { k: "row", id: "login", label: ui.openAtLogin, check: st.launchAtLogin },
@@ -1345,9 +1399,15 @@ function menuPanelHtml(st) {
           )
           .join("")}</div>`;
       }
+      const extra =
+        r.extraKind === "link" && r.extra
+          ? `<span class="m-extra link" data-mid="${r.extraId || "latest"}">${r.extra}${JUMP_ICON}</span>`
+          : r.extra
+            ? `<span class="m-extra muted">${r.extra}</span>`
+            : "";
       return `<button type="button" class="m-row${r.cls ? " " + r.cls : ""}" data-mid="${r.id}"><span class="m-check">${
         r.check ? "✓" : ""
-      }</span><span>${r.label}</span></button>`;
+      }</span><span class="m-grow">${r.label}</span>${extra}</button>`;
     })
     .join("");
 }
@@ -1367,11 +1427,20 @@ function menuStateNow() {
     displayStyle: isIcons() ? "icons" : "full",
     launchAtLogin: !!prefs.launchAtLogin,
     autoCheckUpdate: !!prefs.autoCheckUpdate,
-    current: appVersion || checkedInfo?.current || "",
+    current: appVersion || "",
     checking: menuChecking,
     checkStatus: menuCheckStatus,
-    checkedLatest: checkedInfo?.latest || null,
-    hasNewer: updateHasNewer(checkedInfo),
+    checkExtra:
+      menuChecking
+        ? ""
+        : updateHasNewer(menuCheckedInfo)
+          ? menuCheckedInfo.latest
+          : menuCheckStatus === "upToDate"
+            ? t().updateUpToDate
+            : menuCheckStatus === "failed"
+              ? t().updateCheckFailed
+              : "",
+    checkExtraKind: updateHasNewer(menuCheckedInfo) ? "link" : menuCheckStatus ? "muted" : "",
     latest: updateInfo?.latest || null,
   };
 }
@@ -1380,6 +1449,7 @@ async function showPanelMenu(reposition = true) {
   const wasOpen = menuOpen;
   menuOpen = true;
   if (!wasOpen) {
+    resetMenuCheck();
     await invoke("set_menu_open", { open: true });
     setBarHot();
     await setHovered(null);
@@ -1400,8 +1470,8 @@ async function showPanelMenu(reposition = true) {
     const g = gearCenter(frame.w, frame.h, prefs.edge);
     const gx = frame.x + g.x;
     const gy = frame.y + g.y;
-    const winW = MENU_W + 20;
-    const winH = menuPanelHeight(st) + 12;
+    const winW = MENU_W;
+    const winH = menuPanelHeight(st);
     let x;
     let y;
     if (prefs.edge === "left") x = frame.x + frame.w - 2;
@@ -1476,13 +1546,11 @@ async function handleMenuAction(id) {
     return;
   }
   if (id === "update" || id === "latest") {
-    const info = checkedInfo || updateInfo;
-    if (info?.latest) {
+    const info = menuCheckedInfo || checkedInfo || updateInfo;
+    if (info?.latest && updateHasNewer(info)) {
       await openRelease(info.url);
-      if (updateHasNewer(info)) {
-        updateInfo = info;
-        await skipPromptedVersion();
-      }
+      updateInfo = info;
+      await skipPromptedVersion();
     }
     await closeMenuPanel();
     return;
@@ -1525,7 +1593,7 @@ async function startBar() {
   document.getElementById("bar-root").hidden = false;
   osName = await invoke("os_name");
   prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
-  snaps = slotsFrom([]);
+  snaps = slotsFrom([], true);
   try {
     appVersion = await invoke("app_version");
   } catch {
@@ -1580,7 +1648,7 @@ async function startBar() {
     applyLocale();
     if (prevAuto !== prefs.autoCheckUpdate) applyAutoUpdatePref();
     if (prev !== prefs.visibleProviders.join(",")) {
-      snaps = slotsFrom(snaps.filter((s) => s.id));
+      snaps = slotsFrom(snaps.filter((s) => s.id), true);
       renderBar();
       placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
@@ -1603,9 +1671,36 @@ async function startBar() {
   await api().event.listen("usagebar-update-open", () => {
     openUpdateFromPrompt().catch((err) => console.error(err));
   });
+  await api().event.listen("usagebar-usage", (e) => {
+    if (e.payload) applyIncomingSnap(e.payload);
+  });
 }
 
-let tipMenuPointer = 24;
+let lastMenuPointer = null;
+
+function setMenuHover(el) {
+  const root = document.getElementById("tip-root");
+  if (!root) return;
+  root.querySelectorAll(".m-row.is-hover, .m-chip.is-hover").forEach((n) => {
+    if (n !== el) n.classList.remove("is-hover");
+  });
+  if (el && !el.classList.contains("dim")) el.classList.add("is-hover");
+}
+
+function menuItemFromPoint(x, y) {
+  const stack = document.elementsFromPoint?.(x, y) || [];
+  for (const node of stack) {
+    const item = node.closest?.(".m-row, .m-chip");
+    if (item && item.closest(".menu-card") && !item.classList.contains("dim")) return item;
+  }
+  return null;
+}
+
+function syncMenuHover(e) {
+  if (e) lastMenuPointer = { x: e.clientX, y: e.clientY };
+  const p = lastMenuPointer;
+  setMenuHover(p ? menuItemFromPoint(p.x, p.y) : null);
+}
 
 function resetTipLayout() {
   document.getElementById("tip-root")?.classList.remove("menu-backdrop");
@@ -1637,23 +1732,21 @@ function paintTip(payload) {
     if (payload.cardX != null && payload.cardY != null) {
       tip.style.left = `${payload.cardX}px`;
       tip.style.top = `${payload.cardY}px`;
-      tip.style.width = `${payload.cardW || MENU_W + 20}px`;
+      tip.style.width = `${payload.cardW || MENU_W}px`;
       tip.style.height = `${payload.cardH || 0}px`;
     }
-    if (payload.pointerAt != null) tipMenuPointer = payload.pointerAt;
-    const off = `${Math.max(10, tipMenuPointer - 8)}px`;
-    if (payload.arrow === "up" || payload.arrow === "down") {
-      ptr.style.marginLeft = off;
+    if (ptr) {
+      ptr.hidden = true;
       ptr.style.marginTop = "";
-    } else {
-      ptr.style.marginTop = off;
       ptr.style.marginLeft = "";
+      ptr.style.alignSelf = "";
     }
-    ptr.style.alignSelf = "flex-start";
+    requestAnimationFrame(() => syncMenuHover());
     return;
   }
   resetTipLayout();
   if (ptr) {
+    ptr.hidden = false;
     ptr.style.marginTop = "";
     ptr.style.marginLeft = "";
     ptr.style.alignSelf = "";
@@ -1676,7 +1769,7 @@ function paintTip(payload) {
   if (!spec) return;
   const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
   const metricsHtml = !snap.metrics?.length
-    ? `<div class="empty">${localizeError(snap)}</div>`
+    ? `<div class="empty${isQuerying(snap) ? " querying" : ""}">${localizeError(snap)}</div>`
     : snap.metrics
         .map((m, i) => {
           const color = usageColor(m.percent);
@@ -1716,7 +1809,13 @@ async function startTip() {
     tipHot = !!e.payload;
     document.getElementById("tip")?.classList.toggle("hot", tipHot);
   });
-  document.getElementById("tip-root").addEventListener("click", (e) => {
+  const tipRoot = document.getElementById("tip-root");
+  tipRoot.addEventListener("pointermove", syncMenuHover);
+  tipRoot.addEventListener("pointerleave", () => {
+    lastMenuPointer = null;
+    setMenuHover(null);
+  });
+  tipRoot.addEventListener("click", (e) => {
     const mid = e.target.closest("[data-mid]");
     if (mid) {
       api().event.emit("usagebar-menu", mid.dataset.mid).catch(() => {});
@@ -1741,40 +1840,6 @@ async function startTip() {
 
 function renderSettings() {
   const ui = t();
-  document.getElementById("settings-update-title").textContent = ui.updatesTitle;
-  document.getElementById("settings-update-hint").textContent = ui.updatesHint;
-  document.getElementById("auto-check-update-label").textContent = ui.autoCheckUpdate;
-  document.getElementById("auto-check-update").checked = !!prefs.autoCheckUpdate;
-  document.getElementById("current-version-label").textContent = ui.currentVersion;
-  document.getElementById("current-version-value").textContent = settingsCurrentVersion || "—";
-  document.getElementById("latest-version-label").textContent = ui.latestVersion;
-  const latestBtn = document.getElementById("latest-version-value");
-  const latestPh = document.getElementById("latest-version-placeholder");
-  if (settingsLatest?.latest) {
-    latestBtn.hidden = false;
-    latestBtn.textContent = settingsLatest.latest;
-    latestBtn.classList.toggle("same", !updateHasNewer(settingsLatest));
-    latestPh.hidden = true;
-  } else {
-    latestBtn.hidden = true;
-    latestBtn.textContent = "";
-    latestPh.hidden = false;
-    latestPh.textContent = "—";
-  }
-  const checkBtn = document.getElementById("check-update-btn");
-  checkBtn.textContent = settingsChecking ? ui.checkingUpdate : ui.checkUpdate;
-  checkBtn.disabled = settingsChecking;
-  const status = document.getElementById("update-status");
-  status.textContent =
-    settingsStatus === "checking"
-      ? ui.checkingUpdate
-      : settingsStatus === "failed"
-        ? ui.updateCheckFailed
-        : settingsStatus === "available"
-          ? ui.updateAvailable
-          : settingsStatus === "upToDate"
-            ? ui.updateUpToDate
-            : "";
   const vis = normalizeVisible(prefs.visibleProviders);
   const selected = new Set(vis);
   document.getElementById("settings-title").textContent = ui.toolsTitle;
@@ -1819,52 +1884,13 @@ async function saveVisible(next) {
   renderSettings();
 }
 
-async function runSettingsCheck() {
-  if (settingsChecking) return;
-  settingsChecking = true;
-  settingsStatus = "checking";
-  renderSettings();
-  try {
-    const info = await invoke("check_update");
-    if (!info?.latest) {
-      settingsLatest = null;
-      settingsStatus = "failed";
-    } else {
-      settingsLatest = info;
-      settingsCurrentVersion = info.current || settingsCurrentVersion;
-      settingsStatus = updateHasNewer(info) ? "available" : "upToDate";
-    }
-  } catch {
-    settingsLatest = null;
-    settingsStatus = "failed";
-  }
-  settingsChecking = false;
-  renderSettings();
-}
-
 async function startSettings() {
   document.documentElement.classList.add("settings");
   document.getElementById("settings-root").hidden = false;
   prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
-  try {
-    settingsCurrentVersion = await invoke("app_version");
-  } catch {
-    settingsCurrentVersion = "";
-  }
   applyLocale();
   renderSettings();
   const root = document.getElementById("settings-root");
-  document.getElementById("auto-check-update").addEventListener("change", (e) => {
-    prefs.autoCheckUpdate = !!e.target.checked;
-    savePrefs().catch((err) => console.error(err));
-  });
-  document.getElementById("check-update-btn").addEventListener("click", () => {
-    runSettingsCheck().catch((err) => console.error(err));
-  });
-  document.getElementById("latest-version-value").addEventListener("click", () => {
-    if (!settingsLatest?.latest) return;
-    openRelease(settingsLatest.url).catch((err) => console.error(err));
-  });
   root.addEventListener("change", (e) => {
     const input = e.target.closest("input[data-toggle]");
     if (!input) return;

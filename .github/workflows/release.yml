@@ -46,9 +46,12 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Check for update in the gear menu.** Current version, **Check for update**, and the latest version (click to download) sit in the same menu as auto-check.
-            - Automatic detection stays off by default. Clicking the update bubble still skips that version until a later release.
-            - Still official APIs only. Sign in on this computer first. Unsigned-in tools show No data.
+            - **Providers…** replaces **Tools…**. The window is only the provider list; check for updates stays in the gear menu.
+            - Reopening the menu clears the last check. Already latest → muted **Up to date**. Newer build → green version, click to download.
+            - Menu rows highlight on hover. The settings panel no longer draws a pointer toward the gear.
+            - Hover cards show **Checking…** while a provider is still querying, then fill in as each result arrives.
+
+            See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
             ### Download
 
@@ -70,9 +73,12 @@ jobs:
 
             ### 更新说明
 
-            - **齿轮菜单里可以直接检测更新。** 当前版本、「检测更新」、最新版本（点击下载）都在这个菜单里，不用再进「工具…」。
-            - 自动检测仍然默认关闭。点过更新气泡仍会跳过该版本，等到下一个版本再提醒。
-            - 仍然只读本机登录态、只打官方接口。没登录显示暂无数据。
+            - **「工具」改为「提供商」。** 窗口只负责勾选和排序；检测更新仍在齿轮菜单。
+            - 再次打开菜单会清空上次检测。已是最新版显示灰色「已是最新版」；有新版本显示绿色版本号，点击下载。
+            - 菜单项悬停会高亮。设置面板不再朝齿轮画三角箭头。
+            - 还在请求时悬停显示「查询中」，各家结果返回后立刻填上。
+
+            完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 
             ### 下载
 

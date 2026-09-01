@@ -17,6 +17,7 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-skip-taskbar",
     "core:window:allow-set-focus",
+    "core:window:allow-set-focusable",
     "core:window:allow-outer-position",
     "core:window:allow-outer-size",
     "core:window:allow-inner-size",

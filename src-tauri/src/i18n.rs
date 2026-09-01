@@ -106,17 +106,17 @@ pub fn language(locale: &str) -> &'static str {
 
 pub fn tools(locale: &str) -> &'static str {
     if is_zh(locale) {
-        "工具…"
+        "提供商…"
     } else {
-        "Tools…"
+        "Providers…"
     }
 }
 
 pub fn tools_window(locale: &str) -> &'static str {
     if is_zh(locale) {
-        "工具"
+        "提供商"
     } else {
-        "Tools"
+        "Providers"
     }
 }
 

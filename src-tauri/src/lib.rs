@@ -20,9 +20,14 @@ async fn fetch_usage(app: AppHandle) -> Vec<providers::ProviderSnapshot> {
         .try_state::<Overlay>()
         .and_then(|state| state.prefs.lock().ok().map(|p| p.visible_providers.clone()))
         .unwrap_or_else(|| prefs::load().visible_providers);
-    tauri::async_runtime::spawn_blocking(move || providers::fetch_selected(&ids))
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(move || {
+        let handle = app.clone();
+        providers::fetch_selected_each(&ids, |snap| {
+            let _ = handle.emit("usagebar-usage", snap);
+        })
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]

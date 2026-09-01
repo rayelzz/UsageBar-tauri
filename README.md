@@ -8,6 +8,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 ### Contents
 
+- [Changelog](CHANGELOG.md)
 - [Features](#features)
 - [How usage and reset time are read](#how-usage-and-reset-time-are-read)
 - [Install](#install)
@@ -29,14 +30,14 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 | <img src="docs/reset-en.gif" alt="Quota reset" width="280" /> |
 
 <p>
-  <img src="docs/settings-en.png" alt="Tools window and menu" width="480" />
+  <img src="docs/settings-en.png" alt="Providers window and menu" width="480" />
   &nbsp;
   <img src="docs/style-icons.png" alt="Transparent icon style" width="220" />
 </p>
 
 ### Features
 
-- The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick tools and their order from **Tools…**
+- The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
 - Hover for included usage, API usage, weekly / 5-hour windows, and reset time
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
@@ -53,7 +54,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 UsageBar does **not** estimate anything. It reuses credentials already on this computer and calls each vendor’s official usage endpoint.
 
-| Tool | Local credential | Official API | Ring / tooltip |
+| Provider | Local credential | Official API | Ring / tooltip |
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | Weekly limit (and extra windows if present) |
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` | Included usage + API usage |
@@ -117,7 +118,7 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
-- **Tools…**: choose 1–10 tools and their order. The bar shortens or lengthens to match; no empty **—** slots
+- **Providers…**: choose 1–10 providers and their order. The bar shortens or lengthens to match; no empty **—** slots
 - Current version, **Check for update**, latest version (click to download), and auto-check (off by default); open at login; quit
 
 Preferences are stored at `~/.usagebar/prefs.json`.
@@ -163,7 +164,7 @@ Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.
 Export `GLM_API_KEY` (or `ZAI_API_KEY` / `Z_AI_API_KEY`) in your shell, or use `~/.zai/config.json`, or a GLM / 智谱 / z.ai provider in cc-switch.
 
 **ZCode vs GLM — same ring?**  
-No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Tools → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. UsageBar does not decrypt ZCode’s `enc:v1:` OAuth blobs.
+No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. UsageBar does not decrypt ZCode’s `enc:v1:` OAuth blobs.
 
 **Windows / Linux notes.**  
 Windows needs WebView2 (the installer can bootstrap it). The tray usually shows an icon instead of title-only text. Linux needs a working system tray.

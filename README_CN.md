@@ -2,12 +2,13 @@
 
 [English](README.md) · [中文](README_CN.md)
 
-贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok**、**GLM**，也可在 **工具…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
+贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok**、**GLM**，也可在 **提供商…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
 
 macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
 ### 目录
 
+- [更新日志](CHANGELOG.md)
 - [功能](#功能)
 - [用量和重置时间怎么来的](#用量和重置时间怎么来的)
 - [安装](#安装)
@@ -29,14 +30,14 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
 
 <p>
-  <img src="docs/settings-zh.png" alt="工具窗口和菜单" width="480" />
+  <img src="docs/settings-zh.png" alt="提供商窗口和菜单" width="480" />
   &nbsp;
   <img src="docs/style-icons.png" alt="透明图标样式" width="220" />
 </p>
 
 ### 功能
 
-- 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **工具…** 里勾选并调整顺序
+- 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **提供商…** 里勾选并调整顺序
 - 悬停显示套餐用量、API 用量、周窗口 / 5 小时窗口和重置时间
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
@@ -53,7 +54,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 应用**不做估算**。它复用本机已有登录态，直接请求各家官方用量接口。
 
-| 工具 | 本机凭证 | 官方接口 | 圆环 / 气泡 |
+| 提供商 | 本机凭证 | 官方接口 | 圆环 / 气泡 |
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 周额度（及额外窗口） |
 | **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` | Included usage + API usage |
@@ -110,7 +111,7 @@ npm run tauri build    # 本机安装包
 
 ### 菜单
 
-条上的设置齿轮、菜单栏 / 托盘 **UB**，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、语言（默认 English，可切 中文；厂商和模型名保持英文）、**工具…**（1–10 个，上下排序，条长随数量变化）、当前版本 / **检测更新** / 最新版本（点击下载）、自动检测更新（默认关闭）、登录时打开、退出。点菜单外的空白处即可关闭。
+条上的设置齿轮、菜单栏 / 托盘 **UB**，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、语言（默认 English，可切 中文；厂商和模型名保持英文）、**提供商…**（1–10 个，上下排序，条长随数量变化）、当前版本 / **检测更新** / 最新版本（点击下载）、自动检测更新（默认关闭）、登录时打开、退出。点菜单外的空白处即可关闭。
 
 偏好存在 `~/.usagebar/prefs.json`。
 
@@ -155,7 +156,7 @@ open /Applications/UsageBar.app
 在 shell 里导出 `GLM_API_KEY`（或 `ZAI_API_KEY` / `Z_AI_API_KEY`），或写 `~/.zai/config.json`，或在 cc-switch 里配置 GLM / 智谱 / z.ai。
 
 **ZCode 和 GLM 是同一个圆环吗？**  
-不是。ZCode 是智谱的编程 Agent，GLM 是模型 / API Key。菜单 **工具…** 里的 **ZCode** 读 ZCode 已经保存的 Coding Plan Key；**GLM** 读 shell / `.zai` / cc-switch 的 Key。同一套餐会显示同一组百分比，不同账号则分开。UsageBar 不解密 ZCode 的 `enc:v1:` OAuth。
+不是。ZCode 是智谱的编程 Agent，GLM 是模型 / API Key。菜单 **提供商…** 里的 **ZCode** 读 ZCode 已经保存的 Coding Plan Key；**GLM** 读 shell / `.zai` / cc-switch 的 Key。同一套餐会显示同一组百分比，不同账号则分开。UsageBar 不解密 ZCode 的 `enc:v1:` OAuth。
 
 **Windows / Linux 注意。**  
 Windows 需要 WebView2（安装器可引导下载）。托盘通常会显示图标，而不是只有标题文字。Linux 需要可用的系统托盘。

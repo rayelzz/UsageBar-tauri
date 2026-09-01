@@ -1011,12 +1011,18 @@ fn cc_switch_glm_key() -> Option<String> {
     None
 }
 
-pub fn fetch_selected(ids: &[String]) -> Vec<ProviderSnapshot> {
-    let mut snaps: Vec<ProviderSnapshot> = crate::prefs::normalize_visible(ids)
-        .into_iter()
-        .map(|id| fetch_one(&id))
-        .collect();
-    crate::usage_state::apply(&mut snaps);
+pub fn fetch_selected_each(
+    ids: &[String],
+    mut on_each: impl FnMut(&ProviderSnapshot),
+) -> Vec<ProviderSnapshot> {
+    let mut snaps = Vec::new();
+    for id in crate::prefs::normalize_visible(ids) {
+        let mut one = vec![fetch_one(&id)];
+        crate::usage_state::apply(&mut one);
+        let snap = one.remove(0);
+        on_each(&snap);
+        snaps.push(snap);
+    }
     snaps
 }
 
