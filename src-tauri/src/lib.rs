@@ -85,6 +85,11 @@ fn dismiss_reset_notice(id: String) {
 }
 
 #[tauri::command]
+fn app_version() -> String {
+    updater::current_version()
+}
+
+#[tauri::command]
 async fn check_update() -> Option<updater::UpdateInfo> {
     tauri::async_runtime::spawn_blocking(updater::check)
         .await
@@ -93,8 +98,13 @@ async fn check_update() -> Option<updater::UpdateInfo> {
 }
 
 #[tauri::command]
-fn open_release_page(app: AppHandle) {
-    let _ = app.opener().open_url(updater::RELEASES_PAGE, None::<&str>);
+fn open_release_page(app: AppHandle, url: Option<String>) {
+    let target = url
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .unwrap_or(updater::RELEASES_PAGE);
+    let _ = app.opener().open_url(target, None::<&str>);
 }
 
 #[tauri::command]
@@ -353,6 +363,7 @@ pub fn run() {
             set_menu_open,
             format_reset,
             dismiss_reset_notice,
+            app_version,
             check_update,
             open_release_page,
             quit,

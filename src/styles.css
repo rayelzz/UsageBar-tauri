@@ -531,10 +531,80 @@ html.settings body {
   box-sizing: border-box;
 }
 
+.settings-block {
+  margin-bottom: 28px;
+}
+
 .settings-page h1 {
   margin: 0 0 8px;
   font-size: 20px;
   font-weight: 650;
+}
+
+.settings-versions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.settings-kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-kv .ver,
+.settings-kv .ver-link {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.settings-kv .ver.muted {
+  font-weight: 500;
+  color: #9b9ba1;
+}
+
+.ver-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(150, 235, 168);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ver-link:hover {
+  color: rgb(176, 245, 188);
+}
+
+.ver-link.same {
+  color: #f5f5f7;
+  text-decoration: underline;
+}
+
+.settings-action {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font: 560 14px/1.2 ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.settings-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.settings-action:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .settings-hint,

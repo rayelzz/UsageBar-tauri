@@ -21,6 +21,10 @@ pub struct Prefs {
     pub locale: String,
     #[serde(default = "default_visible_providers")]
     pub visible_providers: Vec<String>,
+    #[serde(default)]
+    pub auto_check_update: bool,
+    #[serde(default)]
+    pub skipped_update_version: String,
 }
 
 pub const CATALOG: &[&str] = &[
@@ -94,6 +98,8 @@ impl Default for Prefs {
             display_style: "full".into(),
             locale: default_locale(),
             visible_providers: default_visible_providers(),
+            auto_check_update: false,
+            skipped_update_version: String::new(),
         }
     }
 }
@@ -165,5 +171,18 @@ mod tests {
     fn normalize_caps_at_ten() {
         let ids: Vec<String> = CATALOG.iter().map(|s| (*s).to_string()).cycle().take(20).collect();
         assert_eq!(normalize_visible(&ids).len(), CATALOG.len().min(SLOT_MAX));
+    }
+
+    #[test]
+    fn auto_check_update_defaults_off() {
+        let prefs = Prefs::default();
+        assert!(!prefs.auto_check_update);
+        assert!(prefs.skipped_update_version.is_empty());
+        let parsed: Prefs = serde_json::from_str(
+            r#"{"locked":false,"clickThrough":true,"edge":"right","along":-1.0,"floatingX":0.0,"floatingY":0.0,"refreshInterval":60,"launchAtLogin":false}"#,
+        )
+        .unwrap();
+        assert!(!parsed.auto_check_update);
+        assert!(parsed.skipped_update_version.is_empty());
     }
 }

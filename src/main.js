@@ -158,6 +158,16 @@ function t() {
         selectedCount: (n) => `已选 ${n} / 10`,
         resetTitle: "额度已重置",
         updateLine: (v) => `有新版本 ${v}`,
+        autoCheckUpdate: "自动检测更新",
+        updatesTitle: "更新",
+        updatesHint: "默认关闭。开启后有新版本会弹出气泡；点气泡跳转下载后，该版本不再提醒。",
+        currentVersion: "当前版本",
+        latestVersion: "最新版本",
+        checkUpdate: "检测更新",
+        checkingUpdate: "正在检测…",
+        updateUpToDate: "已是最新版本",
+        updateAvailable: "有新版本，点击版本号下载",
+        updateCheckFailed: "检测失败，请稍后重试",
         settings: "设置",
         snapGroup: "贴边",
         edgeShort: ["左", "右", "上", "下"],
@@ -191,6 +201,16 @@ function t() {
         selectedCount: (n) => `${n} / 10 selected`,
         resetTitle: "Quota reset",
         updateLine: (v) => `Update available ${v}`,
+        autoCheckUpdate: "Check for updates automatically",
+        updatesTitle: "Updates",
+        updatesHint: "Off by default. When on, a bubble appears for a new release. Clicking it opens the download page and skips that version until the next one.",
+        currentVersion: "Current version",
+        latestVersion: "Latest version",
+        checkUpdate: "Check for update",
+        checkingUpdate: "Checking…",
+        updateUpToDate: "You’re up to date",
+        updateAvailable: "Update available — click the version to download",
+        updateCheckFailed: "Couldn’t check for updates. Try again later.",
         settings: "Settings",
         snapGroup: "Snap edge",
         edgeShort: ["Left", "Right", "Top", "Bottom"],
@@ -287,6 +307,38 @@ function usedText(pct) {
 function applyLocale() {
   document.documentElement.lang = isZh() ? "zh-CN" : "en";
   syncUpdateBadge();
+}
+
+function normalizeLoadedPrefs(p) {
+  const next = { ...p };
+  if (next.displayStyle !== "icons") next.displayStyle = "full";
+  next.locale = next.locale === "zh" ? "zh" : "en";
+  next.visibleProviders = normalizeVisible(next.visibleProviders);
+  next.autoCheckUpdate = !!next.autoCheckUpdate;
+  next.skippedUpdateVersion = next.skippedUpdateVersion || "";
+  return next;
+}
+
+function updateHasNewer(info) {
+  if (!info?.latest) return false;
+  if (typeof info.hasUpdate === "boolean") return info.hasUpdate;
+  return info.latest !== info.current;
+}
+
+function shouldPromptUpdate(info) {
+  if (!prefs.autoCheckUpdate || !updateHasNewer(info)) return false;
+  const skipped = String(prefs.skippedUpdateVersion || "")
+    .trim()
+    .replace(/^v/i, "");
+  if (!skipped) return true;
+  const latest = String(info.latest || "")
+    .trim()
+    .replace(/^v/i, "");
+  return latest !== skipped;
+}
+
+async function openRelease(url) {
+  await invoke("open_release_page", { url: url || null });
 }
 
 function syncUpdateBadge() {
@@ -545,6 +597,8 @@ let prefs = {
   displayStyle: "full",
   locale: "en",
   visibleProviders: DEFAULT_VISIBLE.slice(),
+  autoCheckUpdate: false,
+  skippedUpdateVersion: "",
 };
 let osName = "macos";
 let snaps = [
@@ -560,7 +614,12 @@ let menuOpen = false;
 let resetToastId = null;
 let tipHot = false;
 let updateInfo = null;
+let updateToastOpen = false;
 let updateTimer = null;
+let settingsCurrentVersion = "";
+let settingsLatest = null;
+let settingsChecking = false;
+let settingsStatus = "";
 let barHot = false;
 let pointerOver = false;
 
@@ -876,27 +935,131 @@ async function closeResetToast(id) {
   hovered = null;
   paintHover();
   if (await maybeShowResetToast()) return;
+  if (await showUpdateToastIfIdle()) return;
   const tipWin = await getWindow("tip");
   await api().event.emit("usagebar-tip", { show: false });
   await tipWin?.hide();
 }
 
-async function checkUpdate() {
+async function showUpdateToastIfIdle() {
+  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return false;
+  await showUpdateToast();
+  return updateToastOpen;
+}
+
+function promptableUpdate(info) {
+  return shouldPromptUpdate(info) ? info : null;
+}
+
+function clearUpdatePrompt() {
+  updateInfo = null;
+  syncUpdateBadge();
+  hideUpdateToast().catch((err) => console.error(err));
+}
+
+async function hideUpdateToast() {
+  if (!updateToastOpen) return;
+  updateToastOpen = false;
+  if (resetToastId || hovered || menuOpen) return;
+  await setTipClickable(false);
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", { show: false });
+  await tipWin?.hide();
+}
+
+async function showUpdateToast() {
+  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return;
+  updateToastOpen = true;
+  await setTipClickable(true);
+  const locale = prefs.locale === "zh" ? "zh" : "en";
+  const arrow =
+    prefs.edge === "left"
+      ? "left"
+      : prefs.edge === "top"
+        ? "up"
+        : prefs.edge === "bottom"
+          ? "down"
+          : "right";
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    kind: "update",
+    latest: updateInfo.latest,
+    arrow,
+    locale,
+  });
   try {
-    updateInfo = (await invoke("check_update")) || null;
+    await tipWin?.setMinSize(new (LogicalSize())(1, 1));
+  } catch {
+    /* older runtime */
+  }
+  await tipWin?.setSize(new (LogicalSize())(188, 52));
+  const pos = await getCurrentWindow().outerPosition();
+  const size = await getCurrentWindow().outerSize();
+  const scale = await getCurrentWindow().scaleFactor();
+  await layoutTip(
+    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
+    barSize(prefs.edge),
+    { update: true }
+  );
+}
+
+async function skipPromptedVersion() {
+  const latest = updateInfo?.latest;
+  if (latest) {
+    prefs.skippedUpdateVersion = latest;
+    await savePrefs();
+  }
+  clearUpdatePrompt();
+}
+
+async function openUpdateFromPrompt() {
+  const url = updateInfo?.url || null;
+  await openRelease(url);
+  await skipPromptedVersion();
+}
+
+async function checkUpdate() {
+  if (!prefs.autoCheckUpdate) {
+    clearUpdatePrompt();
+    return;
+  }
+  let info = null;
+  try {
+    info = (await invoke("check_update")) || null;
   } catch {
     return;
   }
+  updateInfo = promptableUpdate(info);
   syncUpdateBadge();
+  if (updateInfo) await showUpdateToast();
+  else await hideUpdateToast();
+}
+
+function stopUpdateTimer() {
+  if (updateTimer) clearInterval(updateTimer);
+  updateTimer = null;
 }
 
 function restartUpdateTimer() {
-  if (updateTimer) clearInterval(updateTimer);
+  stopUpdateTimer();
+  if (!prefs.autoCheckUpdate) return;
   updateTimer = setInterval(checkUpdate, 60 * 60 * 1000);
+}
+
+function applyAutoUpdatePref() {
+  if (prefs.autoCheckUpdate) {
+    restartUpdateTimer();
+    checkUpdate().catch((err) => console.error(err));
+  } else {
+    stopUpdateTimer();
+    clearUpdatePrompt();
+  }
 }
 
 async function showResetToast(snap) {
   if (!snap?.id || menuOpen || dragging) return;
+  updateToastOpen = false;
   resetToastId = snap.id;
   hovered = snap.id;
   paintHover();
@@ -921,8 +1084,10 @@ async function setHovered(id) {
     await api().event.emit("usagebar-tip", { show: false });
     await tipWin?.hide();
     await setTipClickable(false);
+    if (!menuOpen) await showUpdateToast();
     return;
   }
+  updateToastOpen = false;
   await setTipClickable(false);
   await renderTip();
   const pos = await getCurrentWindow().outerPosition();
@@ -956,6 +1121,7 @@ async function refresh() {
   }
   if (await maybeShowResetToast()) return;
   if (hovered) await renderTip();
+  else await showUpdateToast();
 }
 
 function restartTimer() {
@@ -1042,6 +1208,10 @@ async function onNativeMenu(id) {
       prefs.launchAtLogin = !prefs.launchAtLogin;
     }
     await savePrefs();
+  } else if (id === "autoupdate") {
+    prefs.autoCheckUpdate = !prefs.autoCheckUpdate;
+    await savePrefs();
+    applyAutoUpdatePref();
   } else if (id === "tools") {
     await invoke("open_settings");
     return;
@@ -1093,6 +1263,7 @@ function menuSpec(st) {
     chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
     { k: "sep" },
     { k: "row", id: "tools", label: ui.tools },
+    { k: "row", id: "autoupdate", label: ui.autoCheckUpdate, check: st.autoCheckUpdate },
     { k: "row", id: "login", label: ui.openAtLogin, check: st.launchAtLogin },
   ];
   if (st.latest) rows.push({ k: "row", id: "update", label: ui.updateLine(st.latest), cls: "update" });
@@ -1134,6 +1305,7 @@ function menuStateNow() {
     edge: prefs.edge,
     displayStyle: isIcons() ? "icons" : "full",
     launchAtLogin: !!prefs.launchAtLogin,
+    autoCheckUpdate: !!prefs.autoCheckUpdate,
     latest: updateInfo?.latest || null,
   };
 }
@@ -1224,6 +1396,7 @@ async function closeMenuPanel() {
   const tipWin = await getWindow("tip");
   await api().event.emit("usagebar-tip", { show: false });
   await tipWin?.hide();
+  await showUpdateToast();
 }
 
 async function handleMenuAction(id) {
@@ -1233,7 +1406,7 @@ async function handleMenuAction(id) {
     return;
   }
   if (id === "update") {
-    invoke("open_release_page").catch((err) => console.error(err));
+    await openUpdateFromPrompt();
     await closeMenuPanel();
     return;
   }
@@ -1274,10 +1447,7 @@ async function applyLayout(payload) {
 async function startBar() {
   document.getElementById("bar-root").hidden = false;
   osName = await invoke("os_name");
-  prefs = await invoke("get_prefs");
-  if (prefs.displayStyle !== "icons") prefs.displayStyle = "full";
-  prefs.locale = prefs.locale === "zh" ? "zh" : "en";
-  prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+  prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
   snaps = slotsFrom([]);
   applyLocale();
   try {
@@ -1291,8 +1461,7 @@ async function startBar() {
   await placeWindows();
   refresh().catch((err) => console.error(err));
   restartTimer();
-  checkUpdate().catch((err) => console.error(err));
-  restartUpdateTimer();
+  applyAutoUpdatePref();
   document.getElementById("gear-btn").addEventListener("pointerdown", (e) => {
     e.stopPropagation();
   });
@@ -1324,11 +1493,10 @@ async function startBar() {
   await api().event.listen("usagebar-prefs", (e) => {
     if (!e.payload) return;
     const prev = (prefs.visibleProviders || []).join(",");
-    prefs = { ...prefs, ...e.payload };
-    if (prefs.displayStyle !== "icons") prefs.displayStyle = "full";
-    prefs.locale = prefs.locale === "zh" ? "zh" : "en";
-    prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+    const prevAuto = !!prefs.autoCheckUpdate;
+    prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
+    if (prevAuto !== prefs.autoCheckUpdate) applyAutoUpdatePref();
     if (prev !== prefs.visibleProviders.join(",")) {
       snaps = slotsFrom(snaps.filter((s) => s.id));
       renderBar();
@@ -1349,6 +1517,9 @@ async function startBar() {
   });
   await api().event.listen("usagebar-reset-ack", (e) => {
     closeResetToast(e.payload).catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-update-open", () => {
+    openUpdateFromPrompt().catch((err) => console.error(err));
   });
 }
 
@@ -1404,6 +1575,18 @@ function paintTip(payload) {
     ptr.style.marginTop = "";
     ptr.style.marginLeft = "";
     ptr.style.alignSelf = "";
+  }
+  if (payload.kind === "update") {
+    const card = document.getElementById("tip-card");
+    card.dataset.resetId = "";
+    card.classList.remove("menu-card");
+    card.classList.add("update-only");
+    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(
+      payload.latest
+    )}</button>`;
+    document.getElementById("tip").className =
+      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
+    return;
   }
   if (!payload.snap) return;
   const snap = payload.snap;
@@ -1465,7 +1648,7 @@ async function startTip() {
       return;
     }
     if (e.target.closest("[data-open-release]")) {
-      invoke("open_release_page").catch((err) => console.error(err));
+      api().event.emit("usagebar-update-open").catch(() => {});
       return;
     }
     const btn = e.target.closest("[data-close-reset]");
@@ -1476,6 +1659,40 @@ async function startTip() {
 
 function renderSettings() {
   const ui = t();
+  document.getElementById("settings-update-title").textContent = ui.updatesTitle;
+  document.getElementById("settings-update-hint").textContent = ui.updatesHint;
+  document.getElementById("auto-check-update-label").textContent = ui.autoCheckUpdate;
+  document.getElementById("auto-check-update").checked = !!prefs.autoCheckUpdate;
+  document.getElementById("current-version-label").textContent = ui.currentVersion;
+  document.getElementById("current-version-value").textContent = settingsCurrentVersion || "—";
+  document.getElementById("latest-version-label").textContent = ui.latestVersion;
+  const latestBtn = document.getElementById("latest-version-value");
+  const latestPh = document.getElementById("latest-version-placeholder");
+  if (settingsLatest?.latest) {
+    latestBtn.hidden = false;
+    latestBtn.textContent = settingsLatest.latest;
+    latestBtn.classList.toggle("same", !updateHasNewer(settingsLatest));
+    latestPh.hidden = true;
+  } else {
+    latestBtn.hidden = true;
+    latestBtn.textContent = "";
+    latestPh.hidden = false;
+    latestPh.textContent = "—";
+  }
+  const checkBtn = document.getElementById("check-update-btn");
+  checkBtn.textContent = settingsChecking ? ui.checkingUpdate : ui.checkUpdate;
+  checkBtn.disabled = settingsChecking;
+  const status = document.getElementById("update-status");
+  status.textContent =
+    settingsStatus === "checking"
+      ? ui.checkingUpdate
+      : settingsStatus === "failed"
+        ? ui.updateCheckFailed
+        : settingsStatus === "available"
+          ? ui.updateAvailable
+          : settingsStatus === "upToDate"
+            ? ui.updateUpToDate
+            : "";
   const vis = normalizeVisible(prefs.visibleProviders);
   const selected = new Set(vis);
   document.getElementById("settings-title").textContent = ui.toolsTitle;
@@ -1520,15 +1737,52 @@ async function saveVisible(next) {
   renderSettings();
 }
 
+async function runSettingsCheck() {
+  if (settingsChecking) return;
+  settingsChecking = true;
+  settingsStatus = "checking";
+  renderSettings();
+  try {
+    const info = await invoke("check_update");
+    if (!info?.latest) {
+      settingsLatest = null;
+      settingsStatus = "failed";
+    } else {
+      settingsLatest = info;
+      settingsCurrentVersion = info.current || settingsCurrentVersion;
+      settingsStatus = updateHasNewer(info) ? "available" : "upToDate";
+    }
+  } catch {
+    settingsLatest = null;
+    settingsStatus = "failed";
+  }
+  settingsChecking = false;
+  renderSettings();
+}
+
 async function startSettings() {
   document.documentElement.classList.add("settings");
   document.getElementById("settings-root").hidden = false;
-  prefs = await invoke("get_prefs");
-  prefs.locale = prefs.locale === "zh" ? "zh" : "en";
-  prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+  prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
+  try {
+    settingsCurrentVersion = await invoke("app_version");
+  } catch {
+    settingsCurrentVersion = "";
+  }
   applyLocale();
   renderSettings();
   const root = document.getElementById("settings-root");
+  document.getElementById("auto-check-update").addEventListener("change", (e) => {
+    prefs.autoCheckUpdate = !!e.target.checked;
+    savePrefs().catch((err) => console.error(err));
+  });
+  document.getElementById("check-update-btn").addEventListener("click", () => {
+    runSettingsCheck().catch((err) => console.error(err));
+  });
+  document.getElementById("latest-version-value").addEventListener("click", () => {
+    if (!settingsLatest?.latest) return;
+    openRelease(settingsLatest.url).catch((err) => console.error(err));
+  });
   root.addEventListener("change", (e) => {
     const input = e.target.closest("input[data-toggle]");
     if (!input) return;
@@ -1566,9 +1820,7 @@ async function startSettings() {
   });
   await api().event.listen("usagebar-prefs", (e) => {
     if (!e.payload) return;
-    prefs = { ...prefs, ...e.payload };
-    prefs.locale = prefs.locale === "zh" ? "zh" : "en";
-    prefs.visibleProviders = normalizeVisible(prefs.visibleProviders);
+    prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
     renderSettings();
   });

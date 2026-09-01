@@ -10,6 +10,19 @@ pub struct UpdateInfo {
     pub current: String,
     pub latest: String,
     pub url: String,
+    pub has_update: bool,
+}
+
+pub fn current_version() -> String {
+    env!("CARGO_PKG_VERSION").into()
+}
+
+pub fn should_prompt(latest: &str, skipped: &str) -> bool {
+    let skipped = skipped.trim().trim_start_matches('v');
+    if skipped.is_empty() {
+        return true;
+    }
+    is_newer(latest, skipped)
 }
 
 fn parse_ver(raw: &str) -> Option<(u64, u64, u64)> {
@@ -52,9 +65,6 @@ pub fn check() -> Option<UpdateInfo> {
     }
     let json: Value = resp.json().ok()?;
     let tag = json.get("tag_name")?.as_str()?;
-    if !is_newer(tag, current) {
-        return None;
-    }
     let latest = tag.trim().trim_start_matches('v').to_string();
     let url = json
         .get("html_url")
@@ -63,8 +73,9 @@ pub fn check() -> Option<UpdateInfo> {
         .to_string();
     Some(UpdateInfo {
         current: current.into(),
-        latest,
+        latest: latest.clone(),
         url,
+        has_update: is_newer(&latest, current),
     })
 }
 
@@ -79,5 +90,15 @@ mod tests {
         assert!(!is_newer("v0.0.8", "0.0.8"));
         assert!(!is_newer("0.0.7", "0.0.8"));
         assert!(!is_newer("bad", "0.0.8"));
+    }
+
+    #[test]
+    fn skipped_version_waits_for_next() {
+        assert!(should_prompt("0.0.11", ""));
+        assert!(should_prompt("v0.0.11", "  "));
+        assert!(!should_prompt("0.0.10", "0.0.10"));
+        assert!(!should_prompt("v0.0.10", "0.0.10"));
+        assert!(should_prompt("0.0.11", "0.0.10"));
+        assert!(!should_prompt("0.0.9", "0.0.10"));
     }
 }
