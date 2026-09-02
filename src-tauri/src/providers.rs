@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, Local, TimeZone, Utc};
 use regex::Regex;
 use rusqlite::Connection;
 use serde::Serialize;
@@ -1928,9 +1928,13 @@ pub fn format_reset(ms: Option<i64>) -> Option<String> {
 }
 
 pub fn format_reset_in(ms: Option<i64>, zh: bool) -> Option<String> {
+    format_reset_offset(ms, zh, *Local::now().offset())
+}
+
+fn format_reset_offset(ms: Option<i64>, zh: bool, offset: FixedOffset) -> Option<String> {
     let ms = ms?;
-    let dt = Utc.timestamp_millis_opt(ms).single()?.with_timezone(&beijing());
-    let now = Utc::now().with_timezone(&beijing());
+    let dt = Utc.timestamp_millis_opt(ms).single()?.with_timezone(&offset);
+    let now = Utc::now().with_timezone(&offset);
     let time = dt.format("%H:%M");
     if zh {
         if dt.year() != now.year() {
@@ -2196,25 +2200,31 @@ mod tests {
     }
 
     #[test]
-    fn format_reset_uses_beijing_date_and_time() {
+    fn format_reset_follows_given_offset() {
         let ms = DateTime::parse_from_rfc3339("2026-09-02T07:30:00Z")
             .unwrap()
             .timestamp_millis();
+        let shanghai = beijing();
         assert_eq!(
-            format_reset_in(Some(ms), true).as_deref(),
+            format_reset_offset(Some(ms), true, shanghai).as_deref(),
             Some("重置 9月2日 15:30")
         );
         assert_eq!(
-            format_reset_in(Some(ms), false).as_deref(),
+            format_reset_offset(Some(ms), false, shanghai).as_deref(),
             Some("Resets Sep 2, 15:30")
         );
-        let next_year = beijing()
+        let utc = FixedOffset::east_opt(0).unwrap();
+        assert_eq!(
+            format_reset_offset(Some(ms), false, utc).as_deref(),
+            Some("Resets Sep 2, 07:30")
+        );
+        let next_year = shanghai
             .with_ymd_and_hms(2027, 1, 1, 0, 0, 0)
             .single()
             .unwrap()
             .timestamp_millis();
         assert_eq!(
-            format_reset_in(Some(next_year), true).as_deref(),
+            format_reset_offset(Some(next_year), true, shanghai).as_deref(),
             Some("重置 2027年1月1日 00:00")
         );
     }

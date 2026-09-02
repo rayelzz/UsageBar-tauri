@@ -48,7 +48,7 @@ jobs:
 
             - **All quota windows:** 5-hour, weekly, monthly / billing cycle, scoped weekly, on-demand, per-model — only what the vendor API returns.
             - **Grok Bot** weekly allowance on the Cursor card when the account has it.
-            - **Reset time** is a Beijing (UTC+8) date and 24-hour clock, e.g. `Resets Sep 2, 15:30`.
+            - **Reset time** is a calendar date and 24-hour clock in the system timezone, e.g. `Resets Sep 2, 15:30`.
             - **Snappier settings:** used / remaining is a local calculation; auto-check and Open at login tick immediately.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
@@ -75,7 +75,7 @@ jobs:
 
             - **全部窗口：** 5 小时、周、月 / 账期、模型周额度、按需、按模型，只显示接口有的档。
             - Cursor 有 Grok Bot 周额度时，详情里多一行 **Grok Bot · 周额度**。
-            - **重置时间**改为北京时间（UTC+8）的日期和 24 小时时刻，例如 `重置 9月2日 15:30`。
+            - **重置时间**按本机系统时区显示日期和 24 小时时刻，例如 `重置 9月2日 15:30`。
             - **设置更跟手：** 已用 / 剩余本地换算；自动检测、登录时打开立刻打勾。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。

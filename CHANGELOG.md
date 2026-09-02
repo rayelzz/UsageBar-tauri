@@ -10,7 +10,7 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 - **All quota windows.** The hover card lists every window the vendor API returns: 5-hour, weekly, monthly / billing cycle, scoped weekly, on-demand, per-model. Missing windows are not invented. GLM / ZCode show weekly when the plan includes it.
 - **Grok Bot.** Cursor shows **Grok Bot · Weekly limit** when that separate weekly allowance exists.
-- **Reset time.** Calendar date and 24-hour clock in **Beijing time (UTC+8)**, e.g. `Resets Sep 2, 15:30`.
+- **Reset time.** Calendar date and 24-hour clock in the **system timezone**, e.g. `Resets Sep 2, 15:30`.
 - **Snappier settings.** Switching used / remaining recalculates locally (no API call). Auto-check and Open at login tick immediately; saving happens in the background.
 
 ### 0.0.15 — 2026-09-02
@@ -90,7 +90,7 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 - **全部窗口。** 悬停卡列出接口返回的每一档：5 小时、周、月 / 账期、模型周额度、按需、按模型。接口没有的不编造。GLM / ZCode 套餐里有周额度就会显示。
 - **Grok Bot。** Cursor 账号若有独立的 Bot 周额度，详情里显示 **Grok Bot · 周额度**。
-- **重置时间。** 北京时间（UTC+8）的具体日期和 24 小时时刻，例如 `重置 9月2日 15:30`。
+- **重置时间。** 按**本机系统时区**显示具体日期和 24 小时时刻，例如 `重置 9月2日 15:30`。
 - **设置更跟手。** 切换已用 / 剩余只在本地换算，不打接口。自动检测更新、登录时打开立刻打勾，写配置放到后台。
 
 ### 0.0.15 — 2026-09-02

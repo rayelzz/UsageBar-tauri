@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 ### Features
 
 - The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in Beijing (UTC+8)
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
@@ -73,7 +73,7 @@ Cursor session file:
 - Windows: `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
 - Linux: `~/.config/Cursor/User/globalStorage/state.vscdb`
 
-Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed`, `percentage`, `reset_at`, `billingCycleEnd`, `nextResetTime`, …). Reset times are shown as a calendar date and 24-hour clock in Beijing time (UTC+8). Tokens that expire are refreshed locally when possible. A tool you are not signed into simply shows “no data”.
+Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed`, `percentage`, `reset_at`, `billingCycleEnd`, `nextResetTime`, …). Reset times are shown as a calendar date and 24-hour clock in the system timezone. Tokens that expire are refreshed locally when possible. A tool you are not signed into simply shows “no data”.
 
 ### Install
 

@@ -409,10 +409,9 @@ function usageColor(used) {
   return "rgb(77, 219, 107)";
 }
 
-function beijingParts(ms, extra) {
+function localParts(ms, extra) {
   const map = {};
   const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
     hour12: false,
     hourCycle: "h23",
     year: "numeric",
@@ -431,11 +430,8 @@ function formatReset(ms) {
   if (ms == null) return "";
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
-  const p = beijingParts(ms);
-  const nowYear = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-  }).format(new Date());
+  const p = localParts(ms);
+  const nowYear = new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(new Date());
   const showYear = p.year !== nowYear;
   const hh = String(p.hour).padStart(2, "0");
   const mm = String(p.minute).padStart(2, "0");
@@ -445,7 +441,7 @@ function formatReset(ms) {
       : `${Number(p.month)}月${Number(p.day)}日`;
     return `重置 ${date} ${hh}:${mm}`;
   }
-  const mon = beijingParts(ms, { month: "short" }).month;
+  const mon = localParts(ms, { month: "short" }).month;
   const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
   return `Resets ${date}, ${hh}:${mm}`;
 }
