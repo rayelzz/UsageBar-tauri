@@ -46,8 +46,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Display value:** **Used quota** (default) or **Remaining quota**, in the gear menu, tray, and Providers window.
-            - Rings, percents, and the detail card follow the choice. Colors still follow remaining: red ≤ 20%, yellow ≤ 40%, green otherwise.
+            - **Settings persist across restarts and updates** ([#1](https://github.com/rayelzz/UsageBar-tauri/issues/1)): position, providers and order, and every other preference in `~/.usagebar/prefs.json`.
+            - Incomplete or renamed-monitor prefs no longer reset the bar.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -71,8 +71,8 @@ jobs:
 
             ### 更新说明
 
-            - **显示值：** 默认 **已使用额度**，可切 **剩余额度**。齿轮菜单、托盘和提供商窗口都能改。
-            - 圆环、百分比和详情都按这个值显示。颜色仍按剩余额度：剩余 ≤ 20% 红，≤ 40% 黄，其余绿。
+            - **重启和更新后保留全部设置**（[#1](https://github.com/rayelzz/UsageBar-tauri/issues/1)）：位置、提供商个数和顺序，以及其它偏好都在 `~/.usagebar/prefs.json`。
+            - 配置缺字段或显示器改名时，不再把条重置回默认位置。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

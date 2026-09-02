@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Prefs {
     pub locked: bool,
     pub click_through: bool,
@@ -13,20 +13,16 @@ pub struct Prefs {
     pub floating_y: f64,
     pub refresh_interval: u64,
     pub launch_at_login: bool,
-    #[serde(default)]
     pub screen_name: String,
-    #[serde(default)]
     pub display_style: String,
-    #[serde(default = "default_display_value")]
     pub display_value: String,
-    #[serde(default = "default_locale")]
     pub locale: String,
-    #[serde(default = "default_visible_providers")]
     pub visible_providers: Vec<String>,
-    #[serde(default)]
     pub auto_check_update: bool,
-    #[serde(default)]
     pub skipped_update_version: String,
+    /// Last placed origin in logical pixels. Negative means unset.
+    pub last_x: f64,
+    pub last_y: f64,
 }
 
 pub const CATALOG: &[&str] = &[
@@ -42,12 +38,13 @@ pub const CATALOG: &[&str] = &[
 ];
 pub const SLOT_MIN: usize = 1;
 pub const SLOT_MAX: usize = 10;
+const UNSET: f64 = -1.0;
 
-fn default_locale() -> String {
+pub fn default_locale() -> String {
     "en".into()
 }
 
-fn default_display_value() -> String {
+pub fn default_display_value() -> String {
     "used".into()
 }
 
@@ -97,13 +94,17 @@ pub fn slot_count(prefs: &Prefs) -> usize {
     display_slots(prefs).len().clamp(SLOT_MIN, SLOT_MAX)
 }
 
+pub fn is_unset(v: f64) -> bool {
+    !v.is_finite() || v < 0.0
+}
+
 impl Default for Prefs {
     fn default() -> Self {
         Self {
             locked: false,
             click_through: true,
             edge: "right".into(),
-            along: -1.0,
+            along: UNSET,
             floating_x: 0.0,
             floating_y: 0.0,
             refresh_interval: 60,
@@ -115,8 +116,81 @@ impl Default for Prefs {
             visible_providers: default_visible_providers(),
             auto_check_update: false,
             skipped_update_version: String::new(),
+            last_x: UNSET,
+            last_y: UNSET,
         }
     }
+}
+
+impl Prefs {
+    pub fn sanitize(mut self) -> Self {
+        if self.edge != "left"
+            && self.edge != "right"
+            && self.edge != "top"
+            && self.edge != "bottom"
+            && self.edge != "floating"
+        {
+            self.edge = "right".into();
+        }
+        if self.display_style != "icons" {
+            self.display_style = "full".into();
+        }
+        self.display_value = normalize_display_value(&self.display_value);
+        self.locale = if self.locale == "zh" { "zh".into() } else { "en".into() };
+        self.visible_providers = normalize_visible(&self.visible_providers);
+        if !self.along.is_finite() {
+            self.along = UNSET;
+        }
+        if !self.last_x.is_finite() {
+            self.last_x = UNSET;
+        }
+        if !self.last_y.is_finite() {
+            self.last_y = UNSET;
+        }
+        if self.refresh_interval != 0
+            && ![15, 30, 60, 120, 300, 600].contains(&self.refresh_interval)
+        {
+            self.refresh_interval = 60;
+        }
+        self
+    }
+}
+
+/// Keep already-saved values when the incoming payload omitted them or sent sentinels.
+pub fn merge(base: Prefs, mut next: Prefs) -> Prefs {
+    if next.visible_providers.is_empty() {
+        next.visible_providers = base.visible_providers;
+    }
+    if is_unset(next.along) && !is_unset(base.along) {
+        next.along = base.along;
+    }
+    if next.screen_name.is_empty() && !base.screen_name.is_empty() {
+        next.screen_name = base.screen_name;
+    }
+    if is_unset(next.last_x) && !is_unset(base.last_x) {
+        next.last_x = base.last_x;
+    }
+    if is_unset(next.last_y) && !is_unset(base.last_y) {
+        next.last_y = base.last_y;
+    }
+    next.sanitize()
+}
+
+pub fn parse_text(text: &str) -> Prefs {
+    if let Ok(prefs) = serde_json::from_str::<Prefs>(text) {
+        return prefs.sanitize();
+    }
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(obj) = value.as_object() {
+            let mut prefs = Prefs::default();
+            if let Ok(partial) = serde_json::from_value::<Prefs>(serde_json::Value::Object(obj.clone()))
+            {
+                prefs = partial;
+            }
+            return prefs.sanitize();
+        }
+    }
+    Prefs::default()
 }
 
 fn path() -> PathBuf {
@@ -128,13 +202,16 @@ fn path() -> PathBuf {
 
 pub fn load() -> Prefs {
     let path = path();
-    let mut prefs: Prefs = fs::read_to_string(&path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
-    prefs.visible_providers = normalize_visible(&prefs.visible_providers);
-    prefs.display_value = normalize_display_value(&prefs.display_value);
-    prefs
+    match fs::read_to_string(&path) {
+        Ok(text) => {
+            if serde_json::from_str::<Prefs>(&text).is_err() {
+                let bak = path.with_extension("json.bak");
+                let _ = fs::copy(&path, bak);
+            }
+            parse_text(&text)
+        }
+        Err(_) => Prefs::default(),
+    }
 }
 
 pub fn save(prefs: &Prefs) {
@@ -142,11 +219,21 @@ pub fn save(prefs: &Prefs) {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    let mut copy = prefs.clone();
-    copy.visible_providers = normalize_visible(&copy.visible_providers);
-    copy.display_value = normalize_display_value(&copy.display_value);
-    if let Ok(text) = serde_json::to_string_pretty(&copy) {
-        let _ = fs::write(path, text);
+    let copy = prefs.clone().sanitize();
+    let Ok(text) = serde_json::to_string_pretty(&copy) else {
+        return;
+    };
+    let tmp = path.with_extension("json.tmp");
+    if fs::write(&tmp, &text).is_err() {
+        let _ = fs::write(&path, text);
+        return;
+    }
+    if fs::rename(&tmp, &path).is_err() {
+        let _ = fs::remove_file(&path);
+        if fs::rename(&tmp, &path).is_err() {
+            let _ = fs::write(&path, text);
+            let _ = fs::remove_file(&tmp);
+        }
     }
 }
 
@@ -195,10 +282,9 @@ mod tests {
         let prefs = Prefs::default();
         assert!(!prefs.auto_check_update);
         assert!(prefs.skipped_update_version.is_empty());
-        let parsed: Prefs = serde_json::from_str(
+        let parsed = parse_text(
             r#"{"locked":false,"clickThrough":true,"edge":"right","along":-1.0,"floatingX":0.0,"floatingY":0.0,"refreshInterval":60,"launchAtLogin":false}"#,
-        )
-        .unwrap();
+        );
         assert!(!parsed.auto_check_update);
         assert!(parsed.skipped_update_version.is_empty());
         assert_eq!(parsed.display_value, "used");
@@ -211,5 +297,77 @@ mod tests {
         assert_eq!(normalize_display_value("remaining"), "remaining");
         assert_eq!(normalize_display_value("used"), "used");
         assert_eq!(normalize_display_value("nope"), "used");
+    }
+
+    #[test]
+    fn update_keeps_custom_providers_and_order() {
+        let parsed = parse_text(
+            r#"{
+                "locked":false,
+                "clickThrough":true,
+                "edge":"right",
+                "along":431.0,
+                "floatingX":0.0,
+                "floatingY":0.0,
+                "refreshInterval":60,
+                "launchAtLogin":false,
+                "screenName":"Monitor #8193",
+                "locale":"zh",
+                "visibleProviders":["codex","grok","cursor","glm"]
+            }"#,
+        );
+        assert_eq!(
+            parsed.visible_providers,
+            vec!["codex", "grok", "cursor", "glm"]
+        );
+        assert_eq!(parsed.along, 431.0);
+        assert_eq!(parsed.edge, "right");
+        assert_eq!(parsed.locale, "zh");
+        assert_eq!(parsed.display_value, "used");
+    }
+
+    #[test]
+    fn partial_json_does_not_reset_known_keys() {
+        let parsed = parse_text(r#"{"edge":"left","along":120.5,"visibleProviders":["claude","gemini"]}"#);
+        assert_eq!(parsed.edge, "left");
+        assert_eq!(parsed.along, 120.5);
+        assert_eq!(parsed.visible_providers, vec!["claude", "gemini"]);
+        assert!(parsed.click_through);
+    }
+
+    #[test]
+    fn corrupt_json_falls_back_without_panic() {
+        let parsed = parse_text("{not json");
+        assert_eq!(parsed.visible_providers, default_visible_providers());
+        assert_eq!(parsed.edge, "right");
+    }
+
+    #[test]
+    fn merge_keeps_saved_position_and_providers() {
+        let mut base = Prefs::default();
+        base.along = 400.0;
+        base.screen_name = "Built-in".into();
+        base.last_x = 1800.0;
+        base.last_y = 400.0;
+        base.visible_providers = vec!["claude".into(), "codex".into()];
+        let mut incoming = Prefs::default();
+        incoming.visible_providers.clear();
+        let merged = merge(base, incoming);
+        assert_eq!(merged.along, 400.0);
+        assert_eq!(merged.screen_name, "Built-in");
+        assert_eq!(merged.last_x, 1800.0);
+        assert_eq!(merged.last_y, 400.0);
+        assert_eq!(merged.visible_providers, vec!["claude", "codex"]);
+    }
+
+    #[test]
+    fn merge_accepts_new_provider_order() {
+        let base = Prefs::default();
+        let mut incoming = Prefs::default();
+        incoming.visible_providers = vec!["glm".into(), "zcode".into()];
+        incoming.along = 10.0;
+        let merged = merge(base, incoming);
+        assert_eq!(merged.visible_providers, vec!["glm", "zcode"]);
+        assert_eq!(merged.along, 10.0);
     }
 }

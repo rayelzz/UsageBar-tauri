@@ -41,6 +41,7 @@ pub fn set_menu_card(card: Option<[f64; 4]>) {
 
 pub struct Overlay {
     pub prefs: Mutex<Prefs>,
+    placed: AtomicBool,
     drag: Mutex<Option<Drag>>,
     ignoring: AtomicBool,
     last_size: Mutex<(u32, u32)>,
@@ -93,6 +94,8 @@ struct LayoutPayload {
     along: f64,
     floating_x: f64,
     floating_y: f64,
+    last_x: f64,
+    last_y: f64,
     screen_name: String,
     dragging: bool,
 }
@@ -101,6 +104,7 @@ impl Overlay {
     pub fn new(prefs: Prefs) -> Self {
         Self {
             prefs: Mutex::new(prefs),
+            placed: AtomicBool::new(false),
             drag: Mutex::new(None),
             ignoring: AtomicBool::new(false),
             last_size: Mutex::new((0, 0)),
@@ -138,6 +142,11 @@ pub fn spawn(app: AppHandle) {
                 let handle = app.clone();
                 if app
                     .run_on_main_thread(move || {
+                        if let Some(state) = handle.try_state::<Overlay>() {
+                            if !state.placed.load(Ordering::Relaxed) {
+                                let _ = place(&handle);
+                            }
+                        }
                         tick(&handle);
                         pending2.store(false, Ordering::Release);
                     })
@@ -500,10 +509,14 @@ fn finish_drag(
         prefs.floating_x = lx;
         prefs.floating_y = ly;
         prefs.along = lx;
+        prefs.last_x = lx;
+        prefs.last_y = ly;
         set_frame(state, bar, lx, ly, w, h);
     } else {
         prefs.along = if is_vertical(&prefs.edge) { ly } else { lx };
         let glued = glued_frame(&prefs.edge, w, h, prefs.along, &screen);
+        prefs.last_x = glued.0;
+        prefs.last_y = glued.1;
         set_frame(state, bar, glued.0, glued.1, glued.2, glued.3);
     }
     if let Ok(mut g) = state.prefs.lock() {
@@ -581,23 +594,36 @@ pub fn place(app: &AppHandle) -> Option<BarFrame> {
     let bar = app.get_webview_window("bar")?;
     let prefs = state.prefs.lock().ok()?.clone();
     let screens = screens(app, state);
-    let screen = screens
-        .iter()
-        .find(|s| !prefs.screen_name.is_empty() && s.name == prefs.screen_name)
-        .or_else(|| screens.first())?
-        .clone();
+    if screens.is_empty() {
+        return None;
+    }
+    let screen = pick_screen(&screens, &prefs)?;
     let (w, h) = bar_size(&prefs.edge, &prefs);
     let mut along = prefs.along;
-    if along < 0.0 {
-        along = if is_vertical(&prefs.edge) {
+    if prefs::is_unset(along) {
+        along = if !prefs::is_unset(prefs.last_x) && !prefs::is_unset(prefs.last_y) {
+            if is_vertical(&prefs.edge) {
+                prefs.last_y
+            } else {
+                prefs.last_x
+            }
+        } else if is_vertical(&prefs.edge) {
             screen.wy + screen.wh / 2.0 - h / 2.0
         } else {
             screen.wx + screen.ww / 2.0 - w / 2.0
         };
     }
     let (x, y, w, h) = if prefs.edge == "floating" {
-        let mut x = prefs.floating_x;
-        let mut y = prefs.floating_y;
+        let mut x = if !prefs::is_unset(prefs.last_x) {
+            prefs.last_x
+        } else {
+            prefs.floating_x
+        };
+        let mut y = if !prefs::is_unset(prefs.last_y) {
+            prefs.last_y
+        } else {
+            prefs.floating_y
+        };
         if x == 0.0 && y == 0.0 {
             x = screen.wx + screen.ww / 2.0 - w / 2.0;
             y = screen.wy + screen.wh / 2.0 - h / 2.0;
@@ -612,7 +638,32 @@ pub fn place(app: &AppHandle) -> Option<BarFrame> {
         glued_frame(&prefs.edge, w, h, along, &screen)
     };
     set_frame(state, &bar, x, y, w, h);
+    let _ = bar.show();
+    state.placed.store(true, Ordering::Release);
+    let mut next = prefs;
+    next.along = if is_vertical(&next.edge) { y } else { x };
+    next.last_x = x;
+    next.last_y = y;
+    next.screen_name = screen.name;
+    if let Ok(mut g) = state.prefs.lock() {
+        *g = next.clone();
+    }
+    prefs::save(&next);
     Some(BarFrame { x, y, w, h })
+}
+
+fn pick_screen(screens: &[Screen], prefs: &Prefs) -> Option<Screen> {
+    if !prefs.screen_name.is_empty() {
+        if let Some(s) = screens.iter().find(|s| s.name == prefs.screen_name) {
+            return Some(s.clone());
+        }
+    }
+    if !prefs::is_unset(prefs.last_x) && !prefs::is_unset(prefs.last_y) {
+        if let Some(s) = monitor_at(screens, prefs.last_x, prefs.last_y) {
+            return Some(s.clone());
+        }
+    }
+    screens.first().cloned()
 }
 
 fn set_ignore(state: &Overlay, bar: &tauri::WebviewWindow, ignore: bool) {
@@ -627,6 +678,8 @@ fn emit_layout(app: &AppHandle, prefs: &Prefs, dragging: bool) {
         along: prefs.along,
         floating_x: prefs.floating_x,
         floating_y: prefs.floating_y,
+        last_x: prefs.last_x,
+        last_y: prefs.last_y,
         screen_name: prefs.screen_name.clone(),
         dragging,
     };
@@ -825,4 +878,43 @@ fn platform_left() -> bool {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn platform_left() -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn screen(name: &str, x: f64, y: f64) -> Screen {
+        Screen {
+            name: name.into(),
+            x,
+            y,
+            w: 1920.0,
+            h: 1080.0,
+            wx: x,
+            wy: y,
+            ww: 1920.0,
+            wh: 1080.0,
+        }
+    }
+
+    #[test]
+    fn pick_screen_uses_saved_name() {
+        let list = vec![screen("A", 0.0, 0.0), screen("B", 1920.0, 0.0)];
+        let mut prefs = Prefs::default();
+        prefs.screen_name = "B".into();
+        prefs.last_x = 100.0;
+        prefs.last_y = 100.0;
+        assert_eq!(pick_screen(&list, &prefs).unwrap().name, "B");
+    }
+
+    #[test]
+    fn pick_screen_falls_back_to_last_point_when_name_changes() {
+        let list = vec![screen("Built-in", 0.0, 0.0), screen("HDMI", 1920.0, 0.0)];
+        let mut prefs = Prefs::default();
+        prefs.screen_name = "Monitor #8193".into();
+        prefs.last_x = 2100.0;
+        prefs.last_y = 200.0;
+        assert_eq!(pick_screen(&list, &prefs).unwrap().name, "HDMI");
+    }
 }

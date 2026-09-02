@@ -41,9 +41,14 @@ fn get_prefs(app: AppHandle) -> Prefs {
 }
 
 #[tauri::command]
-fn set_prefs(app: AppHandle, mut prefs: Prefs) {
-    prefs.visible_providers = prefs::normalize_visible(&prefs.visible_providers);
-    prefs.display_value = prefs::normalize_display_value(&prefs.display_value);
+fn set_prefs(app: AppHandle, incoming: Prefs) {
+    let base = if let Some(state) = app.try_state::<Overlay>() {
+        state.prefs.lock().ok().map(|g| g.clone())
+    } else {
+        None
+    }
+    .unwrap_or_else(prefs::load);
+    let prefs = prefs::merge(base, incoming);
     if let Some(state) = app.try_state::<Overlay>() {
         if let Ok(mut slot) = state.prefs.lock() {
             *slot = prefs.clone();
@@ -436,6 +441,11 @@ pub fn run() {
 
             let prefs = prefs::load();
             app.manage(Overlay::new(prefs.clone()));
+            if overlay::place(app.handle()).is_none() {
+                if let Some(bar) = app.get_webview_window("bar") {
+                    let _ = bar.show();
+                }
+            }
             overlay::spawn(app.handle().clone());
             if app.tray_by_id("main").is_none() {
                 let menu = build_tray_menu(app.handle(), &prefs)?;

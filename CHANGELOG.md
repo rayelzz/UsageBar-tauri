@@ -6,6 +6,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.15 — 2026-09-02
+
+- **Keep settings across restarts and updates** ([#1](https://github.com/rayelzz/UsageBar-tauri/issues/1)). Edge, position, provider count and order, display style, display value, language, refresh, lock, click-through, and update prefs all live in `~/.usagebar/prefs.json`.
+- Restore the last screen and coordinates even if the monitor name changes. Incomplete or corrupt prefs no longer wipe the whole file.
+
 ### 0.0.14 — 2026-09-01
 
 - **Display value.** Choose **Used quota** (default) or **Remaining quota** in the gear menu, tray, or Providers window.
@@ -73,6 +78,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.15 — 2026-09-02
+
+- **重启和更新后保留全部设置**（[#1](https://github.com/rayelzz/UsageBar-tauri/issues/1)）。贴边、位置、提供商个数和顺序、显示样式、显示值、语言、刷新、锁定、点穿、更新偏好都写在 `~/.usagebar/prefs.json`。
+- 显示器名称变化时仍按上次坐标恢复。配置缺字段或损坏时不再整份回退成默认。
 
 ### 0.0.14 — 2026-09-01
 

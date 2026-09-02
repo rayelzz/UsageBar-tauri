@@ -123,7 +123,7 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - **Providers…**: choose 1–10 providers and their order. The bar shortens or lengthens to match; no empty **—** slots. The same window also sets the display value.
 - Current version, **Check for update**, latest version (click to download), and auto-check (off by default); open at login; quit
 
-Preferences are stored at `~/.usagebar/prefs.json`.
+All settings — edge, position, provider list and order, display style, display value, language, refresh, lock, click-through, update prefs — are stored at `~/.usagebar/prefs.json` and survive restarts and app updates.
 
 ### FAQ
 

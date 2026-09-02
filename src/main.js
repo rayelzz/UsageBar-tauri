@@ -351,6 +351,9 @@ function normalizeLoadedPrefs(p) {
   next.visibleProviders = normalizeVisible(next.visibleProviders);
   next.autoCheckUpdate = !!next.autoCheckUpdate;
   next.skippedUpdateVersion = next.skippedUpdateVersion || "";
+  if (typeof next.lastX !== "number" || Number.isNaN(next.lastX)) next.lastX = -1;
+  if (typeof next.lastY !== "number" || Number.isNaN(next.lastY)) next.lastY = -1;
+  if (typeof next.along !== "number" || Number.isNaN(next.along)) next.along = -1;
   return next;
 }
 
@@ -638,7 +641,10 @@ let prefs = {
   visibleProviders: DEFAULT_VISIBLE.slice(),
   autoCheckUpdate: false,
   skippedUpdateVersion: "",
+  lastX: -1,
+  lastY: -1,
 };
+let prefsReady = false;
 let osName = "macos";
 let snaps = [
   { id: "codex", title: "Codex Usage", headlinePercent: null, metrics: [], error: null, loading: true },
@@ -1193,6 +1199,7 @@ async function setHovered(id) {
 }
 
 async function savePrefs() {
+  if (!prefsReady) return;
   await invoke("set_prefs", { prefs });
 }
 
@@ -1634,6 +1641,8 @@ async function applyLayout(payload) {
   if (typeof payload.floatingX === "number") prefs.floatingX = payload.floatingX;
   if (typeof payload.floatingY === "number") prefs.floatingY = payload.floatingY;
   if (typeof payload.screenName === "string") prefs.screenName = payload.screenName;
+  if (typeof payload.lastX === "number") prefs.lastX = payload.lastX;
+  if (typeof payload.lastY === "number") prefs.lastY = payload.lastY;
   dragging = !!payload.dragging;
   document.documentElement.classList.toggle("dragging", dragging);
   if (dragging) await setHovered(null);
@@ -1648,6 +1657,7 @@ async function startBar() {
   document.getElementById("bar-root").hidden = false;
   osName = await invoke("os_name");
   prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
+  prefsReady = true;
   snaps = slotsFrom([], true);
   try {
     appVersion = await invoke("app_version");
@@ -1962,6 +1972,7 @@ async function startSettings() {
   document.documentElement.classList.add("settings");
   document.getElementById("settings-root").hidden = false;
   prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
+  prefsReady = true;
   applyLocale();
   renderSettings();
   const root = document.getElementById("settings-root");
