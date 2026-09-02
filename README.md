@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 ### Features
 
 - The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for included usage, API usage, weekly / 5-hour windows, and reset time
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in Beijing (UTC+8)
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
@@ -57,15 +57,15 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 
 | Provider | Local credential | Official API | Ring / tooltip |
 | --- | --- | --- | --- |
-| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | Weekly limit (and extra windows if present) |
-| **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` | Included usage + API usage |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly allowance + extra windows |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | 5-hour window + weekly + MCP |
-| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | 5-hour window + weekly + MCP |
-| **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour window + weekly (+ Opus if present) |
-| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Premium requests + reset date |
+| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 5-hour + weekly (+ monthly / extra windows if present) |
+| **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` + Grok Bot weekly status | Monthly billing cycle: included + API (+ on-demand / team pool / Grok Bot weekly if present) |
+| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly and/or monthly (+ products / on-demand if present) |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …) |
+| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | All `limits[]` windows (5-hour, weekly, monthly, MCP, …) |
+| **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour + weekly + scoped weekly (+ monthly extra usage if present) |
+| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
-| **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | Tightest model quota + reset |
+| **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | Per-model remaining fraction + reset |
 
 Cursor session file:
 
@@ -73,7 +73,7 @@ Cursor session file:
 - Windows: `%APPDATA%\Cursor\User\globalStorage\state.vscdb`
 - Linux: `~/.config/Cursor/User/globalStorage/state.vscdb`
 
-Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed`, `percentage`, `reset_at`, `billingCycleEnd`, `nextResetTime`, …). Tokens that expire are refreshed locally when possible. A tool you are not signed into simply shows “no data”.
+Percent and reset timestamps come from the API (`used_percent`, `autoPercentUsed`, `percentage`, `reset_at`, `billingCycleEnd`, `nextResetTime`, …). Reset times are shown as a calendar date and 24-hour clock in Beijing time (UTC+8). Tokens that expire are refreshed locally when possible. A tool you are not signed into simply shows “no data”.
 
 ### Install
 

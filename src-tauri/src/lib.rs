@@ -48,16 +48,31 @@ fn set_prefs(app: AppHandle, incoming: Prefs) {
         None
     }
     .unwrap_or_else(prefs::load);
-    let prefs = prefs::merge(base, incoming);
+    let prefs = prefs::merge(base.clone(), incoming);
     if let Some(state) = app.try_state::<Overlay>() {
         if let Ok(mut slot) = state.prefs.lock() {
             *slot = prefs.clone();
         }
     }
+    let should_place = layout_affects_place(&base, &prefs);
     prefs::save(&prefs);
     apply_tray(&app, &prefs);
-    let _ = overlay::place(&app);
+    if should_place {
+        let _ = overlay::place(&app);
+    }
     let _ = app.emit("usagebar-prefs", &prefs);
+}
+
+fn layout_affects_place(before: &Prefs, after: &Prefs) -> bool {
+    before.edge != after.edge
+        || (before.along - after.along).abs() > f64::EPSILON
+        || (before.floating_x - after.floating_x).abs() > f64::EPSILON
+        || (before.floating_y - after.floating_y).abs() > f64::EPSILON
+        || before.screen_name != after.screen_name
+        || before.display_style != after.display_style
+        || before.visible_providers != after.visible_providers
+        || (before.last_x - after.last_x).abs() > f64::EPSILON
+        || (before.last_y - after.last_y).abs() > f64::EPSILON
 }
 
 #[tauri::command]

@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 ### 功能
 
 - 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **提供商…** 里勾选并调整顺序
-- 悬停显示套餐用量、API 用量、周窗口 / 5 小时窗口和重置时间
+- 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间为北京时间（UTC+8）的具体日期和时刻
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
 - 两种显示样式：**圆环用量**（完整圆环 + 百分比）或 **透明图标**（迷你圆环，仍贴在屏幕边缘）
@@ -57,15 +57,15 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 | 提供商 | 本机凭证 | 官方接口 | 圆环 / 气泡 |
 | --- | --- | --- | --- |
-| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 周额度（及额外窗口） |
-| **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` | Included usage + API usage |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | 周额度 + 额外窗口 |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | 5 小时窗口 + 周额度 + MCP |
-| **ZCode** | `~/.zcode/v2/config.json` 里的 Coding Plan Key | 与 GLM 同一套官方配额接口（按 BigModel / Z.ai 选主机） | 5 小时窗口 + 周额度 + MCP |
-| **Claude** | macOS 钥匙串 `Claude Code-credentials`，或 `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5 小时窗口 + 周额度（及 Opus） |
-| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Premium 请求 + 重置日期 |
+| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 5 小时 + 周额度（及月 / 额外窗口） |
+| **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` + Grok Bot 周额度 | 月度账期：套餐 + API（及按需 / 团队共享 / Grok Bot 周额度） |
+| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | 周和/或月额度（及产品 / 按需） |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等） |
+| **ZCode** | `~/.zcode/v2/config.json` 里的 Coding Plan Key | 与 GLM 同一套官方配额接口（按 BigModel / Z.ai 选主机） | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等） |
+| **Claude** | macOS 钥匙串 `Claude Code-credentials`，或 `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5 小时 + 周额度 + 模型周额度（及月超额） |
+| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | 各模型剩余比例 + 重置 |
-| **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | 最紧一档配额 + 重置 |
+| **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | 各模型剩余比例 + 重置 |
 
 Cursor 会话文件位置：
 
@@ -73,7 +73,7 @@ Cursor 会话文件位置：
 - Windows：`%APPDATA%\Cursor\User\globalStorage\state.vscdb`
 - Linux：`~/.config/Cursor/User/globalStorage/state.vscdb`
 
-百分比和重置时间都是接口原样返回。过期 token 会尽量在本地刷新。没装或没登录的工具显示暂无数据。
+百分比和重置时间都是接口原样返回。重置时间按北京时间（UTC+8）显示具体日期和 24 小时时刻。过期 token 会尽量在本地刷新。没装或没登录的工具显示暂无数据。
 
 ### 安装
 

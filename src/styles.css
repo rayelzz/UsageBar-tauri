@@ -205,6 +205,11 @@ html.dragging, html.dragging * {
 
 .ring svg { display: block; width: 26px; height: 26px; }
 
+.ring svg circle:last-child,
+.mini-ring svg circle:last-child {
+  transition: stroke-dasharray 0.12s ease;
+}
+
 .pct {
   font-size: 11px;
   font-weight: 500;
@@ -380,6 +385,7 @@ html.dragging, html.dragging * {
   height: 100%;
   min-width: 4px;
   border-radius: 99px;
+  transition: width 0.12s ease;
 }
 
 .used {

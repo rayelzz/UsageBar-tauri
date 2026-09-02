@@ -107,6 +107,9 @@ const METRIC_LABELS = {
     "Weekly Opus": "Weekly Opus",
     "Weekly Sonnet": "Weekly Sonnet",
     "Premium requests": "Premium requests",
+    "Team pooled": "Team pooled",
+    Chat: "Chat",
+    Completions: "Completions",
     Usage: "Usage",
   },
   zh: {
@@ -122,6 +125,9 @@ const METRIC_LABELS = {
     "Weekly Opus": "Weekly Opus",
     "Weekly Sonnet": "Weekly Sonnet",
     "Premium requests": "Premium 请求",
+    "Team pooled": "团队共享",
+    Chat: "Chat",
+    Completions: "Completions",
     Usage: "用量",
   },
 };
@@ -175,7 +181,6 @@ function t() {
         off: "关闭",
         noData: "暂无数据",
         querying: "查询中",
-        days: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
       }
     : {
         refreshNow: "Refresh now",
@@ -220,7 +225,6 @@ function t() {
         off: "Off",
         noData: "No data",
         querying: "Checking…",
-        days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       };
 }
 
@@ -288,6 +292,10 @@ function localizeMetricLabel(label) {
   if (!label) return "";
   const dict = isZh() ? METRIC_LABELS.zh : METRIC_LABELS.en;
   if (dict[label]) return dict[label];
+  const hour = label.match(/^(\d+)-hour window$/);
+  if (hour) return isZh() ? `${hour[1]} 小时窗口` : label;
+  const day = label.match(/^(\d+)-day window$/);
+  if (day) return isZh() ? `${day[1]} 天窗口` : label;
   const idx = label.lastIndexOf(" · ");
   if (idx >= 0) {
     const head = label.slice(0, idx);
@@ -401,23 +409,45 @@ function usageColor(used) {
   return "rgb(77, 219, 107)";
 }
 
+function beijingParts(ms, extra) {
+  const map = {};
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    hour12: false,
+    hourCycle: "h23",
+    year: "numeric",
+    month: extra?.month || "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  for (const part of fmt.formatToParts(new Date(ms))) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  return map;
+}
+
 function formatReset(ms) {
   if (ms == null) return "";
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
-  let h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const day = t().days[d.getDay()];
+  const p = beijingParts(ms);
+  const nowYear = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+  }).format(new Date());
+  const showYear = p.year !== nowYear;
+  const hh = String(p.hour).padStart(2, "0");
+  const mm = String(p.minute).padStart(2, "0");
   if (isZh()) {
-    const ap = h < 12 ? "上午" : "下午";
-    h = h % 12;
-    if (h === 0) h = 12;
-    return `重置 ${day} ${ap} ${h}:${m}`;
+    const date = showYear
+      ? `${p.year}年${Number(p.month)}月${Number(p.day)}日`
+      : `${Number(p.month)}月${Number(p.day)}日`;
+    return `重置 ${date} ${hh}:${mm}`;
   }
-  const ap = h < 12 ? "AM" : "PM";
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `Resets ${day} ${h}:${m} ${ap}`;
+  const mon = beijingParts(ms, { month: "short" }).month;
+  const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
+  return `Resets ${date}, ${hh}:${mm}`;
 }
 
 function glyph(id, size) {
@@ -658,6 +688,7 @@ let refreshTimer = null;
 let refreshGen = 0;
 let refreshing = false;
 let refreshQueued = false;
+let prefsSaveTail = Promise.resolve();
 let menuOpen = false;
 let resetToastId = null;
 let tipHot = false;
@@ -1149,10 +1180,31 @@ function restartUpdateTimer() {
 function applyAutoUpdatePref() {
   if (prefs.autoCheckUpdate) {
     restartUpdateTimer();
-    checkUpdate().catch((err) => console.error(err));
+    setTimeout(() => {
+      if (prefs.autoCheckUpdate) checkUpdate().catch((err) => console.error(err));
+    }, 400);
   } else {
     stopUpdateTimer();
     clearUpdatePrompt();
+  }
+}
+
+async function applyLaunchAtLogin(want) {
+  const auto = api().autostart;
+  if (!auto) return;
+  try {
+    const on = await auto.isEnabled();
+    if (want && !on) await auto.enable();
+    if (!want && on) await auto.disable();
+    const actual = await auto.isEnabled();
+    if (actual === prefs.launchAtLogin) return;
+    prefs.launchAtLogin = actual;
+    savePrefs().catch((err) => console.error(err));
+    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
+  } catch (err) {
+    console.error(err);
+    prefs.launchAtLogin = !want;
+    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
   }
 }
 
@@ -1200,7 +1252,39 @@ async function setHovered(id) {
 
 async function savePrefs() {
   if (!prefsReady) return;
-  await invoke("set_prefs", { prefs });
+  const pending = prefsSaveTail.then(() => invoke("set_prefs", { prefs }));
+  prefsSaveTail = pending.catch((err) => {
+    console.error(err);
+  });
+  return pending;
+}
+
+function paintShownPercents() {
+  const root = document.getElementById("cells");
+  if (!root) return;
+  const items = root.querySelectorAll("[data-id]");
+  if (!items.length) {
+    renderBar();
+    return;
+  }
+  items.forEach((el) => {
+    const snap = snaps.find((s) => s.id === el.dataset.id);
+    if (!snap) return;
+    const unknown = snap.headlinePercent == null;
+    const shown = shownPct(snap.headlinePercent);
+    const pctEl = el.querySelector(".pct");
+    if (pctEl) pctEl.textContent = unknown || shown == null ? "—" : `${Math.round(shown)}%`;
+    const circles = el.querySelectorAll("circle");
+    const ring = circles[1];
+    if (ring && !unknown && shown != null) {
+      const r = Number(ring.getAttribute("r"));
+      if (r > 0) {
+        const circ = 2 * Math.PI * r;
+        const dash = (Math.min(Math.max(shown, 0), 100) / 100) * circ;
+        ring.setAttribute("stroke-dasharray", `${dash} ${circ}`);
+      }
+    }
+  });
 }
 
 function applyIncomingSnap(snap) {
@@ -1291,16 +1375,13 @@ async function setDisplayStyle(style) {
   hideMenu();
 }
 
-async function setDisplayValue(value) {
+function setDisplayValue(value) {
   const next = value === "remaining" ? "remaining" : "used";
   if (prefs.displayValue === next) return;
   prefs.displayValue = next;
-  await savePrefs();
-  if (!document.getElementById("bar-root")?.hidden) {
-    renderBar();
-    if (hovered) await renderTip();
-    if (menuOpen) await showPanelMenu(false);
-  }
+  paintShownPercents();
+  if (hovered) renderTip().catch((err) => console.error(err));
+  savePrefs().catch((err) => console.error(err));
 }
 
 async function snapTo(edge) {
@@ -1327,13 +1408,15 @@ function hideMenu() {
   closeMenuPanel().catch(() => {});
 }
 
+const MENU_TOGGLES = new Set(["lock", "click", "login", "autoupdate"]);
+
 async function onNativeMenu(id) {
   if (id === "lock") {
     prefs.locked = !prefs.locked;
-    await savePrefs();
+    savePrefs().catch((err) => console.error(err));
   } else if (id === "click") {
     prefs.clickThrough = !prefs.clickThrough;
-    await savePrefs();
+    savePrefs().catch((err) => console.error(err));
   } else if (id.startsWith("snap:")) {
     await snapTo(id.slice(5));
     return;
@@ -1353,19 +1436,12 @@ async function onNativeMenu(id) {
     await setLocale(id.slice(7));
     return;
   } else if (id === "login") {
-    const auto = api().autostart;
-    if (auto) {
-      const on = await auto.isEnabled();
-      if (on) await auto.disable();
-      else await auto.enable();
-      prefs.launchAtLogin = await auto.isEnabled();
-    } else {
-      prefs.launchAtLogin = !prefs.launchAtLogin;
-    }
-    await savePrefs();
+    prefs.launchAtLogin = !prefs.launchAtLogin;
+    savePrefs().catch((err) => console.error(err));
+    applyLaunchAtLogin(prefs.launchAtLogin).catch((err) => console.error(err));
   } else if (id === "autoupdate") {
     prefs.autoCheckUpdate = !prefs.autoCheckUpdate;
-    await savePrefs();
+    savePrefs().catch((err) => console.error(err));
     applyAutoUpdatePref();
   } else if (id === "tools") {
     await invoke("open_settings");
@@ -1618,6 +1694,10 @@ async function handleMenuAction(id) {
     return;
   }
   const fromPanel = menuOpen;
+  if (MENU_TOGGLES.has(id)) {
+    onNativeMenu(id).catch((err) => console.error(err));
+    return;
+  }
   await onNativeMenu(id);
   if (!fromPanel) return;
   if (
@@ -1720,9 +1800,13 @@ async function startBar() {
       placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
     } else if (prevValue !== prefs.displayValue || prevStyle !== prefs.displayStyle) {
-      renderBar();
+      if (prevStyle !== prefs.displayStyle) {
+        renderBar();
+        placeWindows().catch((err) => console.error(err));
+      } else {
+        paintShownPercents();
+      }
       if (hovered) renderTip().catch((err) => console.error(err));
-      if (prevStyle !== prefs.displayStyle) placeWindows().catch((err) => console.error(err));
     }
   });
   await api().event.listen("usagebar-over", (e) => {
@@ -1893,6 +1977,10 @@ async function startTip() {
   tipRoot.addEventListener("click", (e) => {
     const mid = e.target.closest("[data-mid]");
     if (mid) {
+      if (MENU_TOGGLES.has(mid.dataset.mid)) {
+        const check = mid.querySelector(".m-check");
+        if (check) check.textContent = check.textContent.trim() ? "" : "✓";
+      }
       api().event.emit("usagebar-menu", mid.dataset.mid).catch(() => {});
       return;
     }
@@ -2002,7 +2090,8 @@ async function startSettings() {
   root.addEventListener("click", (e) => {
     const valueBtn = e.target.closest("[data-display-value]");
     if (valueBtn) {
-      setDisplayValue(valueBtn.dataset.displayValue).then(() => renderSettings()).catch((err) => console.error(err));
+      setDisplayValue(valueBtn.dataset.displayValue);
+      renderSettings();
       return;
     }
     const btn = e.target.closest("button[data-move]");
