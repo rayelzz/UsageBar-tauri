@@ -176,6 +176,33 @@ pub fn merge(base: Prefs, mut next: Prefs) -> Prefs {
     next.sanitize()
 }
 
+/// Settings clicks often send a stale full snapshot. Only take geometry from the
+/// client when the edge itself changed (snap). Style / provider count only change size.
+pub fn apply_incoming(base: Prefs, incoming: Prefs) -> Prefs {
+    let edge_changed = incoming.edge != base.edge;
+    let mut prefs = merge(base.clone(), incoming);
+    if !edge_changed {
+        prefs.along = base.along;
+        prefs.last_x = base.last_x;
+        prefs.last_y = base.last_y;
+        prefs.floating_x = base.floating_x;
+        prefs.floating_y = base.floating_y;
+        prefs.screen_name = base.screen_name;
+    }
+    prefs
+}
+
+pub fn tray_needs_update(before: &Prefs, after: &Prefs) -> bool {
+    before.locale != after.locale
+        || before.refresh_interval != after.refresh_interval
+        || before.locked != after.locked
+        || before.click_through != after.click_through
+        || before.edge != after.edge
+        || before.display_style != after.display_style
+        || before.display_value != after.display_value
+        || before.launch_at_login != after.launch_at_login
+}
+
 pub fn parse_text(text: &str) -> Prefs {
     if let Ok(prefs) = serde_json::from_str::<Prefs>(text) {
         return prefs.sanitize();
@@ -369,5 +396,70 @@ mod tests {
         let merged = merge(base, incoming);
         assert_eq!(merged.visible_providers, vec!["glm", "zcode"]);
         assert_eq!(merged.along, 10.0);
+    }
+
+    #[test]
+    fn apply_incoming_keeps_geometry_for_settings_only_changes() {
+        let mut base = Prefs::default();
+        base.along = 431.0;
+        base.last_x = 1875.0;
+        base.last_y = 431.0;
+        base.screen_name = "Built-in".into();
+        base.refresh_interval = 60;
+        let mut incoming = base.clone();
+        incoming.refresh_interval = 15;
+        incoming.last_x = 100.0;
+        incoming.last_y = 20.0;
+        incoming.along = 20.0;
+        incoming.screen_name = "stale".into();
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.refresh_interval, 15);
+        assert_eq!(applied.last_x, 1875.0);
+        assert_eq!(applied.last_y, 431.0);
+        assert_eq!(applied.along, 431.0);
+        assert_eq!(applied.screen_name, "Built-in");
+    }
+
+    #[test]
+    fn apply_incoming_keeps_geometry_when_style_changes() {
+        let mut base = Prefs::default();
+        base.display_style = "full".into();
+        base.last_x = 1875.0;
+        base.last_y = 400.0;
+        base.along = 400.0;
+        let mut incoming = base.clone();
+        incoming.display_style = "icons".into();
+        incoming.last_x = 10.0;
+        incoming.last_y = 10.0;
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.display_style, "icons");
+        assert_eq!(applied.last_x, 1875.0);
+        assert_eq!(applied.last_y, 400.0);
+        assert_eq!(applied.along, 400.0);
+    }
+
+    #[test]
+    fn apply_incoming_takes_geometry_when_edge_changes() {
+        let mut base = Prefs::default();
+        base.edge = "right".into();
+        base.along = 400.0;
+        let mut incoming = base.clone();
+        incoming.edge = "left".into();
+        incoming.along = 120.0;
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.edge, "left");
+        assert_eq!(applied.along, 120.0);
+    }
+
+    #[test]
+    fn tray_needs_update_ignores_geometry() {
+        let mut before = Prefs::default();
+        before.last_x = 10.0;
+        let mut after = before.clone();
+        after.last_x = 99.0;
+        after.along = 50.0;
+        assert!(!tray_needs_update(&before, &after));
+        after.locale = "zh".into();
+        assert!(tray_needs_update(&before, &after));
     }
 }

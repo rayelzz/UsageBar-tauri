@@ -17,7 +17,7 @@
         "height": 236,
         "minWidth": 1,
         "minHeight": 1,
-        "resizable": true,
+        "resizable": false,
         "decorations": false,
         "transparent": true,
         "shadow": false,

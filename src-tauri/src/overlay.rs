@@ -215,9 +215,12 @@ fn tick(app: &AppHandle) {
         state.press_on_gear.store(true, Ordering::Release);
     }
 
-    // 菜单打开时：点齿轮和菜单卡片以外即关闭。
-    if pressed && menu_open && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) {
-        let _ = app.emit("usagebar-menu", "close");
+    // 菜单打开时别再查 tip 窗口或拖条：全屏 tip 的 outer_size 很贵，还会和点击抢主线程。
+    if menu_open {
+        if pressed && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) {
+            let _ = app.emit("usagebar-menu", "close");
+        }
+        return;
     }
 
     if !prefs.locked
@@ -359,11 +362,15 @@ fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {
     let Some([x, y, w, h]) = card else {
         return false;
     };
+    let hit = |s: f64| {
+        mx >= x * s - 16.0
+            && mx <= (x + w) * s + 16.0
+            && my >= y * s - 16.0
+            && my <= (y + h) * s + 16.0
+    };
     let s = if scale > 0.0 { scale } else { 1.0 };
-    mx >= x * s - 6.0
-        && mx <= (x + w) * s + 6.0
-        && my >= y * s - 6.0
-        && my <= (y + h) * s + 6.0
+    // cursor_position 有的运行时给物理像素，有的已是逻辑坐标。两种都算上，避免点在卡片上却被当成外部关闭。
+    hit(s) || hit(1.0)
 }
 
 fn over_tip(app: &AppHandle, mx: f64, my: f64) -> bool {

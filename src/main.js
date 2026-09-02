@@ -733,13 +733,21 @@ function paintDock(edge) {
   if (isIcons()) {
     svg.innerHTML = "";
     svg.removeAttribute("viewBox");
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    svg.style.width = "";
+    svg.style.height = "";
     return;
   }
   const size = barSize(edge);
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
   svg.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
-  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("width", String(size.w));
+  svg.setAttribute("height", String(size.h));
+  svg.removeAttribute("preserveAspectRatio");
+  svg.style.width = `${size.w}px`;
+  svg.style.height = `${size.h}px`;
   svg.innerHTML = barHot
     ? `<path d="${body}" /><circle class="pod" cx="${c.x}" cy="${c.y}" r="${GEAR_R}" />`
     : `<path d="${body}" />`;
@@ -935,6 +943,9 @@ async function placeWindows() {
   }
   const frame = await invoke("place_bar");
   if (!frame) return;
+  prefs.lastX = frame.x;
+  prefs.lastY = frame.y;
+  prefs.along = isVertical(prefs.edge) ? frame.y : frame.x;
   await layoutTip(frame, { w: frame.w, h: frame.h });
 }
 
@@ -1357,7 +1368,7 @@ async function setLocale(next) {
   if (prefs.locale === locale) return;
   prefs.locale = locale;
   applyLocale();
-  await savePrefs();
+  savePrefs().catch((err) => console.error(err));
   if (hovered) await renderTip();
 }
 
@@ -1368,7 +1379,6 @@ async function setDisplayStyle(style) {
   await savePrefs();
   renderBar();
   await placeWindows();
-  hideMenu();
 }
 
 function setDisplayValue(value) {
@@ -1397,11 +1407,6 @@ async function snapTo(edge) {
   await savePrefs();
   renderBar();
   await placeWindows();
-  hideMenu();
-}
-
-function hideMenu() {
-  closeMenuPanel().catch(() => {});
 }
 
 const MENU_TOGGLES = new Set(["lock", "click", "login", "autoupdate"]);
@@ -1420,7 +1425,7 @@ async function onNativeMenu(id) {
     await refresh();
   } else if (id.startsWith("interval:")) {
     prefs.refreshInterval = Number(id.slice(9));
-    await savePrefs();
+    savePrefs().catch((err) => console.error(err));
     restartTimer();
   } else if (id.startsWith("style:")) {
     await setDisplayStyle(id.slice(6));
@@ -1689,24 +1694,42 @@ async function handleMenuAction(id) {
     await closeMenuPanel();
     return;
   }
-  const fromPanel = menuOpen;
+  if (id === "refresh") {
+    await closeMenuPanel();
+    refresh().catch((err) => console.error(err));
+    return;
+  }
+  if (id === "tools" || id === "quit") {
+    await closeMenuPanel();
+    await onNativeMenu(id);
+    return;
+  }
+  if (id.startsWith("snap:") || id.startsWith("style:")) {
+    await closeMenuPanel();
+    await onNativeMenu(id);
+    return;
+  }
   if (MENU_TOGGLES.has(id)) {
     onNativeMenu(id).catch((err) => console.error(err));
     return;
   }
-  await onNativeMenu(id);
-  if (!fromPanel) return;
-  if (
-    id === "quit" ||
-    id === "tools" ||
-    id === "refresh" ||
-    id.startsWith("snap:") ||
-    id.startsWith("style:")
-  ) {
-    await closeMenuPanel();
-  } else if (menuOpen) {
-    await showPanelMenu(false);
+  if (id.startsWith("interval:")) {
+    prefs.refreshInterval = Number(id.slice(9));
+    restartTimer();
+    savePrefs().catch((err) => console.error(err));
+    return;
   }
+  if (id.startsWith("value:")) {
+    setDisplayValue(id.slice(6));
+    return;
+  }
+  if (id.startsWith("locale:")) {
+    await setLocale(id.slice(7));
+    if (menuOpen) await showPanelMenu(false);
+    return;
+  }
+  await onNativeMenu(id);
+  if (menuOpen) await showPanelMenu(false);
 }
 
 async function applyLayout(payload) {
@@ -1836,6 +1859,16 @@ function setMenuHover(el) {
     if (n !== el) n.classList.remove("is-hover");
   });
   if (el && !el.classList.contains("dim")) el.classList.add("is-hover");
+}
+
+function paintChipSelection(el) {
+  const id = el?.dataset?.mid || "";
+  const prefix = id.split(":")[0];
+  if (!["interval", "snap", "style", "value", "locale"].includes(prefix)) return;
+  const root = el.closest("#tip-card") || document;
+  root.querySelectorAll(`.m-chip[data-mid^="${prefix}:"]`).forEach((chip) => {
+    chip.classList.toggle("on", chip === el);
+  });
 }
 
 function menuItemFromPoint(x, y) {
@@ -1976,6 +2009,8 @@ async function startTip() {
       if (MENU_TOGGLES.has(mid.dataset.mid)) {
         const check = mid.querySelector(".m-check");
         if (check) check.textContent = check.textContent.trim() ? "" : "✓";
+      } else {
+        paintChipSelection(mid);
       }
       api().event.emit("usagebar-menu", mid.dataset.mid).catch(() => {});
       return;
