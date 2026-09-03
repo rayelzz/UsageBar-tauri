@@ -46,7 +46,10 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Fix provider edits not applying** ([#2](https://github.com/rayelzz/UsageBar-tauri/issues/2)): checking, unchecking, or reordering providers updates the bar and `prefs.json` immediately again.
+            - **Transparent style matches the dark bar:** same large rings, percents, and gear; only the dock is gone.
+            - **Settings apply again:** snap to an edge, lock position, and switch display style without closing the gear panel.
+            - **Providers window is only providers.** Display value stays on the gear menu.
+            - **Bottom-edge hover card** stays a fixed distance from the bar when switching providers.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -70,7 +73,10 @@ jobs:
 
             ### 更新说明
 
-            - **修复修改提供商不生效**（[#2](https://github.com/rayelzz/UsageBar-tauri/issues/2)）：勾选、取消或调整顺序后，用量条和 `prefs.json` 会立刻更新。
+            - **透明样式与黑色模式一致：** 大圆环、百分比和齿轮都在，只去掉黑底托。
+            - **设置重新生效：** 贴边、锁定位置可用；切换显示样式时齿轮面板保持打开。
+            - **提供商窗口只管提供商。** 显示值只留在齿轮菜单。
+            - **贴下边时详情卡**换供应商后仍与主条保持固定间距。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

@@ -65,9 +65,6 @@ const BAR_SLOT = 48;
 const BAR_H_THICK = 40;
 const BAR_H_BASE = 24;
 const BAR_H_SLOT = 59;
-const ICONS_THICK = 26;
-const ICONS_BASE = 8;
-const ICONS_SLOT = 21;
 const GEAR_R = 14;
 const GEAR_CARVE = GEAR_R + 4.5;
 const GEAR_END = 19;
@@ -568,10 +565,6 @@ function isIcons() {
 
 function barSize(edge) {
   const n = slotCount();
-  if (isIcons()) {
-    const along = ICONS_BASE + ICONS_SLOT * n;
-    return isVertical(edge) ? { w: ICONS_THICK, h: along } : { w: along, h: ICONS_THICK };
-  }
   if (isVertical(edge)) return { w: BAR_THICK, h: BAR_PAD + BAR_SLOT * n + gearAlong(edge) };
   return { w: BAR_H_BASE + BAR_H_SLOT * n + gearAlong(edge), h: BAR_H_THICK };
 }
@@ -679,6 +672,10 @@ let snaps = [
   { id: "glm", title: "GLM Usage", headlinePercent: null, metrics: [], error: null, loading: true },
 ];
 let hovered = null;
+let hoverGen = 0;
+let tipSlideGen = 0;
+let tipSlideFrame = null;
+let tipStageFrame = null;
 let dragging = false;
 let refreshTimer = null;
 let refreshGen = 0;
@@ -707,17 +704,16 @@ function setBarHot(on) {
   if (next === barHot) return;
   barHot = next;
   const barEl = document.getElementById("bar");
-  if (barEl) barEl.classList.toggle("hot", barHot);
+  if (barEl) {
+    barEl.classList.toggle("hot", barHot);
+    barEl.classList.toggle("icons", isIcons());
+  }
   paintDock(prefs.edge);
 }
 
 function placeGearBtn(edge) {
   const btn = document.getElementById("gear-btn");
   if (!btn) return;
-  if (isIcons()) {
-    btn.hidden = true;
-    return;
-  }
   btn.hidden = false;
   const size = barSize(edge);
   const c = gearCenter(size.w, size.h, edge);
@@ -737,8 +733,10 @@ function paintDock(edge) {
     svg.removeAttribute("height");
     svg.style.width = "";
     svg.style.height = "";
+    svg.style.display = "none";
     return;
   }
+  svg.style.display = "";
   const size = barSize(edge);
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
@@ -753,56 +751,12 @@ function paintDock(edge) {
     : `<path d="${body}" />`;
 }
 
-function renderIconCells() {
-  return snaps
-    .map((s) => {
-      const unknown = s.headlinePercent == null;
-      const spec = ICONS[s.id];
-      const empty = !s.id || !spec;
-      const c = 8;
-      const r = 6.2;
-      const circ = 2 * Math.PI * r;
-      const shown = shownPct(s.headlinePercent);
-      const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
-      const dash = empty || unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
-      if (empty) {
-        return `<div class="mini-ring empty-slot unknown">
-          <svg viewBox="0 0 16 16">
-            <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.22" stroke-width="1.6"/>
-          </svg>
-        </div>`;
-      }
-      const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
-      return `<div class="mini-ring${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice ? " reset" : ""}" data-id="${s.id}">
-        <svg viewBox="0 0 16 16">
-          <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-opacity="0.22" stroke-width="1.6"/>
-          <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="1.6"
-            stroke-linecap="round" stroke-dasharray="${dash} ${circ}" transform="rotate(-90 ${c} ${c})"/>
-        </svg>
-        <div class="icon"><svg class="glyph" viewBox="${spec.viewBox}">${spec.d
-          .map((p) => `<path ${rule} d="${p}"/>`)
-          .join("")}</svg></div>
-      </div>`;
-    })
-    .join("");
-}
-
 function renderBar() {
   const barEl = document.getElementById("bar");
   const cells = document.getElementById("cells");
   const edge = prefs.edge;
-  if (isIcons()) {
-    const vertical = isVertical(edge);
-    barEl.className = "bar icons";
-    paintDock(edge);
-    placeGearBtn(edge);
-    cells.className = "cells icons " + (vertical ? "vertical" : "horizontal");
-    cells.style.padding = "5px";
-    cells.innerHTML = renderIconCells();
-    return;
-  }
   const vertical = isVertical(edge);
-  barEl.className = barHot ? "bar hot" : "bar";
+  barEl.className = "bar" + (isIcons() ? " icons" : "") + (barHot ? " hot" : "");
   cells.className = "cells " + (vertical ? "vertical" : "horizontal");
   const pad = padding(edge);
   cells.style.padding = `${pad.t}px ${pad.r}px ${pad.b}px ${pad.l}px`;
@@ -848,6 +802,10 @@ function renderBar() {
     .join("");
 }
 
+const TIP_SLIDE_MS = 400;
+const TIP_TRAVEL_H = 360;
+let tipReadyResolvers = [];
+
 function tipHeight(snap) {
   const n = Math.max(snap?.metrics?.length || 1, 1);
   let h = 54 + n * 52 + 8;
@@ -860,39 +818,195 @@ function tipHeight(snap) {
   return Math.min(Math.max(h, 100), 360);
 }
 
-async function renderTip() {
+function tipArrow() {
+  return prefs.edge === "left" ? "left" : prefs.edge === "top" ? "up" : prefs.edge === "bottom" ? "down" : "right";
+}
+
+function tipContentPayload(extra = {}) {
   const snap = snaps.find((s) => s.id === hovered);
-  const tipWin = await getWindow("tip");
-  if (!snap || !tipWin) {
-    await tipWin?.hide();
-    return;
-  }
-  const resets = (snap.metrics || []).map((m) => formatReset(m.resetsAt));
-  const locale = prefs.locale === "zh" ? "zh" : "en";
-  const arrow =
-    prefs.edge === "left"
-      ? "left"
-      : prefs.edge === "top"
-        ? "up"
-        : prefs.edge === "bottom"
-          ? "down"
-          : "right";
-  await api().event.emit("usagebar-tip", {
+  if (!snap) return null;
+  return {
     show: true,
     snap,
-    resets,
-    arrow,
-    locale,
+    resets: (snap.metrics || []).map((m) => formatReset(m.resetsAt)),
+    arrow: tipArrow(),
+    locale: prefs.locale === "zh" ? "zh" : "en",
     displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     resetNotice: snap.resetNotice || null,
+    ...extra,
+  };
+}
+
+function unionRects(a, b) {
+  if (!a) return b ? { ...b } : null;
+  if (!b) return { ...a };
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return {
+    x,
+    y,
+    w: Math.max(a.x + a.w, b.x + b.w) - x,
+    h: Math.max(a.y + a.h, b.y + b.h) - y,
+  };
+}
+
+function rectsClose(a, b) {
+  return !!(
+    a &&
+    b &&
+    Math.abs(a.x - b.x) < 0.5 &&
+    Math.abs(a.y - b.y) < 0.5 &&
+    Math.abs(a.w - b.w) < 0.5 &&
+    Math.abs(a.h - b.h) < 0.5
+  );
+}
+
+function tipTargetFrame(frame, opts = {}) {
+  const id = opts.id || hovered;
+  const snap = snaps.find((s) => s.id === id);
+  if (!snap && !opts.update) return null;
+  const idx = Math.max(0, snaps.findIndex((s) => s.id === id));
+  const count = Math.max(snaps.length, 1);
+  const th = opts.update ? 52 : opts.travel ? TIP_TRAVEL_H : tipHeight(snap);
+  const tw = opts.update ? 188 : 280;
+  const pad = padding(prefs.edge);
+  const start = isVertical(prefs.edge) ? pad.t : pad.l;
+  const end = isVertical(prefs.edge) ? pad.b : pad.r;
+  const along = isVertical(prefs.edge) ? frame.h : frame.w;
+  const inner = Math.max(along - start - end, 1);
+  const slot = inner / count;
+  const mid = start + (idx + 0.5) * slot;
+  let x = 0;
+  let y = 0;
+  if (prefs.edge === "right" || prefs.edge === "floating") {
+    x = frame.x - tw - 6;
+    y = frame.y + mid - th / 2;
+  } else if (prefs.edge === "left") {
+    x = frame.x + frame.w + 6;
+    y = frame.y + mid - th / 2;
+  } else if (prefs.edge === "top") {
+    x = frame.x + mid - tw / 2;
+    y = frame.y + frame.h + 6;
+  } else {
+    x = frame.x + mid - tw / 2;
+    y = frame.y - th - 6;
+  }
+  return { x, y, w: tw, h: th };
+}
+
+function tipTravelBounds(frame) {
+  let bounds = null;
+  for (const s of snaps) {
+    const f = tipTargetFrame(frame, { id: s.id, travel: true });
+    if (f) bounds = unionRects(bounds, f);
+  }
+  return bounds;
+}
+
+function tipSlideFrom(target, stage, extra = {}) {
+  const pinBottom = prefs.edge === "bottom";
+  return {
+    x: target.x - stage.x,
+    y: pinBottom ? 0 : target.y - stage.y,
+    w: target.w,
+    h: target.h,
+    pin: pinBottom ? "bottom" : "",
+    ...extra,
+  };
+}
+
+function cancelTipSlide() {
+  tipSlideGen += 1;
+}
+
+function resolveTipReady() {
+  const q = tipReadyResolvers.splice(0);
+  q.forEach((fn) => fn());
+}
+
+function waitTipReady() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 64);
+    tipReadyResolvers.push(() => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
-  const h = tipHeight(snap);
+}
+
+async function placeTipWindow(tipWin, rect) {
   try {
     await tipWin.setMinSize(new (LogicalSize())(1, 1));
   } catch {
     /* older runtime */
   }
-  await tipWin.setSize(new (LogicalSize())(280, h));
+  await tipWin.setSize(new (LogicalSize())(rect.w, rect.h));
+  await tipWin.setPosition(new (LogicalPosition())(rect.x, rect.y));
+}
+
+async function hideUsageTip() {
+  cancelTipSlide();
+  tipSlideFrame = null;
+  tipStageFrame = null;
+  const tipWin = await getWindow("tip");
+  await api().event.emit("usagebar-tip", { show: false });
+  await tipWin?.hide();
+}
+
+async function showUsageTip(barFrame, opts = {}) {
+  const tipWin = await getWindow("tip");
+  const target = tipTargetFrame(barFrame);
+  const payload = tipContentPayload();
+  if (!tipWin || !target || !payload) {
+    await tipWin?.hide();
+    return;
+  }
+  const gen = ++tipSlideGen;
+  const stage = tipTravelBounds(barFrame) || target;
+  const first = !tipStageFrame;
+  const barMoved = !first && !rectsClose(tipStageFrame, stage);
+  if (first || barMoved) {
+    await placeTipWindow(tipWin, stage);
+    if (gen !== tipSlideGen) return;
+    tipStageFrame = stage;
+  }
+  tipSlideFrame = { ...target };
+  const slide = tipSlideFrom(target, tipStageFrame, {
+    duration: opts.from && !first && !barMoved ? TIP_SLIDE_MS : 0,
+  });
+  const ready = waitTipReady();
+  await api().event.emit("usagebar-tip", { ...payload, slide });
+  if (first) await ready;
+  if (gen !== tipSlideGen) return;
+  await tipWin.show();
+  if (gen !== tipSlideGen && !hovered && !menuOpen && !resetToastId) {
+    await tipWin.hide();
+  }
+}
+
+async function renderTip(opts = {}) {
+  const snap = snaps.find((s) => s.id === hovered);
+  const tipWin = await getWindow("tip");
+  const payload = tipContentPayload();
+  if (!snap || !payload || !tipWin) {
+    await tipWin?.hide();
+    return;
+  }
+  if (tipStageFrame && tipSlideFrame && !resetToastId && !opts.forceSize) {
+    await api().event.emit("usagebar-tip", {
+      ...payload,
+      slide: tipSlideFrom(tipSlideFrame, tipStageFrame, { duration: 0, keep: true }),
+    });
+    return;
+  }
+  await api().event.emit("usagebar-tip", payload);
+  if (opts.skipSize) return;
+  try {
+    await tipWin.setMinSize(new (LogicalSize())(1, 1));
+  } catch {
+    /* older runtime */
+  }
+  await tipWin.setSize(new (LogicalSize())(280, tipHeight(snap)));
 }
 
 async function resolveScreen(list, point) {
@@ -946,41 +1060,24 @@ async function placeWindows() {
   prefs.lastX = frame.x;
   prefs.lastY = frame.y;
   prefs.along = isVertical(prefs.edge) ? frame.y : frame.x;
-  await layoutTip(frame, { w: frame.w, h: frame.h });
+  if (!menuOpen) await layoutTip(frame, { w: frame.w, h: frame.h });
 }
 
 async function layoutTip(frame, size, opts = {}) {
-  const snap = snaps.find((s) => s.id === hovered);
   const tipWin = await getWindow("tip");
-  if (!tipWin || (!snap && !opts.update)) return;
-  const idx = Math.max(0, snaps.findIndex((s) => s.id === hovered));
-  const count = Math.max(snaps.length, 1);
-  const th = opts.update ? 52 : tipHeight(snap);
-  const tw = opts.update ? 188 : 280;
-  const pad = isIcons() ? { t: 5, b: 5, l: 5, r: 5 } : padding(prefs.edge);
-  const start = isVertical(prefs.edge) ? pad.t : pad.l;
-  const end = isVertical(prefs.edge) ? pad.b : pad.r;
-  const along = isVertical(prefs.edge) ? frame.h : frame.w;
-  const inner = Math.max(along - start - end, 1);
-  const slot = inner / count;
-  const mid = start + (idx + 0.5) * slot;
-  let x = 0;
-  let y = 0;
-  if (prefs.edge === "right" || prefs.edge === "floating") {
-    x = frame.x - tw - 6;
-    y = frame.y + mid - th / 2;
-  } else if (prefs.edge === "left") {
-    x = frame.x + frame.w + 6;
-    y = frame.y + mid - th / 2;
-  } else if (prefs.edge === "top") {
-    x = frame.x + mid - tw / 2;
-    y = frame.y + frame.h + 6;
-  } else {
-    x = frame.x + mid - tw / 2;
-    y = frame.y - th - 6;
+  const target = tipTargetFrame(frame, opts);
+  if (!tipWin || !target) return;
+  if (opts.update || resetToastId) {
+    cancelTipSlide();
+    tipStageFrame = null;
+    tipSlideFrame = { ...target };
+    await placeTipWindow(tipWin, target);
+    const payload = tipContentPayload();
+    if (payload) await api().event.emit("usagebar-tip", payload);
+    await tipWin.show();
+    return;
   }
-  await tipWin.setPosition(new (LogicalPosition())(x, y));
-  await tipWin.show();
+  await showUsageTip(frame);
 }
 
 function paintHover() {
@@ -1034,15 +1131,11 @@ async function closeResetToast(id) {
   paintHover();
   if (await maybeShowResetToast()) return;
   if (await showUpdateToastIfIdle()) return;
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", { show: false });
-  await tipWin?.hide();
+  await hideUsageTip();
 }
 
 async function showUpdateToastIfIdle() {
-  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return false;
-  await showUpdateToast();
-  return updateToastOpen;
+  return false;
 }
 
 function promptableUpdate(info) {
@@ -1060,46 +1153,11 @@ async function hideUpdateToast() {
   updateToastOpen = false;
   if (resetToastId || hovered || menuOpen) return;
   await setTipClickable(false);
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", { show: false });
-  await tipWin?.hide();
+  await hideUsageTip();
 }
 
 async function showUpdateToast() {
-  if (!updateInfo || resetToastId || menuOpen || dragging || hovered) return;
-  updateToastOpen = true;
-  await setTipClickable(true);
-  const locale = prefs.locale === "zh" ? "zh" : "en";
-  const arrow =
-    prefs.edge === "left"
-      ? "left"
-      : prefs.edge === "top"
-        ? "up"
-        : prefs.edge === "bottom"
-          ? "down"
-          : "right";
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", {
-    show: true,
-    kind: "update",
-    latest: updateInfo.latest,
-    arrow,
-    locale,
-  });
-  try {
-    await tipWin?.setMinSize(new (LogicalSize())(1, 1));
-  } catch {
-    /* older runtime */
-  }
-  await tipWin?.setSize(new (LogicalSize())(188, 52));
-  const pos = await getCurrentWindow().outerPosition();
-  const size = await getCurrentWindow().outerSize();
-  const scale = await getCurrentWindow().scaleFactor();
-  await layoutTip(
-    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
-    barSize(prefs.edge),
-    { update: true }
-  );
+  // Update prompts live in the settings menu; no floating toast.
 }
 
 async function skipPromptedVersion() {
@@ -1144,8 +1202,7 @@ async function checkUpdate() {
   rememberCheck(info);
   updateInfo = promptableUpdate(info);
   syncUpdateBadge();
-  if (updateInfo) await showUpdateToast();
-  else await hideUpdateToast();
+  await hideUpdateToast();
 }
 
 async function checkUpdateManual() {
@@ -1235,26 +1292,26 @@ async function showResetToast(snap) {
 async function setHovered(id) {
   if (resetToastId) return;
   if (hovered === id) return;
+  const prev = hovered;
   hovered = id;
+  const gen = ++hoverGen;
   paintHover();
   if (!id) {
-    const tipWin = await getWindow("tip");
-    await api().event.emit("usagebar-tip", { show: false });
-    await tipWin?.hide();
+    await hideUsageTip();
     await setTipClickable(false);
     if (!menuOpen) await showUpdateToast();
     return;
   }
   updateToastOpen = false;
   await setTipClickable(false);
-  await renderTip();
+  if (gen !== hoverGen) return;
   const pos = await getCurrentWindow().outerPosition();
   const size = await getCurrentWindow().outerSize();
   const scale = await getCurrentWindow().scaleFactor();
-  await layoutTip(
-    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
-    barSize(prefs.edge)
-  );
+  if (gen !== hoverGen) return;
+  const frame = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
+  const slide = !!prev && !menuOpen && snaps.some((s) => s.id === prev) && tipSlideFrame;
+  await showUsageTip(frame, { from: slide ? { ...tipSlideFrame } : null });
 }
 
 async function savePrefs() {
@@ -1373,12 +1430,17 @@ async function setLocale(next) {
 }
 
 async function setDisplayStyle(style) {
-  if (prefs.displayStyle === style) return;
+  const next = style === "icons" ? "icons" : "full";
+  if (prefs.displayStyle === next) return;
   await setHovered(null);
-  prefs.displayStyle = style;
-  await savePrefs();
-  renderBar();
+  prefs.displayStyle = next;
+  try {
+    await invoke("set_display_style", { style: next });
+  } catch {
+    await savePrefs();
+  }
   await placeWindows();
+  renderBar();
 }
 
 function setDisplayValue(value) {
@@ -1405,8 +1467,8 @@ async function snapTo(edge) {
     prefs.floatingY = frame.y;
   }
   await savePrefs();
-  renderBar();
   await placeWindows();
+  renderBar();
 }
 
 const MENU_TOGGLES = new Set(["lock", "click", "login", "autoupdate"]);
@@ -1414,10 +1476,10 @@ const MENU_TOGGLES = new Set(["lock", "click", "login", "autoupdate"]);
 async function onNativeMenu(id) {
   if (id === "lock") {
     prefs.locked = !prefs.locked;
-    savePrefs().catch((err) => console.error(err));
+    await savePrefs();
   } else if (id === "click") {
     prefs.clickThrough = !prefs.clickThrough;
-    savePrefs().catch((err) => console.error(err));
+    await savePrefs();
   } else if (id.startsWith("snap:")) {
     await snapTo(id.slice(5));
     return;
@@ -1637,6 +1699,9 @@ async function showPanelMenu(reposition = true) {
     } catch {
       /* older runtime */
     }
+    cancelTipSlide();
+    tipSlideFrame = null;
+    tipStageFrame = null;
     // 铺满当前屏：点卡片外的透明区域即可关闭，不依赖点穿/全局鼠标。
     await tipWin?.setSize(new (LogicalSize())(screen.w, screen.h));
     await tipWin?.setPosition(new (LogicalPosition())(screen.x, screen.y));
@@ -1659,6 +1724,9 @@ async function showPanelMenu(reposition = true) {
     cardH: menuCardFrame.h,
   });
   if (!wasOpen || reposition) await tipWin?.show();
+  if (!wasOpen) {
+    checkUpdateManual().catch((err) => console.error(err));
+  }
 }
 
 async function closeMenuPanel() {
@@ -1668,9 +1736,7 @@ async function closeMenuPanel() {
   await invoke("set_menu_open", { open: false });
   setBarHot();
   await setTipClickable(false);
-  const tipWin = await getWindow("tip");
-  await api().event.emit("usagebar-tip", { show: false });
-  await tipWin?.hide();
+  await hideUsageTip();
   await showUpdateToast();
 }
 
@@ -1704,13 +1770,19 @@ async function handleMenuAction(id) {
     await onNativeMenu(id);
     return;
   }
-  if (id.startsWith("snap:") || id.startsWith("style:")) {
-    await closeMenuPanel();
+  if (id.startsWith("snap:")) {
     await onNativeMenu(id);
+    if (menuOpen) await showPanelMenu(true);
+    return;
+  }
+  if (id.startsWith("style:")) {
+    await onNativeMenu(id);
+    if (menuOpen) await showPanelMenu(false);
     return;
   }
   if (MENU_TOGGLES.has(id)) {
-    onNativeMenu(id).catch((err) => console.error(err));
+    await onNativeMenu(id);
+    if (menuOpen) await showPanelMenu(false);
     return;
   }
   if (id.startsWith("interval:")) {
@@ -1831,6 +1903,7 @@ async function startBar() {
   await api().event.listen("usagebar-over", (e) => {
     setBarHot(!!e.payload);
   });
+  await api().event.listen("usagebar-tip-ready", () => resolveTipReady());
   await api().event.listen("usagebar-hover", (e) => {
     if (menuOpen || dragging) {
       if (hovered) setHovered(null).catch((err) => console.error(err));
@@ -1886,7 +1959,59 @@ function syncMenuHover(e) {
   setMenuHover(p ? menuItemFromPoint(p.x, p.y) : null);
 }
 
+function readTranslate(el) {
+  const raw = getComputedStyle(el).transform;
+  if (!raw || raw === "none") return { x: 0, y: 0 };
+  try {
+    const m = new DOMMatrixReadOnly(raw);
+    return { x: m.m41, y: m.m42 };
+  } catch {
+    const parts = raw.match(/matrix\((.+)\)/);
+    if (!parts) return { x: 0, y: 0 };
+    const n = parts[1].split(",").map(Number);
+    return { x: n[4] || 0, y: n[5] || 0 };
+  }
+}
+
+function clearTipSlide() {
+  const root = document.getElementById("tip-root");
+  const mover = document.getElementById("tip-mover");
+  root?.classList.remove("tip-slide-stage", "tip-pin-bottom");
+  if (!mover) return;
+  mover.style.transition = "none";
+  mover.style.transform = "";
+  delete mover.dataset.sliding;
+}
+
+function applyTipSlide(s) {
+  const root = document.getElementById("tip-root");
+  const mover = document.getElementById("tip-mover");
+  if (!root || !mover || !s) return;
+  root.classList.add("tip-slide-stage");
+  root.classList.toggle("tip-pin-bottom", s.pin === "bottom");
+  const x = s.x;
+  const y = s.pin === "bottom" ? 0 : s.y;
+  const ease = "cubic-bezier(0.16, 1, 0.3, 1)";
+  const placed = mover.dataset.sliding === "1";
+  if (s.keep && placed) return;
+  if (s.duration > 0 && placed) {
+    const cur = readTranslate(mover);
+    mover.style.transition = "none";
+    mover.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0)`;
+    void mover.offsetWidth;
+    requestAnimationFrame(() => {
+      mover.style.transition = `transform ${s.duration}ms ${ease}`;
+      mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    });
+    return;
+  }
+  mover.style.transition = "none";
+  mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  mover.dataset.sliding = "1";
+}
+
 function resetTipLayout() {
+  clearTipSlide();
   document.getElementById("tip-root")?.classList.remove("menu-backdrop");
   const tip = document.getElementById("tip");
   if (!tip) return;
@@ -1896,61 +2021,7 @@ function resetTipLayout() {
   tip.style.height = "";
 }
 
-function paintTip(payload) {
-  if (!payload?.show) {
-    resetTipLayout();
-    return;
-  }
-  prefs.locale = payload.locale === "zh" ? "zh" : "en";
-  if (payload.displayValue) {
-    prefs.displayValue = payload.displayValue === "remaining" ? "remaining" : "used";
-  }
-  applyLocale();
-  const ptr = document.getElementById("tip-pointer");
-  if (payload.kind === "menu") {
-    const root = document.getElementById("tip-root");
-    const tip = document.getElementById("tip");
-    const card = document.getElementById("tip-card");
-    root.classList.add("menu-backdrop");
-    card.dataset.resetId = "";
-    card.classList.add("menu-card");
-    card.innerHTML = menuPanelHtml(payload.state);
-    tip.className = "tip menu-tip arrow-" + (payload.arrow || "right");
-    if (payload.cardX != null && payload.cardY != null) {
-      tip.style.left = `${payload.cardX}px`;
-      tip.style.top = `${payload.cardY}px`;
-      tip.style.width = `${payload.cardW || MENU_W}px`;
-      tip.style.height = `${payload.cardH || 0}px`;
-    }
-    if (ptr) {
-      ptr.hidden = true;
-      ptr.style.marginTop = "";
-      ptr.style.marginLeft = "";
-      ptr.style.alignSelf = "";
-    }
-    requestAnimationFrame(() => syncMenuHover());
-    return;
-  }
-  resetTipLayout();
-  if (ptr) {
-    ptr.hidden = false;
-    ptr.style.marginTop = "";
-    ptr.style.marginLeft = "";
-    ptr.style.alignSelf = "";
-  }
-  if (payload.kind === "update") {
-    const card = document.getElementById("tip-card");
-    card.dataset.resetId = "";
-    card.classList.remove("menu-card");
-    card.classList.add("update-only");
-    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(
-      payload.latest
-    )}</button>`;
-    document.getElementById("tip").className =
-      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
-    return;
-  }
-  if (!payload.snap) return;
+function paintUsageCard(payload) {
   const snap = payload.snap;
   const spec = ICONS[snap.id];
   if (!spec) return;
@@ -1985,8 +2056,82 @@ function paintTip(payload) {
       <svg class="mini glyph" viewBox="${spec.viewBox}">${spec.d.map((p) => `<path ${rule} d="${p}"/>`).join("")}</svg>
       <div class="title">${usageTitle(snap.id)}</div>
     </div>${banner}${metricsHtml}`;
-  document.getElementById("tip").className =
-    "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
+  const tip = document.getElementById("tip");
+  tip.classList.remove("menu-tip", "update-only", "arrow-left", "arrow-right", "arrow-up", "arrow-down");
+  tip.classList.add("tip", "arrow-" + (payload.arrow || "right"));
+  tip.classList.toggle("hot", tipHot);
+}
+
+function paintTip(payload) {
+  if (!payload?.show) {
+    resetTipLayout();
+    return;
+  }
+  prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  if (payload.displayValue) {
+    prefs.displayValue = payload.displayValue === "remaining" ? "remaining" : "used";
+  }
+  applyLocale();
+  const ptr = document.getElementById("tip-pointer");
+  if (payload.kind === "menu") {
+    clearTipSlide();
+    const root = document.getElementById("tip-root");
+    const tip = document.getElementById("tip");
+    const card = document.getElementById("tip-card");
+    root.classList.add("menu-backdrop");
+    card.dataset.resetId = "";
+    card.classList.add("menu-card");
+    card.innerHTML = menuPanelHtml(payload.state);
+    tip.className = "tip menu-tip arrow-" + (payload.arrow || "right");
+    if (payload.cardX != null && payload.cardY != null) {
+      tip.style.left = `${payload.cardX}px`;
+      tip.style.top = `${payload.cardY}px`;
+      tip.style.width = `${payload.cardW || MENU_W}px`;
+      tip.style.height = `${payload.cardH || 0}px`;
+    }
+    if (ptr) {
+      ptr.hidden = true;
+      ptr.style.marginTop = "";
+      ptr.style.marginLeft = "";
+      ptr.style.alignSelf = "";
+    }
+    requestAnimationFrame(() => syncMenuHover());
+    return;
+  }
+  if (payload.slide) {
+    document.getElementById("tip-root")?.classList.remove("menu-backdrop");
+    if (ptr) {
+      ptr.hidden = false;
+      ptr.style.marginTop = "";
+      ptr.style.marginLeft = "";
+      ptr.style.alignSelf = "";
+    }
+    applyTipSlide(payload.slide);
+    paintUsageCard(payload);
+    api().event.emit("usagebar-tip-ready").catch(() => {});
+    return;
+  }
+  resetTipLayout();
+  if (ptr) {
+    ptr.hidden = false;
+    ptr.style.marginTop = "";
+    ptr.style.marginLeft = "";
+    ptr.style.alignSelf = "";
+  }
+  if (payload.kind === "update") {
+    const card = document.getElementById("tip-card");
+    card.dataset.resetId = "";
+    card.classList.remove("menu-card");
+    card.classList.add("update-only");
+    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(
+      payload.latest
+    )}</button>`;
+    document.getElementById("tip").className =
+      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
+    return;
+  }
+  if (!payload.snap) return;
+  paintUsageCard(payload);
 }
 
 async function startTip() {
@@ -2036,15 +2181,6 @@ function renderSettings() {
   const ui = t();
   const vis = normalizeVisible(prefs.visibleProviders);
   const selected = new Set(vis);
-  const valueTitle = document.getElementById("settings-value-title");
-  const valueHint = document.getElementById("settings-value-hint");
-  if (valueTitle) valueTitle.textContent = ui.displayValue;
-  if (valueHint) valueHint.textContent = ui.displayValueHint;
-  document.querySelectorAll("[data-display-value]").forEach((btn) => {
-    const on = btn.dataset.displayValue === (prefs.displayValue === "remaining" ? "remaining" : "used");
-    btn.classList.toggle("on", on);
-    btn.textContent = btn.dataset.displayValue === "remaining" ? ui.remainingQuota : ui.usedQuota;
-  });
   document.getElementById("settings-title").textContent = ui.toolsTitle;
   document.getElementById("settings-hint").textContent = ui.toolsHint;
   const count = document.getElementById("settings-count");
@@ -2119,12 +2255,6 @@ async function startSettings() {
     saveVisible(vis).catch((err) => console.error(err));
   });
   root.addEventListener("click", (e) => {
-    const valueBtn = e.target.closest("[data-display-value]");
-    if (valueBtn) {
-      setDisplayValue(valueBtn.dataset.displayValue);
-      renderSettings();
-      return;
-    }
     const btn = e.target.closest("button[data-move]");
     if (!btn || btn.disabled) return;
     const id = btn.dataset.move;

@@ -14,9 +14,6 @@ const BAR_SLOT: f64 = 48.0;
 const BAR_H_THICK: f64 = 40.0;
 const BAR_H_BASE: f64 = 24.0;
 const BAR_H_SLOT: f64 = 59.0;
-const ICONS_THICK: f64 = 26.0;
-const ICONS_BASE: f64 = 8.0;
-const ICONS_SLOT: f64 = 21.0;
 /// 圆环样式末尾追加的设置区长度：0.0.9 条身原样结束，其后留空放悬空齿轮舱。
 const GEAR_ALONG: f64 = 22.0;
 /// 浮动模式胶囊下方的预留（胶囊无贴边弧，舱体整体更靠下）。
@@ -199,7 +196,6 @@ fn tick(app: &AppHandle) {
     let on_gear = over
         && over_gear(
             &prefs.edge,
-            is_icons(&prefs),
             scale,
             px,
             py,
@@ -318,21 +314,6 @@ fn hover_id(
     let local_y = (my - py) / scale;
     let slots = prefs::display_slots(prefs);
     let count = slots.len().max(1) as f64;
-    if is_icons(prefs) {
-        let vertical = is_vertical(&prefs.edge);
-        let along = if vertical { ph / scale } else { pw / scale };
-        let coord = if vertical { local_y } else { local_x };
-        if along <= 0.0 {
-            return None;
-        }
-        let slot = along / count;
-        let idx = (coord / slot).floor() as i32;
-        let mid = (idx as f64 + 0.5) * slot;
-        if idx >= 0 && (idx as usize) < slots.len() && (coord - mid).abs() < slot * 0.48 {
-            return Some(slots[idx as usize].clone());
-        }
-        return None;
-    }
     let vertical = is_vertical(&prefs.edge);
     let (inset_start, inset_end) = if vertical {
         (20.0, 20.0 + GEAR_ALONG)
@@ -574,6 +555,7 @@ fn window_frame(
 
 fn set_frame(state: &Overlay, bar: &tauri::WebviewWindow, x: f64, y: f64, w: f64, h: f64) {
     let _ = bar.set_min_size(Some(LogicalSize::new(1.0, 1.0)));
+    let _ = bar.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
     let _ = bar.set_size(LogicalSize::new(w, h));
     let _ = bar.set_position(LogicalPosition::new(x, y));
     if let Ok(mut g) = state.last_size.lock() {
@@ -798,30 +780,17 @@ fn glued_frame(edge: &str, w: f64, h: f64, along: f64, screen: &Screen) -> (f64,
     }
 }
 
-fn is_icons(prefs: &Prefs) -> bool {
-    prefs.display_style == "icons"
-}
-
 fn bar_size(edge: &str, prefs: &Prefs) -> (f64, f64) {
     let n = prefs::slot_count(prefs) as f64;
-    if is_icons(prefs) {
-        let along = ICONS_BASE + ICONS_SLOT * n;
-        if is_vertical(edge) {
-            (ICONS_THICK, along)
-        } else {
-            (along, ICONS_THICK)
-        }
+    let g = if edge == "floating" {
+        GEAR_ALONG_FLOAT
     } else {
-        let g = if edge == "floating" {
-            GEAR_ALONG_FLOAT
-        } else {
-            GEAR_ALONG
-        };
-        if is_vertical(edge) {
-            (BAR_THICK, BAR_PAD + BAR_SLOT * n + g)
-        } else {
-            (BAR_H_BASE + BAR_H_SLOT * n + g, BAR_H_THICK)
-        }
+        GEAR_ALONG
+    };
+    if is_vertical(edge) {
+        (BAR_THICK, BAR_PAD + BAR_SLOT * n + g)
+    } else {
+        (BAR_H_BASE + BAR_H_SLOT * n + g, BAR_H_THICK)
     }
 }
 
@@ -837,7 +806,6 @@ fn gear_center(edge: &str, w: f64, h: f64) -> (f64, f64) {
 
 fn over_gear(
     edge: &str,
-    icons: bool,
     scale: f64,
     px: f64,
     py: f64,
@@ -846,9 +814,6 @@ fn over_gear(
     mx: f64,
     my: f64,
 ) -> bool {
-    if icons {
-        return false;
-    }
     let w = pw / scale;
     let h = ph / scale;
     let lx = (mx - px) / scale;

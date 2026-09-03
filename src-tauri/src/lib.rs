@@ -44,7 +44,8 @@ fn get_prefs(app: AppHandle) -> Prefs {
 }
 
 #[tauri::command]
-fn set_prefs(app: AppHandle, incoming: Prefs) {
+fn set_prefs(app: AppHandle, prefs: Prefs) {
+    let incoming = prefs;
     let base = if let Some(state) = app.try_state::<Overlay>() {
         state.prefs.lock().ok().map(|g| g.clone())
     } else {
@@ -86,6 +87,35 @@ fn set_visible_providers(app: AppHandle, ids: Vec<String>) {
     };
     prefs::save(&prefs);
     let _ = app.emit("usagebar-prefs", &prefs);
+}
+
+#[tauri::command]
+fn set_display_style(app: AppHandle, style: String) {
+    let style = if style == "icons" { "icons" } else { "full" }.to_string();
+    let (prefs, tray) = if let Some(state) = app.try_state::<Overlay>() {
+        let Ok(mut slot) = state.prefs.lock() else {
+            return;
+        };
+        let before = slot.clone();
+        if slot.display_style == style {
+            let current = slot.clone();
+            drop(slot);
+            let _ = app.emit("usagebar-prefs", &current);
+            return;
+        }
+        slot.display_style = style;
+        let prefs = slot.clone();
+        (prefs.clone(), prefs::tray_needs_update(&before, &prefs))
+    } else {
+        let mut prefs = prefs::load();
+        prefs.display_style = style;
+        (prefs.clone(), true)
+    };
+    prefs::save(&prefs);
+    let _ = app.emit("usagebar-prefs", &prefs);
+    if tray {
+        schedule_tray(app, prefs);
+    }
 }
 
 fn schedule_tray(app: AppHandle, prefs: Prefs) {
@@ -423,6 +453,7 @@ pub fn run() {
             get_prefs,
             set_prefs,
             set_visible_providers,
+            set_display_style,
             place_bar,
             set_pointer,
             set_menu_open,

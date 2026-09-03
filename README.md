@@ -41,7 +41,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
-- Two display styles: **Ring usage** (full rings + percent) or **Transparent icons** (mini rings, still docked to an edge)
+- Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock)
 - Display value: **Used quota** (default) or **Remaining quota**. Rings, percents, and the detail card follow the choice; colors still follow remaining (red ≤ 20%, yellow ≤ 40%, green otherwise)
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar

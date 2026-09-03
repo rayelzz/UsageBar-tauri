@@ -6,6 +6,13 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.18 — 2026-09-03
+
+- **Transparent style matches the dark bar.** Same large rings, percents, and gear; only the black dock is gone so the desktop shows through. It no longer flashes the full layout and then shrinks to mini icons.
+- **Settings apply again.** Snap left / right / top / bottom moves the bar. Lock position blocks dragging. Switching display style keeps the gear panel open, like language and display value.
+- **Providers window is only providers.** Display value stays on the gear menu.
+- **Bottom-edge hover card.** The detail card’s arrow stays a fixed distance from the bar when switching providers.
+
 ### 0.0.17 — 2026-09-03
 
 - **Fix provider edits not applying** ([#2](https://github.com/rayelzz/UsageBar-tauri/issues/2)). Checking, unchecking, or reordering providers in the Providers window updates the bar and `~/.usagebar/prefs.json` immediately again. A race between window placement and full prefs saves had been restoring the previous provider list.
@@ -89,6 +96,13 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.18 — 2026-09-03
+
+- **透明样式与黑色模式一致。** 同样的大圆环、百分比和齿轮，只去掉黑底托，桌面直接透出来。不再先闪一下完整布局再收成小图标。
+- **设置重新生效。** 贴左 / 右 / 上 / 下会真正挪条。锁定位置后不能再拖。切换显示样式时齿轮面板保持打开，和语言、显示值一样。
+- **提供商窗口只管提供商。** 显示值只留在齿轮菜单里。
+- **贴下边时详情卡对齐。** 换供应商时，箭头到主条的距离保持固定。
 
 ### 0.0.17 — 2026-09-03
 
