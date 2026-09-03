@@ -313,7 +313,10 @@ fn hover_id(
     let local_x = (mx - px) / scale;
     let local_y = (my - py) / scale;
     let slots = prefs::display_slots(prefs);
-    let count = slots.len().max(1) as f64;
+    if slots.is_empty() {
+        return None;
+    }
+    let count = slots.len() as f64;
     let vertical = is_vertical(&prefs.edge);
     let (inset_start, inset_end) = if vertical {
         (20.0, 20.0 + GEAR_ALONG)
@@ -327,12 +330,12 @@ fn hover_id(
         return None;
     }
     let slot = inner / count;
-    let idx = ((coord - inset_start) / slot).floor() as i32;
-    let mid = inset_start + (idx as f64 + 0.5) * slot;
-    if idx >= 0 && (idx as usize) < slots.len() && (coord - mid).abs() < slot * 0.48 {
-        return Some(slots[idx as usize].clone());
+    if slot <= 0.0 {
+        return None;
     }
-    None
+    let max = (slots.len() as i32) - 1;
+    let idx = ((coord - inset_start) / slot).floor() as i32;
+    Some(slots[idx.clamp(0, max) as usize].clone())
 }
 
 fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {

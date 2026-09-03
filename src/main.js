@@ -911,6 +911,7 @@ function tipSlideFrom(target, stage, extra = {}) {
     w: target.w,
     h: target.h,
     pin: pinBottom ? "bottom" : "",
+    fade: false,
     ...extra,
   };
 }
@@ -965,6 +966,7 @@ async function showUsageTip(barFrame, opts = {}) {
   const stage = tipTravelBounds(barFrame) || target;
   const first = !tipStageFrame;
   const barMoved = !first && !rectsClose(tipStageFrame, stage);
+  const switching = !first && !barMoved && !!opts.from;
   if (first || barMoved) {
     await placeTipWindow(tipWin, stage);
     if (gen !== tipSlideGen) return;
@@ -972,13 +974,20 @@ async function showUsageTip(barFrame, opts = {}) {
   }
   tipSlideFrame = { ...target };
   const slide = tipSlideFrom(target, tipStageFrame, {
-    duration: opts.from && !first && !barMoved ? TIP_SLIDE_MS : 0,
+    duration: switching ? TIP_SLIDE_MS : 0,
+    fade: switching,
   });
   const ready = waitTipReady();
   await api().event.emit("usagebar-tip", { ...payload, slide });
   if (first) await ready;
   if (gen !== tipSlideGen) return;
-  await tipWin.show();
+  let visible = false;
+  try {
+    visible = await tipWin.isVisible();
+  } catch {
+    visible = false;
+  }
+  if (!visible) await tipWin.show();
   if (gen !== tipSlideGen && !hovered && !menuOpen && !resetToastId) {
     await tipWin.hide();
   }
@@ -1310,8 +1319,8 @@ async function setHovered(id) {
   const scale = await getCurrentWindow().scaleFactor();
   if (gen !== hoverGen) return;
   const frame = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
-  const slide = !!prev && !menuOpen && snaps.some((s) => s.id === prev) && tipSlideFrame;
-  await showUsageTip(frame, { from: slide ? { ...tipSlideFrame } : null });
+  const from = !!prev && !menuOpen && !!tipStageFrame;
+  await showUsageTip(frame, { from });
 }
 
 async function savePrefs() {
@@ -1980,7 +1989,9 @@ function clearTipSlide() {
   if (!mover) return;
   mover.style.transition = "none";
   mover.style.transform = "";
+  mover.style.height = "";
   delete mover.dataset.sliding;
+  document.getElementById("tip-card")?.classList.remove("tip-card-fade");
 }
 
 function applyTipSlide(s) {
@@ -1991,22 +2002,27 @@ function applyTipSlide(s) {
   root.classList.toggle("tip-pin-bottom", s.pin === "bottom");
   const x = s.x;
   const y = s.pin === "bottom" ? 0 : s.y;
+  const nextH = s.h > 0 ? s.h : 0;
   const ease = "cubic-bezier(0.16, 1, 0.3, 1)";
   const placed = mover.dataset.sliding === "1";
   if (s.keep && placed) return;
   if (s.duration > 0 && placed) {
     const cur = readTranslate(mover);
+    const curH = mover.getBoundingClientRect().height;
     mover.style.transition = "none";
     mover.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0)`;
+    if (curH > 0) mover.style.height = `${curH}px`;
     void mover.offsetWidth;
     requestAnimationFrame(() => {
-      mover.style.transition = `transform ${s.duration}ms ${ease}`;
+      mover.style.transition = `transform ${s.duration}ms ${ease}, height ${s.duration}ms ${ease}`;
       mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      if (nextH > 0) mover.style.height = `${nextH}px`;
     });
     return;
   }
   mover.style.transition = "none";
   mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  if (nextH > 0) mover.style.height = `${nextH}px`;
   mover.dataset.sliding = "1";
 }
 
@@ -2048,14 +2064,17 @@ function paintUsageCard(payload) {
     : "";
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
-  card.classList.remove("update-only");
-  card.classList.remove("menu-card");
+  card.classList.remove("update-only", "menu-card", "tip-card-fade");
   card.innerHTML = `
     ${close}
     <div class="card-head">
       <svg class="mini glyph" viewBox="${spec.viewBox}">${spec.d.map((p) => `<path ${rule} d="${p}"/>`).join("")}</svg>
       <div class="title">${usageTitle(snap.id)}</div>
     </div>${banner}${metricsHtml}`;
+  if (payload.fade) {
+    void card.offsetWidth;
+    card.classList.add("tip-card-fade");
+  }
   const tip = document.getElementById("tip");
   tip.classList.remove("menu-tip", "update-only", "arrow-left", "arrow-right", "arrow-up", "arrow-down");
   tip.classList.add("tip", "arrow-" + (payload.arrow || "right"));
@@ -2107,7 +2126,7 @@ function paintTip(payload) {
       ptr.style.alignSelf = "";
     }
     applyTipSlide(payload.slide);
-    paintUsageCard(payload);
+    paintUsageCard({ ...payload, fade: !!payload.slide.fade });
     api().event.emit("usagebar-tip-ready").catch(() => {});
     return;
   }
