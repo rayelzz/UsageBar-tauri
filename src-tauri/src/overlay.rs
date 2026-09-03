@@ -526,11 +526,18 @@ fn finish_drag(
         prefs.last_y = glued.1;
         set_frame(state, bar, glued.0, glued.1, glued.2, glued.3);
     }
+    // Only patch geometry so a concurrent provider/settings write is not reverted.
     if let Ok(mut g) = state.prefs.lock() {
-        *g = prefs.clone();
+        g.edge = prefs.edge;
+        g.along = prefs.along;
+        g.floating_x = prefs.floating_x;
+        g.floating_y = prefs.floating_y;
+        g.last_x = prefs.last_x;
+        g.last_y = prefs.last_y;
+        g.screen_name = prefs.screen_name;
+        prefs::save(&*g);
+        emit_layout(app, &g, false);
     }
-    prefs::save(&prefs);
-    emit_layout(app, &prefs, false);
 }
 
 fn window_frame(
@@ -647,15 +654,17 @@ pub fn place(app: &AppHandle) -> Option<BarFrame> {
     set_frame(state, &bar, x, y, w, h);
     let _ = bar.show();
     state.placed.store(true, Ordering::Release);
-    let mut next = prefs;
-    next.along = if is_vertical(&next.edge) { y } else { x };
-    next.last_x = x;
-    next.last_y = y;
-    next.screen_name = screen.name;
+    let along = if is_vertical(&prefs.edge) { y } else { x };
+    // Only patch geometry under the lock. Replacing the whole Prefs from a
+    // pre-layout clone races with set_visible_providers / set_prefs and was
+    // wiping provider list changes back to the previous snapshot.
     if let Ok(mut g) = state.prefs.lock() {
-        *g = next.clone();
+        g.along = along;
+        g.last_x = x;
+        g.last_y = y;
+        g.screen_name = screen.name;
+        prefs::save(&*g);
     }
-    prefs::save(&next);
     Some(BarFrame { x, y, w, h })
 }
 

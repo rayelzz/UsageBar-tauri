@@ -2083,7 +2083,7 @@ function renderSettings() {
 
 async function saveVisible(next) {
   prefs.visibleProviders = normalizeVisible(next);
-  await savePrefs();
+  await invoke("set_visible_providers", { ids: prefs.visibleProviders });
   renderSettings();
 }
 

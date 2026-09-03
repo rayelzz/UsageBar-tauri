@@ -176,11 +176,13 @@ pub fn merge(base: Prefs, mut next: Prefs) -> Prefs {
     next.sanitize()
 }
 
-/// Settings clicks often send a stale full snapshot. Only take geometry from the
-/// client when the edge itself changed (snap). Style / provider count only change size.
+/// Full-window snapshots are often stale. Keep geometry unless the edge changed
+/// (snap), and never take `visible_providers` from `set_prefs` — that list is
+/// owned by `set_visible_providers` so the bar cannot overwrite a settings edit.
 pub fn apply_incoming(base: Prefs, incoming: Prefs) -> Prefs {
     let edge_changed = incoming.edge != base.edge;
     let mut prefs = merge(base.clone(), incoming);
+    prefs.visible_providers = base.visible_providers;
     if !edge_changed {
         prefs.along = base.along;
         prefs.last_x = base.last_x;
@@ -418,6 +420,18 @@ mod tests {
         assert_eq!(applied.last_y, 431.0);
         assert_eq!(applied.along, 431.0);
         assert_eq!(applied.screen_name, "Built-in");
+    }
+
+    #[test]
+    fn apply_incoming_ignores_stale_provider_list() {
+        let mut base = Prefs::default();
+        base.visible_providers = vec!["glm".into(), "zcode".into()];
+        let mut incoming = base.clone();
+        incoming.visible_providers = vec!["codex".into()];
+        incoming.display_value = "remaining".into();
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.visible_providers, vec!["glm", "zcode"]);
+        assert_eq!(applied.display_value, "remaining");
     }
 
     #[test]

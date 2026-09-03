@@ -64,6 +64,30 @@ fn set_prefs(app: AppHandle, incoming: Prefs) {
     }
 }
 
+#[tauri::command]
+fn set_visible_providers(app: AppHandle, ids: Vec<String>) {
+    let ids = prefs::normalize_visible(&ids);
+    let prefs = if let Some(state) = app.try_state::<Overlay>() {
+        let Ok(mut slot) = state.prefs.lock() else {
+            return;
+        };
+        if slot.visible_providers == ids {
+            let current = slot.clone();
+            drop(slot);
+            let _ = app.emit("usagebar-prefs", &current);
+            return;
+        }
+        slot.visible_providers = ids;
+        slot.clone()
+    } else {
+        let mut prefs = prefs::load();
+        prefs.visible_providers = ids;
+        prefs
+    };
+    prefs::save(&prefs);
+    let _ = app.emit("usagebar-prefs", &prefs);
+}
+
 fn schedule_tray(app: AppHandle, prefs: Prefs) {
     let gen = TRAY_GEN.fetch_add(1, Ordering::AcqRel) + 1;
     std::thread::spawn(move || {
@@ -398,6 +422,7 @@ pub fn run() {
             fetch_usage,
             get_prefs,
             set_prefs,
+            set_visible_providers,
             place_bar,
             set_pointer,
             set_menu_open,

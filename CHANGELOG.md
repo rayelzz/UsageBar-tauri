@@ -6,6 +6,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.17 — 2026-09-03
+
+- **Fix provider edits not applying** ([#2](https://github.com/rayelzz/UsageBar-tauri/issues/2)). Checking, unchecking, or reordering providers in the Providers window updates the bar and `~/.usagebar/prefs.json` immediately again. A race between window placement and full prefs saves had been restoring the previous provider list.
+
 ### 0.0.16 — 2026-09-02
 
 - **All quota windows.** The hover card lists every window the vendor API returns: 5-hour, weekly, monthly / billing cycle, scoped weekly, on-demand, per-model. Missing windows are not invented. GLM / ZCode show weekly when the plan includes it.
@@ -85,6 +89,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.17 — 2026-09-03
+
+- **修复修改提供商不生效**（[#2](https://github.com/rayelzz/UsageBar-tauri/issues/2)）。在提供商窗口勾选、取消或调整顺序后，用量条和 `~/.usagebar/prefs.json` 会立刻更新。此前窗口布局写回与完整配置保存存在竞态，会把提供商列表盖回旧值。
 
 ### 0.0.16 — 2026-09-02
 
