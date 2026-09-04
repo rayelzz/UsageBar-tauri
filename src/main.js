@@ -172,6 +172,8 @@ function t() {
         checkingUpdate: "正在检测…",
         updateUpToDate: "已是最新版",
         updateCheckFailed: "检测失败，请稍后重试",
+        installingUpdate: "正在安装更新…",
+        updateInstallFailed: "安装失败，已打开下载页",
         settings: "设置",
         snapGroup: "贴边",
         edgeShort: ["左", "右", "上", "下"],
@@ -216,6 +218,8 @@ function t() {
         checkingUpdate: "Checking…",
         updateUpToDate: "Up to date",
         updateCheckFailed: "Couldn’t check for updates. Try again later.",
+        installingUpdate: "Installing update…",
+        updateInstallFailed: "Install failed. Opened the download page.",
         settings: "Settings",
         snapGroup: "Snap edge",
         edgeShort: ["Left", "Right", "Top", "Bottom"],
@@ -688,6 +692,8 @@ let tipHot = false;
 let updateInfo = null;
 let updateToastOpen = false;
 let updateTimer = null;
+let menuInstalling = false;
+let menuInstallPercent = null;
 let appVersion = "";
 let checkedInfo = null;
 let menuCheckedInfo = null;
@@ -1179,9 +1185,23 @@ async function skipPromptedVersion() {
 }
 
 async function openUpdateFromPrompt() {
-  const url = updateInfo?.url || null;
-  await openRelease(url);
-  await skipPromptedVersion();
+  await installAvailableUpdate();
+}
+
+async function installAvailableUpdate() {
+  if (menuInstalling) return;
+  menuInstalling = true;
+  menuInstallPercent = null;
+  if (menuOpen) await showPanelMenu(false);
+  try {
+    await invoke("install_update");
+  } catch {
+    menuInstalling = false;
+    menuCheckStatus = "installFailed";
+    if (menuOpen) await showPanelMenu(false);
+    const url = (menuCheckedInfo || checkedInfo || updateInfo)?.url || null;
+    await openRelease(url);
+  }
 }
 
 function rememberCheck(info) {
@@ -1192,6 +1212,7 @@ function rememberCheck(info) {
 }
 
 function resetMenuCheck() {
+  if (menuInstalling) return;
   menuCheckedInfo = null;
   menuChecking = false;
   menuCheckStatus = "";
@@ -1578,11 +1599,11 @@ function menuSpec(st) {
     {
       k: "row",
       id: "checkupdate",
-      label: st.checking ? ui.checkingUpdate : ui.checkUpdate,
+      label: st.installing ? ui.installingUpdate : st.checking ? ui.checkingUpdate : ui.checkUpdate,
       extra: st.checkExtra || "",
       extraKind: st.checkExtraKind || "",
       extraId: "latest",
-      cls: st.checking ? "dim" : "",
+      cls: st.checking || st.installing ? "dim" : "",
     },
   ];
   rows.push(
@@ -1609,8 +1630,10 @@ function menuPanelHtml(st) {
           .join("")}</div>`;
       }
       const extra =
-        r.extraKind === "link" && r.extra
-          ? `<span class="m-extra link" data-mid="${r.extraId || "latest"}">${r.extra}${JUMP_ICON}</span>`
+        (r.extraKind === "link" || r.extraKind === "install") && r.extra
+          ? `<span class="m-extra link" data-mid="${r.extraId || "latest"}">${r.extra}${
+              r.extraKind === "link" ? JUMP_ICON : ""
+            }</span>`
           : r.extra
             ? `<span class="m-extra muted">${r.extra}</span>`
             : "";
@@ -1639,18 +1662,32 @@ function menuStateNow() {
     autoCheckUpdate: !!prefs.autoCheckUpdate,
     current: appVersion || "",
     checking: menuChecking,
+    installing: menuInstalling,
     checkStatus: menuCheckStatus,
     checkExtra:
-      menuChecking
-        ? ""
+      menuInstalling
+        ? menuInstallPercent != null
+          ? `${menuInstallPercent}%`
+          : ""
+        : menuChecking
+          ? ""
+          : menuCheckStatus === "installFailed"
+            ? t().updateInstallFailed
+            : updateHasNewer(menuCheckedInfo)
+              ? menuCheckedInfo.latest
+              : menuCheckStatus === "upToDate"
+                ? t().updateUpToDate
+                : menuCheckStatus === "failed"
+                  ? t().updateCheckFailed
+                  : "",
+    checkExtraKind:
+      menuInstalling || menuCheckStatus === "installFailed"
+        ? "muted"
         : updateHasNewer(menuCheckedInfo)
-          ? menuCheckedInfo.latest
-          : menuCheckStatus === "upToDate"
-            ? t().updateUpToDate
-            : menuCheckStatus === "failed"
-              ? t().updateCheckFailed
-              : "",
-    checkExtraKind: updateHasNewer(menuCheckedInfo) ? "link" : menuCheckStatus ? "muted" : "",
+          ? "install"
+          : menuCheckStatus
+            ? "muted"
+            : "",
     latest: updateInfo?.latest || null,
   };
 }
@@ -1756,17 +1793,12 @@ async function handleMenuAction(id) {
     return;
   }
   if (id === "checkupdate") {
+    if (menuInstalling) return;
     await checkUpdateManual();
     return;
   }
   if (id === "update" || id === "latest") {
-    const info = menuCheckedInfo || checkedInfo || updateInfo;
-    if (info?.latest && updateHasNewer(info)) {
-      await openRelease(info.url);
-      updateInfo = info;
-      await skipPromptedVersion();
-    }
-    await closeMenuPanel();
+    await installAvailableUpdate();
     return;
   }
   if (id === "refresh") {
@@ -1926,6 +1958,15 @@ async function startBar() {
   });
   await api().event.listen("usagebar-update-open", () => {
     openUpdateFromPrompt().catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-update-progress", (e) => {
+    const total = Number(e.payload?.total);
+    const downloaded = Number(e.payload?.downloaded);
+    if (!total || !Number.isFinite(downloaded)) return;
+    const pct = Math.min(100, Math.round((downloaded / total) * 100));
+    if (pct === menuInstallPercent) return;
+    menuInstallPercent = pct;
+    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-usage", (e) => {
     if (e.payload) applyIncomingSnap(e.payload);

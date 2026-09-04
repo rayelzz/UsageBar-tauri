@@ -8,12 +8,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const USED_MIN: f64 = 1.0;
 const ZERO_MAX: f64 = 0.5;
 const ALERT_MS: i64 = 6 * 60 * 60 * 1000;
+/// Treat a drop as the advertised cycle if it happens at or after the stored
+/// reset time, or up to this early (poll / clock skew).
+const SCHEDULED_EARLY_MS: i64 = 3 * 60 * 1000;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UsageState {
     #[serde(default)]
     last: HashMap<String, HashMap<String, f64>>,
+    #[serde(default)]
+    last_resets: HashMap<String, HashMap<String, i64>>,
     #[serde(default)]
     alerts: HashMap<String, StoredAlert>,
 }
@@ -69,6 +74,18 @@ fn metric_map(snap: &ProviderSnapshot) -> HashMap<String, f64> {
     map
 }
 
+fn reset_map(snap: &ProviderSnapshot) -> HashMap<String, i64> {
+    let mut map = HashMap::new();
+    for metric in &snap.metrics {
+        let Some(at) = metric.resets_at.filter(|at| *at > 0) else {
+            continue;
+        };
+        map.insert(metric.id.clone(), at);
+        map.insert(format!("label:{}", metric.label), at);
+    }
+    map
+}
+
 fn label_for(snap: &ProviderSnapshot, id: &str) -> String {
     if id == "_headline" {
         return snap
@@ -95,25 +112,52 @@ fn prev_for(prev: &HashMap<String, f64>, id: &str, label: Option<&str>) -> Optio
         .or_else(|| label.and_then(|l| prev.get(&format!("label:{l}")).copied()))
 }
 
+fn prev_reset(prev_resets: &HashMap<String, i64>, id: &str, label: Option<&str>) -> Option<i64> {
+    prev_resets
+        .get(id)
+        .copied()
+        .or_else(|| label.and_then(|l| prev_resets.get(&format!("label:{l}")).copied()))
+}
+
 fn is_reset(old: f64, new_pct: f64) -> bool {
     old >= USED_MIN && new_pct <= ZERO_MAX
 }
 
-fn detect(prev: &HashMap<String, f64>, snap: &ProviderSnapshot) -> Vec<(String, f64)> {
+fn scheduled_reset(prev_at: Option<i64>, now: i64) -> bool {
+    match prev_at {
+        Some(at) if at > 0 => now + SCHEDULED_EARLY_MS >= at,
+        _ => false,
+    }
+}
+
+fn detect(
+    prev: &HashMap<String, f64>,
+    prev_resets: &HashMap<String, i64>,
+    snap: &ProviderSnapshot,
+    now: i64,
+) -> Vec<(String, f64)> {
     let mut hits = Vec::new();
     for metric in &snap.metrics {
         let Some(old) = prev_for(prev, &metric.id, Some(&metric.label)) else {
             continue;
         };
-        if is_reset(old, metric.percent) {
-            hits.push((metric.label.clone(), old));
+        if !is_reset(old, metric.percent) {
+            continue;
         }
+        if scheduled_reset(prev_reset(prev_resets, &metric.id, Some(&metric.label)), now) {
+            continue;
+        }
+        hits.push((metric.label.clone(), old));
     }
     if hits.is_empty() {
         if let Some(new_pct) = snap.headline_percent {
             if let Some(old) = prev.get("_headline").copied() {
                 if is_reset(old, new_pct) {
-                    hits.push((label_for(snap, "_headline"), old));
+                    let first = snap.metrics.first();
+                    let at = first.and_then(|m| prev_reset(prev_resets, &m.id, Some(&m.label)));
+                    if !scheduled_reset(at, now) {
+                        hits.push((label_for(snap, "_headline"), old));
+                    }
                 }
             }
         }
@@ -151,8 +195,10 @@ pub fn apply(snaps: &mut [ProviderSnapshot]) {
             continue;
         }
         let current = metric_map(snap);
+        let current_resets = reset_map(snap);
         if let Some(prev) = state.last.get(&snap.id) {
-            let hits = detect(prev, snap);
+            let prev_resets = state.last_resets.get(&snap.id).cloned().unwrap_or_default();
+            let hits = detect(prev, &prev_resets, snap, now);
             if !hits.is_empty() {
                 let from_percent = hits
                     .iter()
@@ -188,6 +234,7 @@ pub fn apply(snaps: &mut [ProviderSnapshot]) {
             }
         }
         state.last.insert(snap.id.clone(), current);
+        state.last_resets.insert(snap.id.clone(), current_resets);
     }
     save(&state);
 }
@@ -204,13 +251,23 @@ mod tests {
     use crate::providers::{ProviderSnapshot, UsageMetric};
 
     fn snap(id: &str, metrics: Vec<(&str, &str, f64)>) -> ProviderSnapshot {
+        snap_resets(
+            id,
+            metrics
+                .into_iter()
+                .map(|(mid, label, percent)| (mid, label, percent, None))
+                .collect(),
+        )
+    }
+
+    fn snap_resets(id: &str, metrics: Vec<(&str, &str, f64, Option<i64>)>) -> ProviderSnapshot {
         let list: Vec<UsageMetric> = metrics
             .into_iter()
-            .map(|(mid, label, percent)| UsageMetric {
+            .map(|(mid, label, percent, resets_at)| UsageMetric {
                 id: mid.into(),
                 label: label.into(),
                 percent,
-                resets_at: None,
+                resets_at,
             })
             .collect();
         let headline = list.first().map(|m| m.percent);
@@ -239,7 +296,7 @@ mod tests {
                 ("weekly", "Weekly limit", 10.0),
             ],
         );
-        let hits = detect(&prev, &current);
+        let hits = detect(&prev, &HashMap::new(), &current, 0);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, "5-hour window");
         assert_eq!(hits[0].1, 74.0);
@@ -249,8 +306,32 @@ mod tests {
     fn ignores_already_zero_and_missing_history() {
         let prev = HashMap::from([("five_hour".into(), 0.0)]);
         let current = snap("codex", vec![("five_hour", "5-hour window", 0.0)]);
-        assert!(detect(&prev, &current).is_empty());
-        assert!(detect(&HashMap::new(), &current).is_empty());
+        assert!(detect(&prev, &HashMap::new(), &current, 0).is_empty());
+        assert!(detect(&HashMap::new(), &HashMap::new(), &current, 0).is_empty());
+    }
+
+    #[test]
+    fn ignores_drop_at_stored_reset_time() {
+        let reset_at = 1_800_000_000_000;
+        let prev = HashMap::from([("five_hour".into(), 74.0)]);
+        let prev_resets = HashMap::from([("five_hour".into(), reset_at)]);
+        let current = snap_resets(
+            "codex",
+            vec![("five_hour", "5-hour window", 0.0, Some(reset_at + 5 * 60 * 60 * 1000))],
+        );
+        assert!(detect(&prev, &prev_resets, &current, reset_at).is_empty());
+        assert!(detect(&prev, &prev_resets, &current, reset_at + 60_000).is_empty());
+    }
+
+    #[test]
+    fn detects_drop_before_stored_reset_time() {
+        let reset_at = 1_800_000_000_000;
+        let prev = HashMap::from([("five_hour".into(), 74.0)]);
+        let prev_resets = HashMap::from([("five_hour".into(), reset_at)]);
+        let current = snap("codex", vec![("five_hour", "5-hour window", 0.0)]);
+        let hits = detect(&prev, &prev_resets, &current, reset_at - 10 * 60 * 1000);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, "5-hour window");
     }
 
     #[test]
@@ -263,7 +344,7 @@ mod tests {
             "glm",
             vec![("TOKENS_LIMIT-6-1", "Weekly limit", 0.0)],
         );
-        let hits = detect(&prev, &current);
+        let hits = detect(&prev, &HashMap::new(), &current, 0);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].0, "Weekly limit");
         assert_eq!(hits[0].1, 74.0);
@@ -273,8 +354,17 @@ mod tests {
     fn detects_headline_drop_for_any_provider() {
         let prev = HashMap::from([("_headline".into(), 61.0)]);
         let current = snap("cursor", vec![("included", "Included usage", 0.0)]);
-        let hits = detect(&prev, &current);
+        let hits = detect(&prev, &HashMap::new(), &current, 0);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].1, 61.0);
+    }
+
+    #[test]
+    fn ignores_headline_drop_when_first_metric_was_scheduled() {
+        let reset_at = 1_800_000_000_000;
+        let prev = HashMap::from([("_headline".into(), 61.0), ("included".into(), 61.0)]);
+        let prev_resets = HashMap::from([("included".into(), reset_at)]);
+        let current = snap("cursor", vec![("included", "Included usage", 0.0)]);
+        assert!(detect(&prev, &prev_resets, &current, reset_at + 1).is_empty());
     }
 }

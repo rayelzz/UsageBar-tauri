@@ -1,5 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
+use tauri::{AppHandle, Emitter};
+use tauri_plugin_updater::UpdaterExt;
 
 const RELEASES_API: &str = "https://api.github.com/repos/rayelzz/UsageBar-tauri/releases/latest";
 pub const RELEASES_PAGE: &str = "https://github.com/rayelzz/UsageBar-tauri/releases/latest";
@@ -77,6 +79,93 @@ pub fn check() -> Option<UpdateInfo> {
         url,
         has_update: is_newer(&latest, current),
     })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProgress {
+    pub phase: String,
+    pub downloaded: u64,
+    pub total: Option<u64>,
+}
+
+fn latest_json_url() -> Option<String> {
+    let current = env!("CARGO_PKG_VERSION");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(format!("UsageBar/{current}"))
+        .build()
+        .ok()?;
+    let json: Value = client
+        .get(RELEASES_API)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .ok()?
+        .json()
+        .ok()?;
+    json.get("assets")
+        .and_then(|a| a.as_array())
+        .and_then(|arr| {
+            arr.iter().find_map(|asset| {
+                let name = asset.get("name")?.as_str()?;
+                if name == "latest.json" {
+                    asset
+                        .get("browser_download_url")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+        })
+}
+
+pub async fn install(app: AppHandle) -> Result<(), String> {
+    let emit = |phase: &str, downloaded: u64, total: Option<u64>| {
+        let _ = app.emit(
+            "usagebar-update-progress",
+            UpdateProgress {
+                phase: phase.into(),
+                downloaded,
+                total,
+            },
+        );
+    };
+    emit("check", 0, None);
+    let update = match app.updater().map_err(|e| e.to_string())?.check().await {
+        Ok(Some(update)) => update,
+        Ok(None) => return Err("no update".into()),
+        Err(_) => {
+            let url = tauri::async_runtime::spawn_blocking(latest_json_url)
+                .await
+                .ok()
+                .flatten()
+                .ok_or_else(|| "no update".to_string())?;
+            let endpoint = url.parse().map_err(|e| format!("{e}"))?;
+            app.updater_builder()
+                .endpoints(vec![endpoint])
+                .map_err(|e| e.to_string())?
+                .build()
+                .map_err(|e| e.to_string())?
+                .check()
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "no update".to_string())?
+        }
+    };
+    let mut downloaded = 0u64;
+    update
+        .download_and_install(
+            |chunk, total| {
+                downloaded += chunk as u64;
+                emit("download", downloaded, total);
+            },
+            || emit("finish", 0, None),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    emit("restart", 0, None);
+    app.restart();
 }
 
 #[cfg(test)]

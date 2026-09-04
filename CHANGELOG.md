@@ -6,6 +6,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.19 — 2026-09-04
+
+- **Click to install updates.** After **Check for update**, click the new version in the gear menu to download, install, and restart. If install fails, the GitHub download page opens. This build can install later releases; 0.0.18 still needs a manual download.
+- **Reset notices only for surprise resets.** A quota that hits 0% at its advertised reset time no longer shows **Quota reset**. A drop to 0% before that time still does, for every provider.
+- **Smoother hover card.** Switching providers slides the detail card as one piece instead of flashing it away.
+
 ### 0.0.18 — 2026-09-03
 
 - **Transparent style matches the dark bar.** Same large rings, percents, and gear; only the black dock is gone so the desktop shows through. It no longer flashes the full layout and then shrinks to mini icons.
@@ -96,6 +102,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.19 — 2026-09-04
+
+- **点一下安装更新。** 齿轮菜单里 **检测更新** 后，点新版本号即可下载、安装并重启。安装失败会打开 GitHub 下载页。从这一版开始可以自动装后面的版本；0.0.18 仍需手动下载。
+- **只有突然重置才提示。** 到了原先显示的重置时间才归零，不再弹「额度已重置」。没到点却掉到 0% 仍会提示。所有供应商一样。
+- **详情卡更顺。** 换供应商时整块滑过去，不再闪没。
 
 ### 0.0.18 — 2026-09-03
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "UsageBar",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "identifier": "com.rayel.usagebar",
   "build": {
     "frontendDist": "../src"
@@ -84,9 +84,21 @@
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-"
     },
+    "createUpdaterArtifacts": true,
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENFN0I4MjY2QTg4OERDMTAKUldRUTNJaW9ab0o3em5VdDBFdFYrOEF0a1d6dnJVSUkzWTBjc0RCQnVvQ3BiMUpyWFpDRzE4U3UK",
+      "endpoints": [
+        "https://github.com/rayelzz/UsageBar-tauri/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

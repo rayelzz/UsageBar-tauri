@@ -180,6 +180,11 @@ async fn check_update() -> Option<updater::UpdateInfo> {
 }
 
 #[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    updater::install(app).await
+}
+
+#[tauri::command]
 fn open_release_page(app: AppHandle, url: Option<String>) {
     let target = url
         .as_deref()
@@ -448,6 +453,7 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             fetch_usage,
             get_prefs,
@@ -461,6 +467,7 @@ pub fn run() {
             dismiss_reset_notice,
             app_version,
             check_update,
+            install_update,
             open_release_page,
             quit,
             os_name,
