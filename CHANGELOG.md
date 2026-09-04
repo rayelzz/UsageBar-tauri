@@ -6,6 +6,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.20 — 2026-09-04
+
+- **Windows hover card.** 0.0.19 locked the detail card to an estimated height and clipped it. On Windows that squared off the corners, cut off Codex rows, and pulled the bottom-edge card away from the bar. The card now sizes to its content again; switching providers still slides as one piece.
+
 ### 0.0.19 — 2026-09-04
 
 - **Click to install updates.** After **Check for update**, click the new version in the gear menu to download, install, and restart. If install fails, the GitHub download page opens. This build can install later releases; 0.0.18 still needs a manual download.
@@ -102,6 +106,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.20 — 2026-09-04
+
+- **Windows 详情卡。** 0.0.19 把卡片锁成估算高度并裁切，Windows 上圆角变直角、Codex 行被切掉，贴下边时卡片还会离开主条。现在按内容撑开；换供应商仍整块滑过去。
 
 ### 0.0.19 — 2026-09-04
 

@@ -2043,27 +2043,24 @@ function applyTipSlide(s) {
   root.classList.toggle("tip-pin-bottom", s.pin === "bottom");
   const x = s.x;
   const y = s.pin === "bottom" ? 0 : s.y;
-  const nextH = s.h > 0 ? s.h : 0;
   const ease = "cubic-bezier(0.16, 1, 0.3, 1)";
   const placed = mover.dataset.sliding === "1";
   if (s.keep && placed) return;
   if (s.duration > 0 && placed) {
     const cur = readTranslate(mover);
-    const curH = mover.getBoundingClientRect().height;
     mover.style.transition = "none";
     mover.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0)`;
-    if (curH > 0) mover.style.height = `${curH}px`;
+    mover.style.height = "";
     void mover.offsetWidth;
     requestAnimationFrame(() => {
-      mover.style.transition = `transform ${s.duration}ms ${ease}, height ${s.duration}ms ${ease}`;
+      mover.style.transition = `transform ${s.duration}ms ${ease}`;
       mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      if (nextH > 0) mover.style.height = `${nextH}px`;
     });
     return;
   }
   mover.style.transition = "none";
   mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-  if (nextH > 0) mover.style.height = `${nextH}px`;
+  mover.style.height = "";
   mover.dataset.sliding = "1";
 }
 

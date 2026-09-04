@@ -48,9 +48,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
+            - **Windows hover card:** detail cards keep rounded corners and full content; bottom-edge cards stay next to the bar.
             - **Click to install updates:** after Check for update, click the new version to download, install, and restart.
-            - **Reset notices only for surprise resets.** Scheduled 0% rollovers no longer prompt.
-            - **Smoother hover card** when switching providers.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -74,9 +73,8 @@ jobs:
 
             ### 更新说明
 
+            - **Windows 详情卡：** 圆角和完整内容回来了；贴下边时卡片仍贴着主条。
             - **点一下安装更新：** 检测后点新版本号即可下载、安装并重启。
-            - **只有突然重置才提示。** 到点归零不再弹「额度已重置」。
-            - **换供应商时详情卡**整块滑过去。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

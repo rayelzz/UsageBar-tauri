@@ -280,8 +280,7 @@ html.dragging, html.dragging * {
   top: 0;
   width: 280px;
   height: auto;
-  overflow: hidden;
-  will-change: transform, height;
+  will-change: transform;
 }
 
 #tip-root.tip-slide-stage.tip-pin-bottom #tip-mover {
@@ -291,7 +290,7 @@ html.dragging, html.dragging * {
 
 #tip-root.tip-slide-stage .tip {
   width: 280px;
-  height: 100%;
+  height: auto;
 }
 
 .card.tip-card-fade {
