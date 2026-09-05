@@ -279,6 +279,7 @@ mod tests {
             error: None,
             updated_at: 1,
             reset_notice: None,
+            reset_credits: vec![],
         }
     }
 

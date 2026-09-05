@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 ### Features
 
 - The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, and ZCode also list banked reset cards and their expiry at the bottom of the card when the inventory is present
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock)
@@ -57,11 +57,11 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 
 | Provider | Local credential | Official API | Ring / tooltip |
 | --- | --- | --- | --- |
-| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 5-hour + weekly (+ monthly / extra windows if present) |
+| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5-hour + weekly (+ monthly / extra windows if present); banked reset cards and expiry at the bottom of the card |
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` + Grok Bot weekly status | Monthly billing cycle: included + API (+ on-demand / team pool / Grok Bot weekly if present) |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly and/or monthly (+ products / on-demand if present) |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …) |
-| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | All `limits[]` windows (5-hour, weekly, monthly, MCP, …) |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Reset cards come from a separate inventory (or an embedded list on the quota payload); probe failure leaves this blank |
+| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Same reset-card inventory as GLM |
 | **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour + weekly + scoped weekly (+ monthly extra usage if present) |
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |

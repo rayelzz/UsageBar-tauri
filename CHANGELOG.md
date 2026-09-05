@@ -6,6 +6,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.21 — 2026-09-05
+
+- **Reset cards.** Codex, GLM, and ZCode list banked reset cards and expiry at the bottom of the hover card. Display only — they are not redeemed here. Grok Extra Usage / prepaid is not a reset card.
+- **Wider hover card.** Long model names such as GPT-5.3-Codex-Spark stay on one line with the reset time.
+- **Faster refresh.** Visible providers are queried in parallel, so one slow vendor no longer blocks the others.
+
 ### 0.0.20 — 2026-09-04
 
 - **Windows hover card.** 0.0.19 locked the detail card to an estimated height and clipped it. On Windows that squared off the corners, cut off Codex rows, and pulled the bottom-edge card away from the bar. The card now sizes to its content again; switching providers still slides as one piece.
@@ -106,6 +112,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.21 — 2026-09-05
+
+- **重置卡。** Codex、GLM、ZCode 在详情底部列出重置卡和到期时间，只展示、不兑换。Grok 的 Extra Usage / 预付余额不是重置卡。
+- **详情卡加宽。** `GPT-5.3-Codex-Spark` 这类长名称和重置时间可以同一行放下。
+- **刷新更快。** 各供应商并行查询，一家慢不再卡住其余。
 
 ### 0.0.20 — 2026-09-04
 

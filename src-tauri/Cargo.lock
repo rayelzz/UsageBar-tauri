@@ -4731,7 +4731,7 @@ dependencies = [
 
 [[package]]
 name = "usagebar"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "chrono",
  "dirs 6.0.0",

@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 ### 功能
 
 - 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **提供商…** 里勾选并调整顺序
-- 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间按本机系统时区显示具体日期和时刻
+- 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间按本机系统时区显示具体日期和时刻。Codex / GLM / ZCode 在有库存时，详情最下面还会列出重置卡和到期时间
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
 - 两种显示样式：**圆环用量**（完整圆环 + 百分比 + 黑底托）或 **透明图标**（同样的圆环和百分比，无底托）
@@ -57,11 +57,11 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 | 提供商 | 本机凭证 | 官方接口 | 圆环 / 气泡 |
 | --- | --- | --- | --- |
-| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` | 5 小时 + 周额度（及月 / 额外窗口） |
+| **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5 小时 + 周额度（及月 / 额外窗口）；详情底部显示重置卡和到期时间 |
 | **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` + Grok Bot 周额度 | 月度账期：套餐 + API（及按需 / 团队共享 / Grok Bot 周额度） |
 | **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | 周和/或月额度（及产品 / 按需） |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等） |
-| **ZCode** | `~/.zcode/v2/config.json` 里的 Coding Plan Key | 与 GLM 同一套官方配额接口（按 BigModel / Z.ai 选主机） | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等） |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡来自独立 inventory（或 quota 载荷里已带的列表）；探测失败则留空 |
+| **ZCode** | `~/.zcode/v2/config.json` 里的 Coding Plan Key | 与 GLM 同一套官方配额接口（按 BigModel / Z.ai 选主机） | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡与 GLM 同一套 inventory |
 | **Claude** | macOS 钥匙串 `Claude Code-credentials`，或 `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5 小时 + 周额度 + 模型周额度（及月超额） |
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | 各模型剩余比例 + 重置 |

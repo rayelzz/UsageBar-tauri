@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize)]
@@ -27,6 +28,18 @@ pub struct ResetNotice {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ResetCredit {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub granted_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderSnapshot {
     pub id: String,
     pub title: String,
@@ -36,6 +49,8 @@ pub struct ProviderSnapshot {
     pub updated_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reset_notice: Option<ResetNotice>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reset_credits: Vec<ResetCredit>,
 }
 
 fn now_ms() -> i64 {
@@ -154,8 +169,16 @@ fn parse_date_clock(v: &Value, clock: NaiveClock) -> Option<i64> {
 }
 
 fn http_get_json(url: &str, headers: &[(&str, String)]) -> Result<(u16, Value), String> {
+    http_get_json_timeout(url, headers, 20)
+}
+
+fn http_get_json_timeout(
+    url: &str,
+    headers: &[(&str, String)],
+    secs: u64,
+) -> Result<(u16, Value), String> {
     let mut req = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
+        .timeout(std::time::Duration::from_secs(secs))
         .build()
         .map_err(|e| e.to_string())?
         .get(url);
@@ -208,6 +231,7 @@ fn empty(id: &str, title: &str, error: &str) -> ProviderSnapshot {
         error: Some(error.into()),
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -291,7 +315,341 @@ fn pull_codex(auth: &Value) -> Result<ProviderSnapshot, String> {
     if code != 200 {
         return Err("api_error".into());
     }
-    Ok(parse_codex(json))
+    let mut snap = parse_codex(json);
+    snap.reset_credits = pull_codex_reset_credits(&headers);
+    Ok(snap)
+}
+
+fn pull_codex_reset_credits(headers: &[(&str, String)]) -> Vec<ResetCredit> {
+    match http_get_json_timeout(
+        "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits",
+        headers,
+        8,
+    ) {
+        Ok((200, json)) => parse_reset_credits(&json),
+        _ => vec![],
+    }
+}
+
+const CREDIT_LIST_KEYS: &[&str] = &[
+    "credits",
+    "reset_credits",
+    "resetCredits",
+    "reset_cards",
+    "resetCards",
+    "quota_resets",
+    "quotaResets",
+    "items",
+];
+
+static ZHIPU_RESET_CACHE: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+
+const ZHIPU_RESET_PATHS: &[&str] = &[
+    "/api/monitor/usage/quota/reset-credits",
+    "/api/monitor/usage/quota/resets",
+    "/api/monitor/usage/reset-credits",
+    "/api/monitor/usage/quota-reset",
+    "/api/biz/subscription/reset-cards",
+];
+
+fn credit_usable(status: &str) -> bool {
+    !matches!(
+        status.to_ascii_lowercase().as_str(),
+        "used" | "consumed" | "expired" | "redeemed" | "inactive" | "revoked"
+    )
+}
+
+fn reset_credits_root(json: &Value) -> &Value {
+    json.get("data").filter(|v| v.is_object()).unwrap_or(json)
+}
+
+fn credit_list<'a>(root: &'a Value) -> Option<&'a Vec<Value>> {
+    for key in CREDIT_LIST_KEYS {
+        if let Some(arr) = root.get(*key).and_then(|v| v.as_array()) {
+            return Some(arr);
+        }
+    }
+    None
+}
+
+fn has_credit_list_key(root: &Value) -> bool {
+    CREDIT_LIST_KEYS
+        .iter()
+        .any(|key| root.get(*key).map(|v| v.is_array()).unwrap_or(false))
+}
+
+fn available_reset_count(root: &Value) -> usize {
+    root.get("available_count")
+        .or_else(|| root.get("availableCount"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as usize
+}
+
+fn looks_like_money_grants(root: &Value) -> bool {
+    let Some(arr) = credit_list(root) else {
+        return false;
+    };
+    arr.iter().any(|item| {
+        let money = item.get("amount").is_some()
+            || item.get("grant_amount").is_some()
+            || item.get("used_amount").is_some();
+        let reset = item.get("title").is_some()
+            || item.get("cardType").is_some()
+            || item.get("resetType").is_some()
+            || item.get("kind").is_some();
+        money && !reset
+    })
+}
+
+fn looks_like_reset_card(item: &Value) -> bool {
+    item.get("expires_at").is_some()
+        || item.get("expiresAt").is_some()
+        || item.get("expire_at").is_some()
+        || item.get("expireAt").is_some()
+        || item.get("expireTime").is_some()
+        || item.get("expire_time").is_some()
+        || item.get("validTo").is_some()
+        || item.get("valid_to").is_some()
+        || item.get("cardType").is_some()
+        || item.get("resetType").is_some()
+        || item
+            .get("title")
+            .or_else(|| item.get("name"))
+            .or_else(|| item.get("kind"))
+            .and_then(|v| v.as_str())
+            .is_some_and(|s| s.to_ascii_lowercase().contains("reset"))
+}
+
+fn looks_like_reset_inventory(json: &Value) -> bool {
+    let root = reset_credits_root(json);
+    if looks_like_money_grants(root) {
+        return false;
+    }
+    if root.get("limits").is_some() && !has_credit_list_key(root) {
+        return false;
+    }
+    if root.get("creditUsagePercent").is_some() || root.get("config").is_some() {
+        return false;
+    }
+    let dedicated = [
+        "credits",
+        "reset_credits",
+        "resetCredits",
+        "reset_cards",
+        "resetCards",
+        "quota_resets",
+        "quotaResets",
+    ]
+    .iter()
+    .any(|key| root.get(*key).map(|v| v.is_array()).unwrap_or(false));
+    if dedicated {
+        return true;
+    }
+    if available_reset_count(root) > 0 {
+        return true;
+    }
+    root.get("items")
+        .and_then(|v| v.as_array())
+        .is_some_and(|items| items.iter().any(looks_like_reset_card))
+}
+
+fn reset_credit_title(item: &Value) -> String {
+    for key in ["title", "name", "kind"] {
+        if let Some(title) = item.get(key).and_then(|v| v.as_str()).map(str::trim) {
+            if !title.is_empty() {
+                return normalize_reset_title(title);
+            }
+        }
+    }
+    for key in ["cardType", "resetType", "type"] {
+        if let Some(kind) = item.get(key).and_then(|v| v.as_str()).map(str::trim) {
+            if !kind.is_empty()
+                && !matches!(kind, "CREDIT_LIMIT" | "TOKENS_LIMIT" | "TIME_LIMIT")
+            {
+                return normalize_reset_title(kind);
+            }
+        }
+    }
+    "Full reset".into()
+}
+
+fn normalize_reset_title(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower == "full reset" || lower == "full" || trimmed == "完全重置" {
+        return "Full reset".into();
+    }
+    if lower.contains("full") {
+        return trimmed.to_string();
+    }
+    if lower.contains("week") || trimmed.contains('周') {
+        return "Weekly reset".into();
+    }
+    if (lower.contains('5')
+        && (lower.contains("hour") || lower.contains("hr") || lower.contains('h')))
+        || lower.contains("five")
+        || trimmed.contains("5 小时")
+        || trimmed.contains("5小时")
+    {
+        return "5-hour reset".into();
+    }
+    trimmed.to_string()
+}
+
+fn credit_expires_at(item: &Value) -> Option<i64> {
+    item.get("expires_at")
+        .or_else(|| item.get("expiresAt"))
+        .or_else(|| item.get("expire_at"))
+        .or_else(|| item.get("expireAt"))
+        .or_else(|| item.get("expireTime"))
+        .or_else(|| item.get("expire_time"))
+        .or_else(|| item.get("validTo"))
+        .or_else(|| item.get("valid_to"))
+        .and_then(parse_date)
+}
+
+fn parse_reset_credits(json: &Value) -> Vec<ResetCredit> {
+    let root = reset_credits_root(json);
+    let limits_only = root.get("limits").is_some() && !has_credit_list_key(root);
+    let list = credit_list(root).cloned().unwrap_or_default();
+    let now = now_ms();
+    let mut out = Vec::new();
+    for item in list {
+        let status = item
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("available");
+        if !credit_usable(status) {
+            continue;
+        }
+        let expires_at = credit_expires_at(&item);
+        if expires_at.is_some_and(|ms| ms + 60_000 < now) {
+            continue;
+        }
+        out.push(ResetCredit {
+            id: item
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .into(),
+            title: reset_credit_title(&item),
+            status: status.into(),
+            granted_at: item
+                .get("granted_at")
+                .or_else(|| item.get("grantedAt"))
+                .and_then(parse_date),
+            expires_at,
+        });
+    }
+    out.sort_by_key(|c| c.expires_at.unwrap_or(i64::MAX));
+    if out.is_empty() && !limits_only {
+        let n = available_reset_count(root);
+        for i in 0..n.min(6) {
+            out.push(ResetCredit {
+                id: format!("count-{i}"),
+                title: "Full reset".into(),
+                status: "available".into(),
+                granted_at: None,
+                expires_at: None,
+            });
+        }
+    }
+    out.truncate(6);
+    out
+}
+
+fn fetch_reset_inventory(url: &str, headers: &[(&str, String)]) -> Option<Vec<ResetCredit>> {
+    let Ok((200, json)) = http_get_json_timeout(url, headers, 6) else {
+        return None;
+    };
+    if json.get("success").and_then(|v| v.as_bool()) == Some(false) {
+        return None;
+    }
+    if let Some(code) = json.get("code").and_then(|v| v.as_i64()) {
+        if code != 0 && code != 200 {
+            return None;
+        }
+    }
+    if !looks_like_reset_inventory(&json) {
+        return None;
+    }
+    Some(parse_reset_credits(&json))
+}
+
+fn cache_path_for(cache: &Mutex<Vec<(String, String)>>, host: &str) -> Option<String> {
+    cache
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(h, _)| h == host)
+        .map(|(_, path)| path.clone())
+}
+
+fn cache_any_hit(cache: &Mutex<Vec<(String, String)>>) -> Option<String> {
+    cache
+        .lock()
+        .ok()?
+        .iter()
+        .find(|(_, path)| !path.is_empty())
+        .map(|(_, path)| path.clone())
+}
+
+fn cache_remember(cache: &Mutex<Vec<(String, String)>>, host: &str, path: &str) {
+    let Ok(mut rows) = cache.lock() else {
+        return;
+    };
+    if let Some(entry) = rows.iter_mut().find(|(h, _)| h == host) {
+        entry.1 = path.into();
+    } else {
+        rows.push((host.into(), path.into()));
+    }
+}
+
+fn pull_reset_credits_from_paths(
+    cache: &Mutex<Vec<(String, String)>>,
+    bases: &[&str],
+    headers: &[(&str, String)],
+    paths: &[&str],
+) -> Vec<ResetCredit> {
+    let shared_hit = cache_any_hit(cache);
+    for base in bases {
+        let known = cache_path_for(cache, base);
+        if known.as_deref() == Some("") {
+            if let Some(path) = shared_hit.as_deref() {
+                if let Some(credits) = fetch_reset_inventory(&format!("{base}{path}"), headers) {
+                    cache_remember(cache, base, path);
+                    return credits;
+                }
+            }
+            continue;
+        }
+        let try_path = known
+            .filter(|path| !path.is_empty())
+            .or_else(|| shared_hit.clone());
+        if let Some(path) = try_path {
+            if let Some(credits) = fetch_reset_inventory(&format!("{base}{path}"), headers) {
+                cache_remember(cache, base, &path);
+                return credits;
+            }
+        }
+    }
+    for base in bases {
+        if cache_path_for(cache, base).as_deref() == Some("") {
+            continue;
+        }
+        for path in paths {
+            if let Some(credits) = fetch_reset_inventory(&format!("{base}{path}"), headers) {
+                cache_remember(cache, base, path);
+                return credits;
+            }
+        }
+        cache_remember(cache, base, "");
+    }
+    vec![]
+}
+
+fn pull_zhipu_reset_credits(host: &str, headers: &[(&str, String)]) -> Vec<ResetCredit> {
+    pull_reset_credits_from_paths(&ZHIPU_RESET_CACHE, &[host], headers, ZHIPU_RESET_PATHS)
 }
 
 fn parse_codex(json: Value) -> ProviderSnapshot {
@@ -340,6 +698,7 @@ fn parse_codex(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -678,6 +1037,7 @@ fn parse_cursor(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -893,6 +1253,7 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -1004,7 +1365,11 @@ fn fetch_zhipu_quota(id: &str, title: &str, key: &str, hosts: &[&str]) -> Provid
     for host in hosts {
         let url = format!("{host}/api/monitor/usage/quota/limit");
         if let Ok((200, json)) = http_get_json(&url, &headers) {
-            return parse_glm(id, title, json);
+            let mut snap = parse_glm(id, title, json);
+            if snap.reset_credits.is_empty() {
+                snap.reset_credits = pull_zhipu_reset_credits(host, &headers);
+            }
+            return snap;
         }
     }
     empty(id, title, "login_not_found")
@@ -1039,6 +1404,7 @@ fn glm_item_percent(item: &Value) -> Option<f64> {
 }
 
 fn parse_glm(id: &str, title: &str, json: Value) -> ProviderSnapshot {
+    let reset_credits = parse_reset_credits(&json);
     let data = json.get("data").cloned().unwrap_or(json);
     let limits = data
         .get("limits")
@@ -1095,6 +1461,7 @@ fn parse_glm(id: &str, title: &str, json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits,
     }
 }
 
@@ -1218,15 +1585,35 @@ pub fn fetch_selected_each(
     ids: &[String],
     mut on_each: impl FnMut(&ProviderSnapshot),
 ) -> Vec<ProviderSnapshot> {
-    let mut snaps = Vec::new();
-    for id in crate::prefs::normalize_visible(ids) {
-        let mut one = vec![fetch_one(&id)];
-        crate::usage_state::apply(&mut one);
-        let snap = one.remove(0);
-        on_each(&snap);
-        snaps.push(snap);
+    let ids = crate::prefs::normalize_visible(ids);
+    if ids.is_empty() {
+        return vec![];
     }
-    snaps
+    std::thread::scope(|scope| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        for (index, id) in ids.iter().cloned().enumerate() {
+            let tx = tx.clone();
+            scope.spawn(move || {
+                let _ = tx.send((index, fetch_one(&id)));
+            });
+        }
+        drop(tx);
+        let mut slots: Vec<Option<ProviderSnapshot>> = vec![None; ids.len()];
+        for (index, snap) in rx {
+            let mut one = vec![snap];
+            crate::usage_state::apply(&mut one);
+            let snap = one.remove(0);
+            on_each(&snap);
+            if let Some(slot) = slots.get_mut(index) {
+                *slot = Some(snap);
+            }
+        }
+        slots
+            .into_iter()
+            .enumerate()
+            .map(|(i, snap)| snap.unwrap_or_else(|| empty(&ids[i], "Usage", "api_error")))
+            .collect()
+    })
 }
 
 fn fetch_one(id: &str) -> ProviderSnapshot {
@@ -1508,6 +1895,7 @@ fn parse_claude(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -1659,6 +2047,7 @@ fn parse_copilot(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -1806,6 +2195,7 @@ fn fetch_gemini() -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        reset_credits: vec![],
     }
 }
 
@@ -1903,6 +2293,7 @@ fn fetch_antigravity() -> ProviderSnapshot {
                 metrics,
                 updated_at: now_ms(),
                 reset_notice: None,
+                reset_credits: vec![],
             };
         }
     }
@@ -2098,6 +2489,7 @@ mod tests {
         assert_eq!(snap.headline_percent, Some(40.0));
         assert_eq!(snap.metrics[0].label, "5-hour window");
         assert_eq!(snap.metrics[1].label, "Weekly limit");
+        assert!(snap.reset_credits.is_empty());
     }
 
     #[test]
@@ -2133,6 +2525,7 @@ mod tests {
         assert_eq!(snap.metrics[1].label, "Weekly limit");
         assert_eq!(snap.metrics[1].percent, 25.0);
         assert!(snap.metrics[1].resets_at.is_some());
+        assert!(snap.reset_credits.is_empty());
     }
 
     #[test]
@@ -2173,6 +2566,7 @@ mod tests {
         assert_eq!(snap.metrics[1].label, "Monthly limit");
         assert_eq!(snap.metrics[2].label, "MCP tools");
         assert_eq!(snap.headline_percent, Some(8.0));
+        assert!(snap.reset_credits.is_empty());
     }
 
     #[test]
@@ -2261,6 +2655,171 @@ mod tests {
         assert_eq!(snap.metrics[2].label, "Extra · 5-hour window");
         assert_eq!(snap.metrics[2].percent, 0.0);
         assert_eq!(snap.headline_percent, Some(12.0));
+        assert!(snap.reset_credits.is_empty());
+    }
+
+    #[test]
+    fn codex_reset_credits_keep_available_and_drop_used() {
+        let credits = parse_reset_credits(&json!({
+            "available_count": 2,
+            "credits": [
+                {
+                    "id": "a",
+                    "title": "Full reset (Weekly + 5 hr)",
+                    "status": "available",
+                    "granted_at": "2026-09-01T00:16:00Z",
+                    "expires_at": "2026-09-21T00:16:00Z"
+                },
+                {
+                    "title": "Full reset",
+                    "status": "used",
+                    "expires_at": "2026-10-04T05:34:00Z"
+                },
+                {
+                    "name": "Full reset",
+                    "status": "active",
+                    "expiresAt": "2026-10-04T05:34:00Z"
+                }
+            ]
+        }));
+        assert_eq!(credits.len(), 2);
+        assert_eq!(credits[0].title, "Full reset (Weekly + 5 hr)");
+        assert_eq!(credits[1].title, "Full reset");
+        assert!(credits[0].expires_at.is_some());
+        assert!(credits[1].expires_at.is_some());
+        assert!(credits[0].expires_at.unwrap() < credits[1].expires_at.unwrap());
+    }
+
+    #[test]
+    fn codex_reset_credits_count_only() {
+        let credits = parse_reset_credits(&json!({
+            "available_count": 2,
+            "credits": []
+        }));
+        assert_eq!(credits.len(), 2);
+        assert_eq!(credits[0].title, "Full reset");
+        assert!(credits[0].expires_at.is_none());
+    }
+
+    #[test]
+    fn reset_credits_keep_usable_and_drop_used_or_expired() {
+        let credits = parse_reset_credits(&json!({
+            "data": {
+                "reset_cards": [
+                    {
+                        "id": "a",
+                        "cardType": "FIVE_HOUR",
+                        "status": "available",
+                        "expireAt": "2026-10-04T05:34:00Z"
+                    },
+                    {
+                        "id": "b",
+                        "resetType": "weekly",
+                        "status": "consumed",
+                        "expireTime": "2026-12-01T00:00:00Z"
+                    },
+                    {
+                        "id": "c",
+                        "title": "Weekly reset",
+                        "status": "available",
+                        "validTo": "2020-01-01T00:00:00Z"
+                    },
+                    {
+                        "id": "d",
+                        "cardType": "full",
+                        "status": "available",
+                        "expireTime": "2026-12-01T00:00:00Z"
+                    }
+                ]
+            }
+        }));
+        assert_eq!(credits.len(), 2);
+        assert_eq!(credits[0].title, "5-hour reset");
+        assert_eq!(credits[1].title, "Full reset");
+        assert!(credits[0].expires_at.is_some());
+        assert!(credits[1].expires_at.is_some());
+        assert!(credits[0].expires_at.unwrap() < credits[1].expires_at.unwrap());
+    }
+
+    #[test]
+    fn reset_credits_count_only_without_details() {
+        let credits = parse_reset_credits(&json!({
+            "available_count": 3
+        }));
+        assert_eq!(credits.len(), 3);
+        assert_eq!(credits[0].title, "Full reset");
+        assert!(credits[0].expires_at.is_none());
+    }
+
+    #[test]
+    fn parse_glm_fills_embedded_reset_credits() {
+        let snap = parse_glm(
+            "glm",
+            "GLM Usage",
+            json!({
+                "data": {
+                    "limits": [
+                        {
+                            "type": "CREDIT_LIMIT",
+                            "unit": 3,
+                            "number": 5,
+                            "percentage": 10.0
+                        }
+                    ],
+                    "resetCredits": [
+                        {
+                            "id": "z1",
+                            "cardType": "WEEKLY",
+                            "status": "available",
+                            "expireAt": "2026-12-01T00:00:00Z"
+                        }
+                    ]
+                }
+            }),
+        );
+        assert_eq!(snap.metrics.len(), 1);
+        assert_eq!(snap.reset_credits.len(), 1);
+        assert_eq!(snap.reset_credits[0].title, "Weekly reset");
+        assert!(snap.reset_credits[0].expires_at.is_some());
+    }
+
+    #[test]
+    fn reset_inventory_rejects_grok_billing_and_money_grants() {
+        assert!(!looks_like_reset_inventory(&json!({
+            "creditUsagePercent": 12.0,
+            "config": { "currentPeriod": {} }
+        })));
+        assert!(!looks_like_reset_inventory(&json!({
+            "credits": [
+                {
+                    "amount": 10.0,
+                    "used_amount": 1.0,
+                    "expire_at": "2027-01-01T00:00:00Z"
+                }
+            ]
+        })));
+        assert!(!looks_like_reset_inventory(&json!({
+            "data": {
+                "limits": [
+                    {
+                        "type": "CREDIT_LIMIT",
+                        "unit": 3,
+                        "number": 5,
+                        "percentage": 10.0
+                    }
+                ]
+            }
+        })));
+        assert!(looks_like_reset_inventory(&json!({
+            "available_count": 2,
+            "credits": []
+        })));
+        assert!(!looks_like_reset_inventory(&json!({
+            "code": 404,
+            "success": false,
+            "data": null,
+            "msg": "not found"
+        })));
     }
 
     #[test]

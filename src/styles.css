@@ -261,13 +261,14 @@ html.dragging, html.dragging * {
 
 .card {
   position: relative;
-  width: 260px;
+  width: 320px;
   box-sizing: border-box;
   padding: 14px;
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.94);
   color: #fff;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  overflow: visible;
 }
 
 #tip-root.tip-slide-stage {
@@ -278,7 +279,7 @@ html.dragging, html.dragging * {
   position: absolute;
   left: 0;
   top: 0;
-  width: 280px;
+  width: 340px;
   height: auto;
   will-change: transform;
 }
@@ -289,7 +290,7 @@ html.dragging, html.dragging * {
 }
 
 #tip-root.tip-slide-stage .tip {
-  width: 280px;
+  width: 340px;
   height: auto;
 }
 
@@ -361,15 +362,73 @@ html.dragging, html.dragging * {
 .metric { margin-bottom: 10px; }
 .metric:last-child { margin-bottom: 0; }
 
+.credit-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.credit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.credit-count {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.credit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.credit-row:last-child { margin-bottom: 0; }
+
+.credit-title {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.credit-exp {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
 .metric-top {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 8px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.72);
 }
 
-.metric-reset { font-size: 10px; color: rgba(255, 255, 255, 0.4); }
+.metric-top > span:first-child {
+  white-space: nowrap;
+}
+
+.metric-reset {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
 
 .track {
   height: 3px;

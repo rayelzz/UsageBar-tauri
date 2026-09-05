@@ -48,8 +48,9 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Windows hover card:** detail cards keep rounded corners and full content; bottom-edge cards stay next to the bar.
-            - **Click to install updates:** after Check for update, click the new version to download, install, and restart.
+            - **Reset cards:** Codex, GLM, and ZCode show banked reset cards and expiry on the hover card (display only).
+            - **Wider hover card:** long model names stay on one line.
+            - **Faster refresh:** providers are queried in parallel.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -73,8 +74,9 @@ jobs:
 
             ### 更新说明
 
-            - **Windows 详情卡：** 圆角和完整内容回来了；贴下边时卡片仍贴着主条。
-            - **点一下安装更新：** 检测后点新版本号即可下载、安装并重启。
+            - **重置卡：** Codex / GLM / ZCode 详情底部显示重置卡和到期时间（只展示）。
+            - **详情卡加宽：** 长模型名不再换行。
+            - **刷新更快：** 各供应商并行查询。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

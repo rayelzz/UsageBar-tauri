@@ -180,6 +180,12 @@ function t() {
         off: "关闭",
         noData: "暂无数据",
         querying: "查询中",
+        resetCards: "重置卡",
+        resetCardCount: (n) => `${n} 张`,
+        resetCardAvailable: "可用",
+        resetCardFull: "完全重置",
+        resetCardFiveHour: "5 小时重置",
+        resetCardWeekly: "周额度重置",
       }
     : {
         refreshNow: "Refresh now",
@@ -226,6 +232,12 @@ function t() {
         off: "Off",
         noData: "No data",
         querying: "Checking…",
+        resetCards: "Reset cards",
+        resetCardCount: (n) => (n === 1 ? "1 card" : `${n} cards`),
+        resetCardAvailable: "Available",
+        resetCardFull: "Full reset",
+        resetCardFiveHour: "5-hour reset",
+        resetCardWeekly: "Weekly reset",
       };
 }
 
@@ -262,8 +274,8 @@ function slotCount() {
 }
 
 function emptySnap(id, loading = false) {
-  if (!id) return { id: "", title: "", headlinePercent: null, metrics: [], error: null, loading: false };
-  return { id, title: usageTitle(id), headlinePercent: null, metrics: [], error: null, loading };
+  if (!id) return { id: "", title: "", headlinePercent: null, metrics: [], resetCredits: [], error: null, loading: false };
+  return { id, title: usageTitle(id), headlinePercent: null, metrics: [], resetCredits: [], error: null, loading };
 }
 
 function pendingSnap(id) {
@@ -445,6 +457,49 @@ function formatReset(ms) {
   const mon = localParts(ms, { month: "short" }).month;
   const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
   return `Resets ${date}, ${hh}:${mm}`;
+}
+
+function resetCreditsOf(snap) {
+  const list = snap?.resetCredits;
+  return Array.isArray(list) ? list : [];
+}
+
+function localizeResetCreditTitle(title) {
+  const raw = String(title || "Full reset").trim();
+  if (!raw || /full reset/i.test(raw) || raw === "完全重置") return t().resetCardFull;
+  if (
+    /5[- ]?h(our)?/i.test(raw) ||
+    /five[_\s-]?hour/i.test(raw) ||
+    raw === "FIVE_HOUR" ||
+    raw === "5 小时重置" ||
+    raw === "5小时重置"
+  ) {
+    return t().resetCardFiveHour;
+  }
+  if (/week/i.test(raw) || raw.includes("周额度") || raw === "周") {
+    return t().resetCardWeekly;
+  }
+  return raw;
+}
+
+function formatCreditExpiry(ms) {
+  if (ms == null) return t().resetCardAvailable;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return t().resetCardAvailable;
+  const p = localParts(ms);
+  const nowYear = new Intl.DateTimeFormat("en-US", { year: "numeric" }).format(new Date());
+  const showYear = p.year !== nowYear;
+  const hh = String(p.hour).padStart(2, "0");
+  const mm = String(p.minute).padStart(2, "0");
+  if (isZh()) {
+    const date = showYear
+      ? `${p.year}年${Number(p.month)}月${Number(p.day)}日`
+      : `${Number(p.month)}月${Number(p.day)}日`;
+    return `到期 ${date} ${hh}:${mm}`;
+  }
+  const mon = localParts(ms, { month: "short" }).month;
+  const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
+  return `Expires ${date}, ${hh}:${mm}`;
 }
 
 function glyph(id, size) {
@@ -809,7 +864,10 @@ function renderBar() {
 }
 
 const TIP_SLIDE_MS = 400;
+const TIP_W = 340;
 const TIP_TRAVEL_H = 360;
+const TIP_H_CAP = 640;
+const TIP_FIT_PAD = 10;
 let tipReadyResolvers = [];
 
 function tipHeight(snap) {
@@ -818,10 +876,14 @@ function tipHeight(snap) {
   if (snap?.resetNotice) {
     h += 36;
   }
+  const credits = resetCreditsOf(snap);
+  if (credits.length) {
+    h += 34 + credits.length * 36;
+  }
   if (prefs.edge === "top" || prefs.edge === "bottom") {
     h += 12;
   }
-  return Math.min(Math.max(h, 100), 360);
+  return Math.min(Math.max(h, 100), TIP_H_CAP);
 }
 
 function tipArrow() {
@@ -873,8 +935,8 @@ function tipTargetFrame(frame, opts = {}) {
   if (!snap && !opts.update) return null;
   const idx = Math.max(0, snaps.findIndex((s) => s.id === id));
   const count = Math.max(snaps.length, 1);
-  const th = opts.update ? 52 : opts.travel ? TIP_TRAVEL_H : tipHeight(snap);
-  const tw = opts.update ? 188 : 280;
+  const th = opts.update ? 52 : opts.travel ? Math.max(TIP_TRAVEL_H, tipHeight(snap)) : tipHeight(snap);
+  const tw = opts.update ? 188 : TIP_W;
   const pad = padding(prefs.edge);
   const start = isVertical(prefs.edge) ? pad.t : pad.l;
   const end = isVertical(prefs.edge) ? pad.b : pad.r;
@@ -926,19 +988,53 @@ function cancelTipSlide() {
   tipSlideGen += 1;
 }
 
-function resolveTipReady() {
+function resolveTipReady(payload) {
   const q = tipReadyResolvers.splice(0);
-  q.forEach((fn) => fn());
+  q.forEach((fn) => fn(payload || null));
 }
 
 function waitTipReady() {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, 64);
-    tipReadyResolvers.push(() => {
+    let done = false;
+    const finish = (payload) => {
+      if (done) return;
+      done = true;
+      resolve(payload || null);
+    };
+    const timer = setTimeout(() => finish(null), 140);
+    tipReadyResolvers.push((payload) => {
       clearTimeout(timer);
-      resolve();
+      finish(payload);
     });
   });
+}
+
+function measuredTipHeight() {
+  const tip = document.getElementById("tip");
+  if (!tip) return 0;
+  return Math.ceil(tip.getBoundingClientRect().height);
+}
+
+function emitTipReady() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      api()
+        .event.emit("usagebar-tip-ready", { h: measuredTipHeight() })
+        .catch(() => {});
+    });
+  });
+}
+
+async function growTipStage(tipWin, needH) {
+  if (!tipWin || !tipStageFrame) return;
+  const want = Math.min(Math.ceil(needH) + TIP_FIT_PAD, TIP_H_CAP);
+  if (want <= tipStageFrame.h + 1) return;
+  const next = { ...tipStageFrame, h: want };
+  if (prefs.edge === "bottom") {
+    next.y = tipStageFrame.y + tipStageFrame.h - next.h;
+  }
+  await placeTipWindow(tipWin, next);
+  tipStageFrame = next;
 }
 
 async function placeTipWindow(tipWin, rect) {
@@ -985,7 +1081,9 @@ async function showUsageTip(barFrame, opts = {}) {
   });
   const ready = waitTipReady();
   await api().event.emit("usagebar-tip", { ...payload, slide });
-  if (first) await ready;
+  const measured = await ready;
+  if (gen !== tipSlideGen) return;
+  if (measured?.h) await growTipStage(tipWin, measured.h);
   if (gen !== tipSlideGen) return;
   let visible = false;
   try {
@@ -1008,10 +1106,13 @@ async function renderTip(opts = {}) {
     return;
   }
   if (tipStageFrame && tipSlideFrame && !resetToastId && !opts.forceSize) {
+    const ready = waitTipReady();
     await api().event.emit("usagebar-tip", {
       ...payload,
       slide: tipSlideFrom(tipSlideFrame, tipStageFrame, { duration: 0, keep: true }),
     });
+    const measured = await ready;
+    if (measured?.h) await growTipStage(tipWin, measured.h);
     return;
   }
   await api().event.emit("usagebar-tip", payload);
@@ -1021,7 +1122,7 @@ async function renderTip(opts = {}) {
   } catch {
     /* older runtime */
   }
-  await tipWin.setSize(new (LogicalSize())(280, tipHeight(snap)));
+  await tipWin.setSize(new (LogicalSize())(TIP_W, tipHeight(snap)));
 }
 
 async function resolveScreen(list, point) {
@@ -1944,7 +2045,7 @@ async function startBar() {
   await api().event.listen("usagebar-over", (e) => {
     setBarHot(!!e.payload);
   });
-  await api().event.listen("usagebar-tip-ready", () => resolveTipReady());
+  await api().event.listen("usagebar-tip-ready", (e) => resolveTipReady(e.payload));
   await api().event.listen("usagebar-hover", (e) => {
     if (menuOpen || dragging) {
       if (hovered) setHovered(null).catch((err) => console.error(err));
@@ -2100,6 +2201,20 @@ function paintUsageCard(payload) {
   const close = notice
     ? `<button type="button" class="tip-close" data-close-reset="${snap.id}" aria-label="Close">×</button>`
     : "";
+  const credits = resetCreditsOf(snap);
+  const creditsHtml = !credits.length
+    ? ""
+    : `<div class="credit-block">
+      <div class="credit-head">${t().resetCards}<span class="credit-count">${t().resetCardCount(credits.length)}</span></div>
+      ${credits
+        .map(
+          (c) => `<div class="credit-row">
+            <span class="credit-title">${localizeResetCreditTitle(c.title)}</span>
+            <span class="credit-exp">${formatCreditExpiry(c.expiresAt)}</span>
+          </div>`
+        )
+        .join("")}
+    </div>`;
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
   card.classList.remove("update-only", "menu-card", "tip-card-fade");
@@ -2108,7 +2223,7 @@ function paintUsageCard(payload) {
     <div class="card-head">
       <svg class="mini glyph" viewBox="${spec.viewBox}">${spec.d.map((p) => `<path ${rule} d="${p}"/>`).join("")}</svg>
       <div class="title">${usageTitle(snap.id)}</div>
-    </div>${banner}${metricsHtml}`;
+    </div>${banner}${metricsHtml}${creditsHtml}`;
   if (payload.fade) {
     void card.offsetWidth;
     card.classList.add("tip-card-fade");
@@ -2165,7 +2280,7 @@ function paintTip(payload) {
     }
     applyTipSlide(payload.slide);
     paintUsageCard({ ...payload, fade: !!payload.slide.fade });
-    api().event.emit("usagebar-tip-ready").catch(() => {});
+    emitTipReady();
     return;
   }
   resetTipLayout();
