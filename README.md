@@ -17,23 +17,25 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - [Privacy](#privacy)
 - [License](#license)
 
+| Ring usage | Transparent icons |
+| --- | --- |
+| <img src="docs/bar-dark.png" alt="Dark ring usage bar" width="96" /> | <img src="docs/bar-transparent.png" alt="Transparent icon style" width="72" /> |
+
 | Codex | Cursor |
 | --- | --- |
-| <img src="docs/codex-usage.png" alt="Codex usage tooltip" width="280" /> | <img src="docs/cursor-usage.png" alt="Cursor usage tooltip" width="280" /> |
+| <img src="docs/en-codex.png" alt="Codex usage tooltip" width="280" /> | <img src="docs/en-cursor.png" alt="Cursor usage tooltip" width="280" /> |
 
 | Grok | GLM |
 | --- | --- |
-| <img src="docs/grok-usage.png" alt="Grok usage tooltip" width="280" /> | <img src="docs/glm-usage.png" alt="GLM usage tooltip" width="280" /> |
+| <img src="docs/en-grok.png" alt="Grok usage tooltip" width="280" /> | <img src="docs/en-glm.png" alt="GLM usage tooltip" width="280" /> |
 
 | Quota reset |
 | --- |
 | <img src="docs/reset-en.gif" alt="Quota reset" width="280" /> |
 
-<p>
-  <img src="docs/settings-en.png" alt="Providers window and menu" width="480" />
-  &nbsp;
-  <img src="docs/style-icons.png" alt="Transparent icon style" width="220" />
-</p>
+| Settings | Providers |
+| --- | --- |
+| <img src="docs/en-settings.png" alt="Settings menu" width="220" /> | <img src="docs/en-providers.png" alt="Providers window" width="300" /> |
 
 ### Features
 

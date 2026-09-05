@@ -17,23 +17,25 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 - [隐私](#隐私)
 - [许可证](#许可证)
 
+| 圆环用量 | 透明图标 |
+| --- | --- |
+| <img src="docs/bar-dark.png" alt="圆环用量主条" width="96" /> | <img src="docs/bar-transparent.png" alt="透明图标样式" width="72" /> |
+
 | Codex | Cursor |
 | --- | --- |
-| <img src="docs/codex-usage.png" alt="Codex 用量" width="280" /> | <img src="docs/cursor-usage.png" alt="Cursor 用量" width="280" /> |
+| <img src="docs/zh-codex.png" alt="Codex 用量" width="280" /> | <img src="docs/zh-cursor.png" alt="Cursor 用量" width="280" /> |
 
 | Grok | GLM |
 | --- | --- |
-| <img src="docs/grok-usage.png" alt="Grok 用量" width="280" /> | <img src="docs/glm-usage.png" alt="GLM 用量" width="280" /> |
+| <img src="docs/zh-grok.png" alt="Grok 用量" width="280" /> | <img src="docs/zh-glm.png" alt="GLM 用量" width="280" /> |
 
 | 额度已重置 |
 | --- |
 | <img src="docs/reset-zh.gif" alt="额度已重置" width="280" /> |
 
-<p>
-  <img src="docs/settings-zh.png" alt="提供商窗口和菜单" width="480" />
-  &nbsp;
-  <img src="docs/style-icons.png" alt="透明图标样式" width="220" />
-</p>
+| 设置 | 提供商 |
+| --- | --- |
+| <img src="docs/zh-settings.png" alt="设置菜单" width="220" /> | <img src="docs/zh-providers.png" alt="提供商窗口" width="300" /> |
 
 ### 功能
 
