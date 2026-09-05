@@ -6,16 +6,7 @@ A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **
 
 macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
-### Contents
-
-- [Changelog](CHANGELOG.md)
-- [Features](#features)
-- [How usage and reset time are read](#how-usage-and-reset-time-are-read)
-- [Install](#install)
-- [Menu](#menu)
-- [FAQ](#faq)
-- [Privacy](#privacy)
-- [License](#license)
+[Changelog](CHANGELOG.md) · [Features](#features) · [How usage and reset time are read](#how-usage-and-reset-time-are-read) · [Install](#install) · [Menu](#menu) · [FAQ](#faq) · [Privacy](#privacy) · [License](#license)
 
 | Ring usage | Transparent icons |
 | --- | --- |
