@@ -21,6 +21,18 @@ html.dragging, html.dragging * {
   height: 100%;
 }
 
+html.update #tip-root,
+html.update #tip-mover {
+  width: 100%;
+  height: 100%;
+}
+
+html.update .tip {
+  width: 100%;
+  height: auto;
+  align-items: flex-start;
+}
+
 #tip-mover {
   width: 100%;
   height: 100%;
@@ -238,6 +250,78 @@ html.dragging, html.dragging * {
   background: rgba(77, 219, 107, 0.16);
 }
 
+.card.update-notes .tip-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.update-notes-body {
+  margin: 0 0 10px;
+}
+
+.update-notes-list {
+  margin: 0 0 8px;
+  padding: 0 0 0 18px;
+}
+
+.update-notes-list li {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.update-notes-list li:last-child {
+  margin-bottom: 0;
+}
+
+.update-notes-p {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.update-notes-p:last-child {
+  margin-bottom: 0;
+}
+
+.update-notes-link {
+  color: rgb(150, 235, 168);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.update-notes-link:hover {
+  color: rgb(180, 245, 196);
+}
+
+.update-notes code {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.update-install {
+  display: block;
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(77, 219, 107, 0.35);
+  border-radius: 10px;
+  background: rgba(77, 219, 107, 0.16);
+  color: rgb(150, 235, 168);
+  font: 650 13px/1.35 ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif;
+  text-align: center;
+  cursor: pointer;
+}
+
+.update-install:hover {
+  background: rgba(77, 219, 107, 0.28);
+}
+
 .glyph { fill: #fff; }
 
 .dock-svg {
@@ -410,6 +494,26 @@ html.dragging, html.dragging * {
   white-space: nowrap;
 }
 
+.credit-exp.warn { color: rgb(219, 209, 41); }
+.credit-exp.urgent { color: rgb(242, 82, 82); }
+
+.credit-soon-item { margin-bottom: 8px; }
+.credit-soon-item:last-child { margin-bottom: 0; }
+
+.credit-soon-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.credit-left {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+}
+
 .metric-top {
   display: flex;
   justify-content: space-between;
@@ -452,6 +556,7 @@ html.dragging, html.dragging * {
 }
 
 .pointer {
+  display: none;
   width: 0;
   height: 0;
   border-style: solid;

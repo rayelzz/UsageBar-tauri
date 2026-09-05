@@ -31,15 +31,16 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 ### Features
 
 - The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, ZCode, and Grok also list banked reset cards and their expiry at the bottom of the card when the inventory is present
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, ZCode, and Grok also list banked reset cards and their expiry at the bottom of the card when the inventory is present. Expiry text turns yellow when a card has ≤ 1 day left, red when ≤ 8 hours
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
+- A reset card also pulses that icon and pops a 30-second “expiring” card (1 day before, then once at 5 / 4 / 3 / 2 / 1 hours). Hover the slot for the usual usage card, or click **×**; the same milestone does not repeat
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock)
 - Display value: **Used quota** (default) or **Remaining quota**. Rings, percents, and the detail card follow the choice; colors still follow remaining (red ≤ 20%, yellow ≤ 40%, green otherwise)
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
 - A detached settings gear sits past the end of the bar (the original bar shape is unchanged). Hover to show it; click to open the same dark menu as **UB**. Click outside the panel to close
-- Automatic update checks are **off** by default. The gear menu shows the current version and **Check for update**; after a check, click the latest version to download, install, and restart. If install fails, the GitHub download page opens. If auto-check is on and you click the update bubble, that version is skipped until a later release
+- Automatic update checks are **off** by default. Opening the gear menu still checks once; a new version pops a separate notes window from the GitHub release (**What’s new** / **更新说明**, matching the app language) beside the settings menu. **×** skips that version; hovering a slot hides the card. The gear menu still has the current version and **Check for update**; after a check, click the latest version or **Install** to download, install, and restart. If install fails, the GitHub download page opens
 - Status / tray item is the text **UB** (macOS). Click the gear, right-click the bar, or click **UB** for the same menu
 - Auto-refresh every 60 seconds (configurable)
 - Official brand icons; red when remaining ≤ 20% (used ≥ 80%), yellow when remaining ≤ 40% (used ≥ 60%), green otherwise
@@ -114,7 +115,7 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - Display value: Used quota / Remaining quota
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
 - **Providers…**: choose 1–10 providers and their order. The bar shortens or lengthens to match; no empty **—** slots. The same window also sets the display value.
-- Current version, **Check for update**, latest version (click to install), and auto-check (off by default); open at login; quit
+- Current version, **Check for update**, latest version (click to install), and auto-check (off by default). A new version pops a separate notes window beside the menu; open at login; quit
 
 All settings — edge, position, provider list and order, display style, display value, language, refresh, lock, click-through, update prefs — are stored at `~/.usagebar/prefs.json` and survive restarts and app updates.
 

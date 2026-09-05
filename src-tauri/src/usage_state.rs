@@ -1,9 +1,16 @@
-use crate::providers::{ProviderSnapshot, ResetNotice};
+use crate::providers::{CreditNotice, CreditNoticeItem, ProviderSnapshot, ResetCredit, ResetNotice};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static STATE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_state() -> std::sync::MutexGuard<'static, ()> {
+    STATE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 const USED_MIN: f64 = 1.0;
 const ZERO_MAX: f64 = 0.5;
@@ -11,6 +18,9 @@ const ALERT_MS: i64 = 6 * 60 * 60 * 1000;
 /// Treat a drop as the advertised cycle if it happens at or after the stored
 /// reset time, or up to this early (poll / clock skew).
 const SCHEDULED_EARLY_MS: i64 = 3 * 60 * 1000;
+const HOUR_MS: i64 = 60 * 60 * 1000;
+const DAY_MS: i64 = 24 * HOUR_MS;
+const CREDIT_MILESTONES: [&str; 6] = ["1d", "h5", "h4", "h3", "h2", "h1"];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +31,10 @@ struct UsageState {
     last_resets: HashMap<String, HashMap<String, i64>>,
     #[serde(default)]
     alerts: HashMap<String, StoredAlert>,
+    #[serde(default)]
+    credit_fired: HashMap<String, i64>,
+    #[serde(default)]
+    credit_alerts: HashMap<String, StoredCreditAlert>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +42,13 @@ struct UsageState {
 struct StoredAlert {
     from_percent: f64,
     labels: Vec<String>,
+    at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredCreditAlert {
+    items: Vec<CreditNoticeItem>,
     at: i64,
 }
 
@@ -57,8 +78,20 @@ fn save(state: &UsageState) {
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    if let Ok(text) = serde_json::to_string_pretty(state) {
-        let _ = fs::write(path, text);
+    let Ok(text) = serde_json::to_string_pretty(state) else {
+        return;
+    };
+    let tmp = path.with_extension("json.tmp");
+    if fs::write(&tmp, &text).is_err() {
+        let _ = fs::write(&path, text);
+        return;
+    }
+    if fs::rename(&tmp, &path).is_err() {
+        let _ = fs::remove_file(&path);
+        if fs::rename(&tmp, &path).is_err() {
+            let _ = fs::write(&path, text);
+            let _ = fs::remove_file(&tmp);
+        }
     }
 }
 
@@ -165,6 +198,168 @@ fn detect(
     hits
 }
 
+fn credit_identity(credit: &ResetCredit) -> String {
+    if !credit.id.is_empty() {
+        credit.id.clone()
+    } else {
+        format!("{}@{}", credit.title, credit.expires_at.unwrap_or(0))
+    }
+}
+
+fn credit_fired_key(provider: &str, identity: &str, milestone: &str) -> String {
+    format!("{provider}:{identity}:{milestone}")
+}
+
+fn credit_milestone(remaining: i64) -> Option<&'static str> {
+    if remaining <= 0 {
+        None
+    } else if remaining <= HOUR_MS {
+        Some("h1")
+    } else if remaining <= 2 * HOUR_MS {
+        Some("h2")
+    } else if remaining <= 3 * HOUR_MS {
+        Some("h3")
+    } else if remaining <= 4 * HOUR_MS {
+        Some("h4")
+    } else if remaining <= 5 * HOUR_MS {
+        Some("h5")
+    } else if remaining <= DAY_MS {
+        Some("1d")
+    } else {
+        None
+    }
+}
+
+fn live_credit_identities(snap: &ProviderSnapshot, now: i64) -> HashSet<String> {
+    snap.reset_credits
+        .iter()
+        .filter_map(|credit| {
+            let exp = credit.expires_at?;
+            if exp <= now {
+                None
+            } else {
+                Some(credit_identity(credit))
+            }
+        })
+        .collect()
+}
+
+fn prune_credit_for_provider(state: &mut UsageState, provider: &str, live: &HashSet<String>) {
+    let prefix = format!("{provider}:");
+    state.credit_fired.retain(|key, _| {
+        let Some(rest) = key.strip_prefix(&prefix) else {
+            return true;
+        };
+        live.iter().any(|identity| {
+            CREDIT_MILESTONES
+                .iter()
+                .any(|milestone| rest == format!("{identity}:{milestone}"))
+        })
+    });
+    if let Some(alert) = state.credit_alerts.get_mut(provider) {
+        alert.items.retain(|item| live.contains(&item.id));
+        if alert.items.is_empty() {
+            state.credit_alerts.remove(provider);
+        }
+    }
+}
+
+fn detect_credit_items(
+    snap: &ProviderSnapshot,
+    fired: &HashMap<String, i64>,
+    now: i64,
+) -> Vec<CreditNoticeItem> {
+    let mut items = Vec::new();
+    for credit in &snap.reset_credits {
+        let Some(expires_at) = credit.expires_at else {
+            continue;
+        };
+        if expires_at <= now {
+            continue;
+        }
+        let Some(milestone) = credit_milestone(expires_at - now) else {
+            continue;
+        };
+        let identity = credit_identity(credit);
+        let key = credit_fired_key(&snap.id, &identity, milestone);
+        if fired.contains_key(&key) {
+            continue;
+        }
+        items.push(CreditNoticeItem {
+            id: identity,
+            title: credit.title.clone(),
+            expires_at: Some(expires_at),
+            milestone: milestone.into(),
+        });
+    }
+    items
+}
+
+fn refresh_credit_items(snap: &ProviderSnapshot, items: &mut [CreditNoticeItem]) {
+    for item in items {
+        if let Some(credit) = snap
+            .reset_credits
+            .iter()
+            .find(|credit| credit_identity(credit) == item.id)
+        {
+            item.title = credit.title.clone();
+            item.expires_at = credit.expires_at;
+        }
+    }
+}
+
+fn apply_credit_notice(state: &mut UsageState, snap: &mut ProviderSnapshot, now: i64) {
+    let live = live_credit_identities(snap, now);
+    prune_credit_for_provider(state, &snap.id, &live);
+    if snap.reset_notice.is_some() {
+        return;
+    }
+    let hits = detect_credit_items(snap, &state.credit_fired, now);
+    let mut items = state
+        .credit_alerts
+        .get(&snap.id)
+        .map(|alert| alert.items.clone())
+        .unwrap_or_default();
+    let mut fresh = false;
+    for hit in hits {
+        if let Some(existing) = items.iter_mut().find(|item| item.id == hit.id) {
+            if existing.milestone != hit.milestone {
+                *existing = hit;
+                fresh = true;
+            }
+        } else {
+            items.push(hit);
+            fresh = true;
+        }
+    }
+    items.retain(|item| live.contains(&item.id));
+    if items.is_empty() {
+        state.credit_alerts.remove(&snap.id);
+        return;
+    }
+    refresh_credit_items(snap, &mut items);
+    state.credit_alerts.insert(
+        snap.id.clone(),
+        StoredCreditAlert {
+            items: items.clone(),
+            at: now,
+        },
+    );
+    snap.credit_notice = Some(CreditNotice { fresh, items });
+}
+
+fn restore_credit_notice(state: &UsageState, snap: &mut ProviderSnapshot) {
+    if snap.reset_notice.is_some() {
+        return;
+    }
+    if let Some(alert) = state.credit_alerts.get(&snap.id) {
+        snap.credit_notice = Some(CreditNotice {
+            fresh: false,
+            items: alert.items.clone(),
+        });
+    }
+}
+
 fn still_zero(snap: &ProviderSnapshot, alert: &StoredAlert) -> bool {
     if snap.headline_percent.unwrap_or(100.0) <= ZERO_MAX {
         return true;
@@ -180,6 +375,7 @@ fn still_zero(snap: &ProviderSnapshot, alert: &StoredAlert) -> bool {
 }
 
 pub fn apply(snaps: &mut [ProviderSnapshot]) {
+    let _guard = lock_state();
     let mut state = load();
     let now = now_ms();
     state.alerts.retain(|_, alert| now - alert.at <= ALERT_MS);
@@ -192,6 +388,7 @@ pub fn apply(snaps: &mut [ProviderSnapshot]) {
                     labels: alert.labels.clone(),
                 });
             }
+            restore_credit_notice(&state, snap);
             continue;
         }
         let current = metric_map(snap);
@@ -233,6 +430,7 @@ pub fn apply(snaps: &mut [ProviderSnapshot]) {
                 }
             }
         }
+        apply_credit_notice(&mut state, snap, now);
         state.last.insert(snap.id.clone(), current);
         state.last_resets.insert(snap.id.clone(), current_resets);
     }
@@ -240,15 +438,34 @@ pub fn apply(snaps: &mut [ProviderSnapshot]) {
 }
 
 pub fn dismiss(id: &str) {
+    let _guard = lock_state();
     let mut state = load();
     state.alerts.remove(id);
     save(&state);
 }
 
+pub fn dismiss_credit(id: &str) {
+    let _guard = lock_state();
+    let mut state = load();
+    dismiss_credit_in(&mut state, id, now_ms());
+    save(&state);
+}
+
+fn dismiss_credit_in(state: &mut UsageState, id: &str, now: i64) {
+    let Some(alert) = state.credit_alerts.remove(id) else {
+        return;
+    };
+    for item in alert.items {
+        state
+            .credit_fired
+            .insert(credit_fired_key(id, &item.id, &item.milestone), now);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::{ProviderSnapshot, UsageMetric};
+    use crate::providers::{ProviderSnapshot, ResetCredit, ResetNotice, UsageMetric};
 
     fn snap(id: &str, metrics: Vec<(&str, &str, f64)>) -> ProviderSnapshot {
         snap_resets(
@@ -279,8 +496,25 @@ mod tests {
             error: None,
             updated_at: 1,
             reset_notice: None,
+            credit_notice: None,
             reset_credits: vec![],
         }
+    }
+
+    fn credit(id: &str, title: &str, expires_at: Option<i64>) -> ResetCredit {
+        ResetCredit {
+            id: id.into(),
+            title: title.into(),
+            status: "available".into(),
+            granted_at: None,
+            expires_at,
+        }
+    }
+
+    fn snap_credits(id: &str, credits: Vec<ResetCredit>) -> ProviderSnapshot {
+        let mut snap = snap(id, vec![("weekly", "Weekly limit", 10.0)]);
+        snap.reset_credits = credits;
+        snap
     }
 
     #[test]
@@ -367,5 +601,149 @@ mod tests {
         let prev_resets = HashMap::from([("included".into(), reset_at)]);
         let current = snap("cursor", vec![("included", "Included usage", 0.0)]);
         assert!(detect(&prev, &prev_resets, &current, reset_at + 1).is_empty());
+    }
+
+    #[test]
+    fn credit_milestone_picks_finest_bucket() {
+        assert_eq!(credit_milestone(26 * HOUR_MS), None);
+        assert_eq!(credit_milestone(20 * HOUR_MS), Some("1d"));
+        assert_eq!(credit_milestone(5 * HOUR_MS), Some("h5"));
+        assert_eq!(credit_milestone(4 * HOUR_MS + 1), Some("h5"));
+        assert_eq!(credit_milestone(4 * HOUR_MS), Some("h4"));
+        assert_eq!(credit_milestone((3.5 * HOUR_MS as f64) as i64), Some("h4"));
+        assert_eq!(credit_milestone((2.5 * HOUR_MS as f64) as i64), Some("h3"));
+        assert_eq!(credit_milestone(2 * HOUR_MS), Some("h2"));
+        assert_eq!(credit_milestone(HOUR_MS), Some("h1"));
+        assert_eq!(credit_milestone(1), Some("h1"));
+        assert_eq!(credit_milestone(0), None);
+        assert_eq!(credit_milestone(-1), None);
+    }
+
+    #[test]
+    fn credit_identity_falls_back_when_id_empty() {
+        assert_eq!(
+            credit_identity(&credit("", "Full reset", Some(99))),
+            "Full reset@99"
+        );
+        assert_eq!(credit_identity(&credit("tok-1", "Full reset", Some(99))), "tok-1");
+    }
+
+    #[test]
+    fn credit_detect_skips_missing_or_expired() {
+        let now = 1_800_000_000_000;
+        let snap = snap_credits(
+            "codex",
+            vec![
+                credit("a", "Full reset", None),
+                credit("b", "Full reset", Some(now)),
+                credit("c", "Full reset", Some(now - 1)),
+                credit("d", "Full reset", Some(now + 30 * HOUR_MS)),
+            ],
+        );
+        assert!(detect_credit_items(&snap, &HashMap::new(), now).is_empty());
+    }
+
+    #[test]
+    fn credit_detect_only_finest_unfired_bucket() {
+        let now = 1_800_000_000_000;
+        let snap = snap_credits(
+            "codex",
+            vec![credit("card", "Full reset", Some(now + (2.5 * HOUR_MS as f64) as i64))],
+        );
+        let hits = detect_credit_items(&snap, &HashMap::new(), now);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].milestone, "h3");
+        assert_eq!(hits[0].id, "card");
+    }
+
+    #[test]
+    fn credit_detect_skips_already_fired_milestone() {
+        let now = 1_800_000_000_000;
+        let snap = snap_credits(
+            "codex",
+            vec![credit("card", "Full reset", Some(now + 20 * HOUR_MS))],
+        );
+        let fired = HashMap::from([("codex:card:1d".into(), now)]);
+        assert!(detect_credit_items(&snap, &fired, now).is_empty());
+    }
+
+    #[test]
+    fn credit_notice_skips_when_reset_notice_present() {
+        let now = 1_800_000_000_000;
+        let mut snap = snap_credits(
+            "codex",
+            vec![credit("card", "Full reset", Some(now + 20 * HOUR_MS))],
+        );
+        snap.reset_notice = Some(ResetNotice {
+            fresh: true,
+            from_percent: 80.0,
+            labels: vec!["Weekly limit".into()],
+        });
+        let mut state = UsageState::default();
+        apply_credit_notice(&mut state, &mut snap, now);
+        assert!(snap.credit_notice.is_none());
+        assert!(state.credit_alerts.is_empty());
+    }
+
+    #[test]
+    fn credit_notice_keeps_pending_and_marks_fired_on_dismiss() {
+        let now = 1_800_000_000_000;
+        let mut snap = snap_credits(
+            "codex",
+            vec![credit("", "Full reset", Some(now + 20 * HOUR_MS))],
+        );
+        let mut state = UsageState::default();
+        apply_credit_notice(&mut state, &mut snap, now);
+        let notice = snap.credit_notice.expect("credit notice");
+        assert!(notice.fresh);
+        assert_eq!(notice.items.len(), 1);
+        assert_eq!(notice.items[0].id, "Full reset@1800072000000");
+        assert_eq!(notice.items[0].milestone, "1d");
+
+        snap.credit_notice = None;
+        apply_credit_notice(&mut state, &mut snap, now + 60_000);
+        let again = snap.credit_notice.expect("pending credit notice");
+        assert!(!again.fresh);
+        assert_eq!(again.items[0].milestone, "1d");
+
+        dismiss_credit_in(&mut state, "codex", now + 120_000);
+        snap.credit_notice = None;
+        apply_credit_notice(&mut state, &mut snap, now + 180_000);
+        assert!(snap.credit_notice.is_none());
+    }
+
+    #[test]
+    fn credit_notice_lists_multiple_unfired_cards() {
+        let now = 1_800_000_000_000;
+        let mut snap = snap_credits(
+            "glm",
+            vec![
+                credit("five", "5-hour reset", Some(now + HOUR_MS)),
+                credit("week", "Weekly reset", Some(now + 20 * HOUR_MS)),
+            ],
+        );
+        let mut state = UsageState::default();
+        apply_credit_notice(&mut state, &mut snap, now);
+        let notice = snap.credit_notice.expect("credit notice");
+        assert_eq!(notice.items.len(), 2);
+        assert_eq!(notice.items[0].milestone, "h1");
+        assert_eq!(notice.items[1].milestone, "1d");
+    }
+
+    #[test]
+    fn pending_credit_replaces_same_card_milestone() {
+        let now = 1_800_000_000_000;
+        let mut snap = snap_credits(
+            "codex",
+            vec![credit("full", "Full reset", Some(now + DAY_MS))],
+        );
+        let mut state = UsageState::default();
+        apply_credit_notice(&mut state, &mut snap, now);
+        assert_eq!(snap.credit_notice.as_ref().unwrap().items[0].milestone, "1d");
+        apply_credit_notice(&mut state, &mut snap, now + DAY_MS - HOUR_MS);
+        let notice = snap.credit_notice.expect("still pending");
+        assert_eq!(notice.items.len(), 1);
+        assert_eq!(notice.items[0].milestone, "h1");
+        assert!(notice.fresh);
     }
 }

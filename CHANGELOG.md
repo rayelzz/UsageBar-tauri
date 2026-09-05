@@ -6,6 +6,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.23 — 2026-09-05
+
+- **Reset-card expiry reminder.** After each refresh, a card that enters 1 day left, then 5 / 4 / 3 / 2 / 1 hours, pulses the icon and shows a 30-second card. Hover the slot or click **×** to dismiss that milestone. Expiry text on the usage card turns yellow at ≤ 1 day and red at ≤ 8 hours.
+- **Update notes.** A new version opens a separate window with the GitHub release **What’s new** / **更新说明** section in the app language, beside the settings menu. Opening settings still checks once when auto-check is off. **×** skips that version; hovering a slot hides the card without skipping.
+
 ### 0.0.22 — 2026-09-05
 
 - **GLM / ZCode reset cards.** Banked cards come from a signed-in ZCode session (`~/.zcode/v2/credentials.json` + `zcode.z.ai` coding-plan reset status), not the Coding Plan API key. Display only — they are not redeemed here.
@@ -117,6 +122,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.23 — 2026-09-05
+
+- **重置卡临期提醒。** 每次刷新后，卡进入到期前 1 天，以及 5 / 4 / 3 / 2 / 1 小时档时，对应图标绿灯闪动并弹出 30 秒提醒。悬停该槽或点 **×** 关闭该档。详情里的到期时间还剩 1 天以内变黄，8 小时以内变红。
+- **更新说明。** 检测到新版本时，按应用语言用独立窗口弹出 GitHub Release 的 **What’s new** / **更新说明**，不顶掉设置菜单。未开自动检测时，打开设置仍会查一次。点 **×** 跳过该版本；悬停圆环会收起说明但不跳过。
 
 ### 0.0.22 — 2026-09-05
 

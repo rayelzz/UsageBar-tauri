@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Datelike, FixedOffset, Local, TimeZone, Utc};
 use regex::Regex;
 use rusqlite::Connection;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -42,6 +42,23 @@ pub struct ResetCredit {
     pub expires_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreditNoticeItem {
+    pub id: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+    pub milestone: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreditNotice {
+    pub fresh: bool,
+    pub items: Vec<CreditNoticeItem>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderSnapshot {
@@ -53,6 +70,8 @@ pub struct ProviderSnapshot {
     pub updated_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reset_notice: Option<ResetNotice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credit_notice: Option<CreditNotice>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reset_credits: Vec<ResetCredit>,
 }
@@ -266,6 +285,7 @@ fn empty(id: &str, title: &str, error: &str) -> ProviderSnapshot {
         error: Some(error.into()),
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -902,6 +922,7 @@ fn parse_codex(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -1241,6 +1262,7 @@ fn parse_cursor(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -1472,6 +1494,7 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -1925,6 +1948,7 @@ fn parse_glm(id: &str, title: &str, json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits,
     }
 }
@@ -2359,6 +2383,7 @@ fn parse_claude(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -2511,6 +2536,7 @@ fn parse_copilot(json: Value) -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -2659,6 +2685,7 @@ fn fetch_gemini() -> ProviderSnapshot {
         metrics,
         updated_at: now_ms(),
         reset_notice: None,
+        credit_notice: None,
         reset_credits: vec![],
     }
 }
@@ -2757,6 +2784,7 @@ fn fetch_antigravity() -> ProviderSnapshot {
                 metrics,
                 updated_at: now_ms(),
                 reset_notice: None,
+                credit_notice: None,
                 reset_credits: vec![],
             };
         }

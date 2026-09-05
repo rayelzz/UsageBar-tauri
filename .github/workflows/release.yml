@@ -45,11 +45,14 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: UsageBar v__VERSION__
+          # What’s new / 更新说明 are shown in the in-app update card.
+          # Keep those two sections short. Put download / xattr / Gatekeeper
+          # text only under Download / 下载, never in the notes sections.
           releaseBody: |
             ### What’s new
 
-            - **Reset cards:** GLM and ZCode read the signed-in ZCode session. Grok reads grok.com `GetRemainingResets`. Codex is unchanged. Display only — cards are not redeemed here.
-            - Prepaid / Extra Usage is still not a reset card.
+            - **Reset-card expiry:** When a card enters 1 day left, then 5 / 4 / 3 / 2 / 1 hours, the icon pulses and a 30-second card appears. Hover or **×** dismisses that milestone. Expiry text turns yellow at ≤ 1 day, red at ≤ 8 hours.
+            - **Update notes:** A new version opens a separate window with this section in the app language, beside the settings menu. Opening settings still checks once when auto-check is off. **×** skips that version.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -73,8 +76,8 @@ jobs:
 
             ### 更新说明
 
-            - **重置卡：** GLM / ZCode 读本机已登录的 ZCode 会话；Grok 读 grok.com `GetRemainingResets`。Codex 不变。只展示、不兑换。
-            - 预付余额 / Extra Usage 仍然不是重置卡。
+            - **重置卡临期：** 进入到期前 1 天，以及 5 / 4 / 3 / 2 / 1 小时时，图标闪动并弹出 30 秒提醒。悬停或点 **×** 关闭该档。到期时间 ≤1 天变黄、≤8 小时变红。
+            - **更新说明：** 新版本用独立窗口按应用语言显示本段，不顶掉设置。未开自动检测时，打开设置仍会查一次。点 **×** 跳过该版本。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

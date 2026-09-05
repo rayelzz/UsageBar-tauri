@@ -142,6 +142,11 @@ fn set_pointer(left: bool) {
 }
 
 #[tauri::command]
+fn set_update_card(card: Option<[f64; 4]>) {
+    overlay::set_update_card(card);
+}
+
+#[tauri::command]
 fn set_menu_open(app: AppHandle, open: bool, card: Option<[f64; 4]>) {
     overlay::MENU_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
     if !open {
@@ -164,6 +169,11 @@ fn format_reset(ms: Option<i64>) -> Option<String> {
 #[tauri::command]
 fn dismiss_reset_notice(id: String) {
     usage_state::dismiss(&id);
+}
+
+#[tauri::command]
+fn dismiss_credit_notice(id: String) {
+    usage_state::dismiss_credit(&id);
 }
 
 #[tauri::command]
@@ -463,8 +473,10 @@ pub fn run() {
             place_bar,
             set_pointer,
             set_menu_open,
+            set_update_card,
             format_reset,
             dismiss_reset_notice,
+            dismiss_credit_notice,
             app_version,
             check_update,
             install_update,
@@ -499,6 +511,16 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     let _ = tip.set_visible_on_all_workspaces(true);
+                }
+            }
+            if let Some(update) = app.get_webview_window("update") {
+                let _ = update.set_always_on_top(true);
+                let _ = update.set_skip_taskbar(true);
+                let _ = update.set_ignore_cursor_events(true);
+                let _ = update.set_focusable(false);
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = update.set_visible_on_all_workspaces(true);
                 }
             }
             if let Some(settings) = app.get_webview_window("settings") {

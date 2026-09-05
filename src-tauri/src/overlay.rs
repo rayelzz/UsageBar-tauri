@@ -28,9 +28,16 @@ pub static JS_LEFT: AtomicBool = AtomicBool::new(false);
 pub static MENU_OPEN: AtomicBool = AtomicBool::new(false);
 /// 菜单卡片逻辑坐标 [x, y, w, h]，用于判断点击是否落在面板上。
 pub static MENU_CARD: Mutex<Option<[f64; 4]>> = Mutex::new(None);
+pub static UPDATE_CARD: Mutex<Option<[f64; 4]>> = Mutex::new(None);
 
 pub fn set_menu_card(card: Option<[f64; 4]>) {
     if let Ok(mut slot) = MENU_CARD.lock() {
+        *slot = card;
+    }
+}
+
+pub fn set_update_card(card: Option<[f64; 4]>) {
+    if let Ok(mut slot) = UPDATE_CARD.lock() {
         *slot = card;
     }
 }
@@ -213,7 +220,8 @@ fn tick(app: &AppHandle) {
 
     // 菜单打开时别再查 tip 窗口或拖条：全屏 tip 的 outer_size 很贵，还会和点击抢主线程。
     if menu_open {
-        if pressed && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) {
+        if pressed && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) && !over_update_card(scale, cursor.x, cursor.y)
+        {
             let _ = app.emit("usagebar-menu", "close");
         }
         return;
@@ -338,11 +346,7 @@ fn hover_id(
     Some(slots[idx.clamp(0, max) as usize].clone())
 }
 
-fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {
-    let card = match MENU_CARD.lock() {
-        Ok(g) => *g,
-        Err(e) => *e.into_inner(),
-    };
+fn over_card(card: Option<[f64; 4]>, scale: f64, mx: f64, my: f64) -> bool {
     let Some([x, y, w, h]) = card else {
         return false;
     };
@@ -355,6 +359,22 @@ fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {
     let s = if scale > 0.0 { scale } else { 1.0 };
     // cursor_position 有的运行时给物理像素，有的已是逻辑坐标。两种都算上，避免点在卡片上却被当成外部关闭。
     hit(s) || hit(1.0)
+}
+
+fn over_menu_card(scale: f64, mx: f64, my: f64) -> bool {
+    let card = match MENU_CARD.lock() {
+        Ok(g) => *g,
+        Err(e) => *e.into_inner(),
+    };
+    over_card(card, scale, mx, my)
+}
+
+fn over_update_card(scale: f64, mx: f64, my: f64) -> bool {
+    let card = match UPDATE_CARD.lock() {
+        Ok(g) => *g,
+        Err(e) => *e.into_inner(),
+    };
+    over_card(card, scale, mx, my)
 }
 
 fn over_tip(app: &AppHandle, mx: f64, my: f64) -> bool {

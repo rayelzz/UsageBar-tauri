@@ -13,6 +13,73 @@ pub struct UpdateInfo {
     pub latest: String,
     pub url: String,
     pub has_update: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes_en: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes_zh: Option<String>,
+}
+
+fn norm_heading(line: &str) -> String {
+    line.trim()
+        .trim_start_matches('#')
+        .trim()
+        .replace('\u{2019}', "'")
+        .replace('\u{2018}', "'")
+        .to_ascii_lowercase()
+}
+
+fn is_notes_start(line: &str, lang: &str) -> bool {
+    let h = norm_heading(line);
+    match lang {
+        "en" => h == "what's new" || h == "whats new",
+        "zh" => h == "更新说明",
+        _ => false,
+    }
+}
+
+fn is_notes_stop(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed == "---" {
+        return true;
+    }
+    let h = norm_heading(line);
+    matches!(
+        h.as_str(),
+        "download" | "downloads" | "下载" | "what's new" | "whats new" | "更新说明"
+    )
+}
+
+fn extract_notes_section(body: &str, lang: &str) -> Option<String> {
+    let mut lines = body.lines().peekable();
+    while let Some(line) = lines.next() {
+        if !is_notes_start(line, lang) {
+            continue;
+        }
+        let mut out = vec![line.trim().to_string()];
+        for next in lines.by_ref() {
+            if is_notes_stop(next) && !is_notes_start(next, lang) {
+                break;
+            }
+            out.push(next.trim_end().to_string());
+        }
+        let text = out
+            .join("\n")
+            .trim()
+            .trim_matches('\n')
+            .to_string();
+        if text.is_empty() {
+            return None;
+        }
+        return Some(text);
+    }
+    None
+}
+
+pub fn parse_release_notes(body: &str) -> (Option<String>, Option<String>) {
+    (
+        extract_notes_section(body, "en"),
+        extract_notes_section(body, "zh"),
+    )
 }
 
 pub fn current_version() -> String {
@@ -73,11 +140,15 @@ pub fn check() -> Option<UpdateInfo> {
         .and_then(|v| v.as_str())
         .unwrap_or(RELEASES_PAGE)
         .to_string();
+    let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("");
+    let (notes_en, notes_zh) = parse_release_notes(body);
     Some(UpdateInfo {
         current: current.into(),
         latest: latest.clone(),
         url,
         has_update: is_newer(&latest, current),
+        notes_en,
+        notes_zh,
     })
 }
 
@@ -189,5 +260,53 @@ mod tests {
         assert!(!should_prompt("v0.0.10", "0.0.10"));
         assert!(should_prompt("0.0.11", "0.0.10"));
         assert!(!should_prompt("0.0.9", "0.0.10"));
+    }
+
+    #[test]
+    fn parses_bilingual_release_notes_and_drops_download() {
+        let body = r#"### What’s new
+
+- **Reset cards:** GLM and ZCode read the signed-in ZCode session.
+- Prepaid / Extra Usage is still not a reset card.
+
+See [CHANGELOG.md](https://example.com) for the full history.
+
+### Download
+
+- **macOS:** `aarch64.dmg`
+
+---
+
+### 更新说明
+
+- **重置卡：** GLM / ZCode 读本机已登录的 ZCode 会话。
+- 预付余额 / Extra Usage 仍然不是重置卡。
+
+完整记录见 [CHANGELOG.md](https://example.com)。
+
+### 下载
+
+- **macOS：** `aarch64.dmg`
+"#;
+        let (en, zh) = parse_release_notes(body);
+        let en = en.expect("en notes");
+        let zh = zh.expect("zh notes");
+        assert!(en.contains("What’s new") || en.contains("What's new"));
+        assert!(en.contains("Reset cards"));
+        assert!(en.contains("CHANGELOG.md"));
+        assert!(!en.contains("aarch64.dmg"));
+        assert!(!en.contains("更新说明"));
+        assert!(zh.contains("更新说明"));
+        assert!(zh.contains("重置卡"));
+        assert!(zh.contains("CHANGELOG.md"));
+        assert!(!zh.contains("aarch64.dmg"));
+        assert!(!zh.contains("What’s new") && !zh.contains("What's new"));
+    }
+
+    #[test]
+    fn missing_section_is_none() {
+        let (en, zh) = parse_release_notes("### Download\n\n- dmg\n");
+        assert!(en.is_none());
+        assert!(zh.is_none());
     }
 }

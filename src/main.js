@@ -186,6 +186,13 @@ function t() {
         resetCardFull: "完全重置",
         resetCardFiveHour: "5 小时重置",
         resetCardWeekly: "周额度重置",
+        creditSoonTitle: "重置卡即将到期",
+        creditRemainingDays: (n) => `还有 ${n} 天`,
+        creditRemainingHours: (n) => `还有 ${n} 小时`,
+        creditRemainingMinutes: (n) => `还有 ${n} 分钟`,
+        creditRemainingExpired: "已到期",
+        whatsNew: "更新说明",
+        installVersion: (v) => `安装 ${v}`,
       }
     : {
         refreshNow: "Refresh now",
@@ -238,6 +245,13 @@ function t() {
         resetCardFull: "Full reset",
         resetCardFiveHour: "5-hour reset",
         resetCardWeekly: "Weekly reset",
+        creditSoonTitle: "Reset card expiring",
+        creditRemainingDays: (n) => (n === 1 ? "in 1 day" : `in ${n} days`),
+        creditRemainingHours: (n) => (n === 1 ? "in 1 hour" : `in ${n} hours`),
+        creditRemainingMinutes: (n) => (n === 1 ? "in 1 minute" : `in ${n} minutes`),
+        creditRemainingExpired: "Expired",
+        whatsNew: "What’s new",
+        installVersion: (v) => `Install ${v}`,
       };
 }
 
@@ -282,10 +296,27 @@ function pendingSnap(id) {
   return emptySnap(id, true);
 }
 
+const ackResetIds = new Set();
+const ackCreditIds = new Set();
+
+function applyNoticeAcks(snap) {
+  if (!snap) return snap;
+  let next = snap;
+  if (ackResetIds.has(snap.id)) {
+    if (snap.resetNotice?.fresh) ackResetIds.delete(snap.id);
+    else if (snap.resetNotice) next = { ...next, resetNotice: null };
+  }
+  if (ackCreditIds.has(snap.id)) {
+    if (snap.creditNotice?.fresh) ackCreditIds.delete(snap.id);
+    else if (snap.creditNotice) next = { ...next, creditNotice: null };
+  }
+  return next;
+}
+
 function slotsFrom(got, pendingIfMissing = false) {
   const vis = normalizeVisible(prefs.visibleProviders);
   const byId = Object.fromEntries((got || []).map((s) => [s.id, s]));
-  return vis.map((id) => byId[id] || (pendingIfMissing ? pendingSnap(id) : emptySnap(id)));
+  return vis.map((id) => applyNoticeAcks(byId[id] || (pendingIfMissing ? pendingSnap(id) : emptySnap(id))));
 }
 
 function hasMetrics(snap) {
@@ -384,16 +415,20 @@ function updateHasNewer(info) {
   return info.latest !== info.current;
 }
 
-function shouldPromptUpdate(info) {
-  if (!prefs.autoCheckUpdate || !updateHasNewer(info)) return false;
+function isSkippedUpdate(info) {
   const skipped = String(prefs.skippedUpdateVersion || "")
     .trim()
     .replace(/^v/i, "");
-  if (!skipped) return true;
-  const latest = String(info.latest || "")
+  if (!skipped) return false;
+  const latest = String(info?.latest || "")
     .trim()
     .replace(/^v/i, "");
-  return latest !== skipped;
+  return !!latest && latest === skipped;
+}
+
+function shouldPromptUpdate(info) {
+  if (!prefs.autoCheckUpdate || !updateHasNewer(info)) return false;
+  return !isSkippedUpdate(info);
 }
 
 async function openRelease(url) {
@@ -403,8 +438,9 @@ async function openRelease(url) {
 function syncUpdateBadge() {
   const gear = document.getElementById("gear-btn");
   if (!gear) return;
-  gear.classList.toggle("has-update", !!updateInfo);
-  gear.setAttribute("aria-label", updateInfo ? t().updateLine(updateInfo.latest) : t().settings);
+  const show = prefs.autoCheckUpdate && !!promptableUpdate(updateInfo);
+  gear.classList.toggle("has-update", show);
+  gear.setAttribute("aria-label", show ? t().updateLine(updateInfo.latest) : t().settings);
 }
 
 const api = () => window.__TAURI__;
@@ -480,6 +516,31 @@ function localizeResetCreditTitle(title) {
     return t().resetCardWeekly;
   }
   return raw;
+}
+
+function creditExpiryTone(ms) {
+  if (ms == null) return "";
+  const left = Number(ms) - Date.now();
+  if (!Number.isFinite(left) || left <= 8 * 60 * 60 * 1000) return "urgent";
+  if (left <= 24 * 60 * 60 * 1000) return "warn";
+  return "";
+}
+
+function formatCreditRemaining(ms) {
+  if (ms == null) return t().resetCardAvailable;
+  const left = Number(ms) - Date.now();
+  if (!Number.isFinite(left)) return t().resetCardAvailable;
+  if (left <= 0) return t().creditRemainingExpired;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (left >= day) {
+    return t().creditRemainingDays(Math.max(1, Math.round(left / day)));
+  }
+  if (left >= hour) {
+    return t().creditRemainingHours(Math.max(1, Math.round(left / hour)));
+  }
+  return t().creditRemainingMinutes(Math.max(1, Math.round(left / minute)));
 }
 
 function formatCreditExpiry(ms) {
@@ -703,6 +764,10 @@ async function monitorAt(point, list) {
   );
 }
 
+async function requestUpdateInfo() {
+  return invoke("check_update");
+}
+
 let prefs = {
   locked: false,
   clickThrough: true,
@@ -742,10 +807,16 @@ let refreshing = false;
 let refreshQueued = false;
 let prefsSaveTail = Promise.resolve();
 let menuOpen = false;
+let menuScreenBox = null;
 let resetToastId = null;
+let creditToastId = null;
+let creditToastTimer = null;
+const CREDIT_TOAST_MS = 30_000;
 let tipHot = false;
 let updateInfo = null;
 let updateToastOpen = false;
+let updateToastDismissed = false;
+let updateLayoutGen = 0;
 let updateTimer = null;
 let menuInstalling = false;
 let menuInstallPercent = null;
@@ -753,6 +824,7 @@ let appVersion = "";
 let checkedInfo = null;
 let menuCheckedInfo = null;
 let menuChecking = false;
+let menuCheckWantNotes = false;
 let menuCheckStatus = "";
 const JUMP_ICON =
   '<svg class="m-jump" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11.5 11.5 5"/><path d="M7 5h4.5V9.5"/></svg>';
@@ -846,7 +918,7 @@ function renderBar() {
         </div>`;
       }
       const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
-      return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice ? " reset" : ""}" data-id="${s.id}">
+      return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice || s.creditNotice ? " reset" : ""}" data-id="${s.id}">
         <div class="ring">
           <svg viewBox="0 0 26 26">
             <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
@@ -869,8 +941,14 @@ const TIP_TRAVEL_H = 360;
 const TIP_H_CAP = 640;
 const TIP_FIT_PAD = 10;
 let tipReadyResolvers = [];
+let updateReadyResolvers = [];
 
 function tipHeight(snap) {
+  if (creditToastId && snap?.id === creditToastId) {
+    const n = Math.max(snap?.creditNotice?.items?.length || 1, 1);
+    let h = 54 + 36 + n * 52 + 8;
+    return Math.min(Math.max(h, 100), TIP_H_CAP);
+  }
   const n = Math.max(snap?.metrics?.length || 1, 1);
   let h = 54 + n * 52 + 8;
   if (snap?.resetNotice) {
@@ -879,9 +957,6 @@ function tipHeight(snap) {
   const credits = resetCreditsOf(snap);
   if (credits.length) {
     h += 34 + credits.length * 36;
-  }
-  if (prefs.edge === "top" || prefs.edge === "bottom") {
-    h += 12;
   }
   return Math.min(Math.max(h, 100), TIP_H_CAP);
 }
@@ -901,8 +976,109 @@ function tipContentPayload(extra = {}) {
     locale: prefs.locale === "zh" ? "zh" : "en",
     displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     resetNotice: snap.resetNotice || null,
+    creditNotice: snap.creditNotice || null,
     ...extra,
+    mode: creditToastId === snap.id && snap.creditNotice ? "creditSoon" : extra.mode || "",
   };
+}
+
+function updateNotesText(info) {
+  if (!info) return "";
+  return isZh() ? info.notesZh || info.notesEn || "" : info.notesEn || info.notesZh || "";
+}
+
+function updateTipHeight(notes) {
+  const lines = String(notes || "")
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/^#{1,6}\s/.test(l));
+  let h = 54 + 40 + 52;
+  for (const line of lines) {
+    const text = line.replace(/^[-*]\s+/, "");
+    const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+    const unit = cjk > text.length / 3 ? 22 : 42;
+    h += Math.max(1, Math.ceil(text.length / unit)) * 20 + 10;
+  }
+  return Math.min(Math.max(h, 160), TIP_H_CAP);
+}
+
+function updateTipPayload() {
+  const info = updateHasNewer(updateInfo) ? updateInfo : null;
+  if (!info) return null;
+  return {
+    show: true,
+    kind: "update",
+    latest: info.latest,
+    notes: updateNotesText(info),
+    arrow: tipArrow(),
+    locale: prefs.locale === "zh" ? "zh" : "en",
+  };
+}
+
+function rectsOverlap(a, b, gap = 8) {
+  return !!(
+    a &&
+    b &&
+    a.x < b.x + b.w + gap &&
+    a.x + a.w + gap > b.x &&
+    a.y < b.y + b.h + gap &&
+    a.y + a.h + gap > b.y
+  );
+}
+
+function clampRectToScreen(rect, screen) {
+  if (!rect || !screen) return rect;
+  return {
+    ...rect,
+    x: clamp(rect.x, screen.wx + 6, Math.max(screen.wx + 6, screen.wx + screen.ww - rect.w - 6)),
+    y: clamp(rect.y, screen.wy + 6, Math.max(screen.wy + 6, screen.wy + screen.wh - rect.h - 6)),
+  };
+}
+
+function overlapArea(a, b) {
+  if (!a || !b) return 0;
+  const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return w * h;
+}
+
+function visibleArea(rect, screen) {
+  if (!rect || !screen) return 0;
+  const w = Math.max(0, Math.min(rect.x + rect.w, screen.wx + screen.ww) - Math.max(rect.x, screen.wx));
+  const h = Math.max(0, Math.min(rect.y + rect.h, screen.wy + screen.wh) - Math.max(rect.y, screen.wy));
+  return w * h;
+}
+
+function placeUpdateBesideMenu(notes, menu, screen) {
+  const gap = 10;
+  const candidates = [
+    { x: menu.x - notes.w - gap, y: menu.y },
+    { x: menu.x + menu.w + gap, y: menu.y },
+    { x: menu.x, y: menu.y - notes.h - gap },
+    { x: menu.x, y: menu.y + menu.h + gap },
+    { x: menu.x + menu.w - notes.w, y: menu.y - notes.h - gap },
+    { x: menu.x + menu.w - notes.w, y: menu.y + menu.h + gap },
+  ];
+  let best = null;
+  let bestScore = -Infinity;
+  for (const c of candidates) {
+    const next = clampRectToScreen({ ...notes, x: c.x, y: c.y }, screen);
+    const score = visibleArea(next, screen) - overlapArea(next, menu) * 3;
+    if (score > bestScore) {
+      best = next;
+      bestScore = score;
+    }
+  }
+  return best || clampRectToScreen(notes, screen);
+}
+
+function updateCardFrame(barFrame, h, screen) {
+  let target = tipTargetFrame(barFrame, { update: true, w: TIP_W, h });
+  if (!target) return null;
+  if (menuOpen && menuScreenBox) {
+    return placeUpdateBesideMenu(target, menuScreenBox, screen);
+  }
+  return clampRectToScreen(target, screen);
 }
 
 function unionRects(a, b) {
@@ -933,10 +1109,14 @@ function tipTargetFrame(frame, opts = {}) {
   const id = opts.id || hovered;
   const snap = snaps.find((s) => s.id === id);
   if (!snap && !opts.update) return null;
-  const idx = Math.max(0, snaps.findIndex((s) => s.id === id));
   const count = Math.max(snaps.length, 1);
-  const th = opts.update ? 52 : opts.travel ? Math.max(TIP_TRAVEL_H, tipHeight(snap)) : tipHeight(snap);
-  const tw = opts.update ? 188 : TIP_W;
+  const idx = opts.update ? count - 1 : Math.max(0, snaps.findIndex((s) => s.id === id));
+  const th = opts.update
+    ? opts.h || updateTipHeight(updateNotesText(updateInfo))
+    : opts.travel
+      ? Math.max(TIP_TRAVEL_H, tipHeight(snap))
+      : tipHeight(snap);
+  const tw = opts.update ? opts.w || TIP_W : TIP_W;
   const pad = padding(prefs.edge);
   const start = isVertical(prefs.edge) ? pad.t : pad.l;
   const end = isVertical(prefs.edge) ? pad.b : pad.r;
@@ -993,6 +1173,11 @@ function resolveTipReady(payload) {
   q.forEach((fn) => fn(payload || null));
 }
 
+function resolveUpdateReady(payload) {
+  const q = updateReadyResolvers.splice(0);
+  q.forEach((fn) => fn(payload || null));
+}
+
 function waitTipReady() {
   return new Promise((resolve) => {
     let done = false;
@@ -1025,6 +1210,22 @@ function emitTipReady() {
   });
 }
 
+function waitUpdateReady() {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (payload) => {
+      if (done) return;
+      done = true;
+      resolve(payload || null);
+    };
+    const timer = setTimeout(() => finish(null), 160);
+    updateReadyResolvers.push((payload) => {
+      clearTimeout(timer);
+      finish(payload);
+    });
+  });
+}
+
 async function growTipStage(tipWin, needH) {
   if (!tipWin || !tipStageFrame) return;
   const want = Math.min(Math.ceil(needH) + TIP_FIT_PAD, TIP_H_CAP);
@@ -1048,6 +1249,7 @@ async function placeTipWindow(tipWin, rect) {
 }
 
 async function hideUsageTip() {
+  if (menuOpen) return;
   cancelTipSlide();
   tipSlideFrame = null;
   tipStageFrame = null;
@@ -1057,6 +1259,7 @@ async function hideUsageTip() {
 }
 
 async function showUsageTip(barFrame, opts = {}) {
+  if (menuOpen) return;
   const tipWin = await getWindow("tip");
   const target = tipTargetFrame(barFrame);
   const payload = tipContentPayload();
@@ -1092,12 +1295,13 @@ async function showUsageTip(barFrame, opts = {}) {
     visible = false;
   }
   if (!visible) await tipWin.show();
-  if (gen !== tipSlideGen && !hovered && !menuOpen && !resetToastId) {
+  if (gen !== tipSlideGen && !hovered && !menuOpen && !resetToastId && !creditToastId) {
     await tipWin.hide();
   }
 }
 
 async function renderTip(opts = {}) {
+  if (menuOpen) return;
   const snap = snaps.find((s) => s.id === hovered);
   const tipWin = await getWindow("tip");
   const payload = tipContentPayload();
@@ -1105,7 +1309,7 @@ async function renderTip(opts = {}) {
     await tipWin?.hide();
     return;
   }
-  if (tipStageFrame && tipSlideFrame && !resetToastId && !opts.forceSize) {
+  if (tipStageFrame && tipSlideFrame && !resetToastId && !creditToastId && !opts.forceSize) {
     const ready = waitTipReady();
     await api().event.emit("usagebar-tip", {
       ...payload,
@@ -1177,13 +1381,98 @@ async function placeWindows() {
   prefs.lastY = frame.y;
   prefs.along = isVertical(prefs.edge) ? frame.y : frame.x;
   if (!menuOpen) await layoutTip(frame, { w: frame.w, h: frame.h });
+  if (updateToastOpen) await layoutUpdateCard();
+}
+
+async function currentBarFrame() {
+  const pos = await getCurrentWindow().outerPosition();
+  const size = await getCurrentWindow().outerSize();
+  const scale = await getCurrentWindow().scaleFactor();
+  return { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
+}
+
+async function setUpdateClickable(on) {
+  const win = await getWindow("update");
+  try {
+    await win?.setIgnoreCursorEvents(!on);
+  } catch {
+    /* older runtime */
+  }
+  try {
+    await win?.setFocusable(!!on);
+  } catch {
+    /* optional */
+  }
+}
+
+async function hideUpdateWindowOnly() {
+  const win = await getWindow("update");
+  await win?.hide();
+}
+
+async function raiseUpdateWindow() {
+  if (!updateToastOpen) return;
+  const win = await getWindow("update");
+  if (!win) return;
+  try {
+    await win.show();
+  } catch {
+    /* optional */
+  }
+}
+
+async function publishUpdateHit(target, screen) {
+  const hit = target && screen
+    ? { x: target.x - screen.x, y: target.y - screen.y, w: target.w, h: target.h }
+    : null;
+  try {
+    if (target) await invoke("set_update_card", { card: [target.x, target.y, target.w, target.h] });
+    else await invoke("set_update_card", { card: null });
+  } catch {
+    /* optional */
+  }
+  await api().event.emit("usagebar-update-hit", hit);
+}
+
+async function layoutUpdateCard() {
+  const payload = updateTipPayload();
+  const win = await getWindow("update");
+  if (!payload || !win) return;
+  const gen = ++updateLayoutGen;
+  const frame = await currentBarFrame();
+  if (gen !== updateLayoutGen) return;
+  const list = await monitors();
+  const screen = await monitorAt({ x: frame.x + frame.w / 2, y: frame.y + frame.h / 2 }, list);
+  let target = updateCardFrame(frame, updateTipHeight(payload.notes), screen);
+  if (!target || gen !== updateLayoutGen) return;
+  await setUpdateClickable(true);
+  if (gen !== updateLayoutGen) return;
+  await placeTipWindow(win, target);
+  if (gen !== updateLayoutGen) return;
+  await publishUpdateHit(target, screen);
+  const ready = waitUpdateReady();
+  await api().event.emit("usagebar-update-card", payload);
+  const measured = await ready;
+  if (gen !== updateLayoutGen) return;
+  if (measured?.h) {
+    const grown = updateCardFrame(frame, Math.min(Math.max(measured.h + TIP_FIT_PAD, target.h), TIP_H_CAP), screen);
+    if (grown && (Math.abs(grown.h - target.h) > 2 || Math.abs(grown.x - target.x) > 2 || Math.abs(grown.y - target.y) > 2)) {
+      target = grown;
+      await placeTipWindow(win, target);
+      if (gen !== updateLayoutGen) return;
+      await publishUpdateHit(target, screen);
+    }
+  }
+  if (gen !== updateLayoutGen) return;
+  await raiseUpdateWindow();
 }
 
 async function layoutTip(frame, size, opts = {}) {
+  if (menuOpen) return;
   const tipWin = await getWindow("tip");
   const target = tipTargetFrame(frame, opts);
   if (!tipWin || !target) return;
-  if (opts.update || resetToastId) {
+  if (resetToastId || creditToastId) {
     cancelTipSlide();
     tipStageFrame = null;
     tipSlideFrame = { ...target };
@@ -1211,18 +1500,42 @@ async function setTipClickable(on) {
   }
   try {
     await tipWin?.setFocusable(!!on);
-    if (on) await tipWin?.setFocus();
+    if (on) {
+      const visible = await tipWin?.isVisible();
+      if (visible) await tipWin.setFocus();
+    }
   } catch {
     /* optional */
   }
+  if (on && menuOpen && updateToastOpen) await raiseUpdateWindow();
 }
 
 async function acknowledgeReset(id) {
   const snap = snaps.find((s) => s.id === id);
   if (!id || !snap?.resetNotice) return;
+  ackResetIds.add(id);
   await invoke("dismiss_reset_notice", { id });
   snaps = snaps.map((s) => (s.id === id ? { ...s, resetNotice: null } : s));
   if (resetToastId === id) resetToastId = null;
+  await setTipClickable(false);
+  renderBar();
+}
+
+function clearCreditToastTimer() {
+  if (creditToastTimer) {
+    clearTimeout(creditToastTimer);
+    creditToastTimer = null;
+  }
+}
+
+async function acknowledgeCredit(id) {
+  const snap = snaps.find((s) => s.id === id);
+  if (!id || !snap?.creditNotice) return;
+  ackCreditIds.add(id);
+  clearCreditToastTimer();
+  await invoke("dismiss_credit_notice", { id });
+  snaps = snaps.map((s) => (s.id === id ? { ...s, creditNotice: null } : s));
+  if (creditToastId === id) creditToastId = null;
   await setTipClickable(false);
   renderBar();
 }
@@ -1231,11 +1544,23 @@ function nextResetSnap() {
   return snaps.find((s) => s.resetNotice?.fresh) || snaps.find((s) => s.resetNotice) || null;
 }
 
+function nextCreditSnap() {
+  return snaps.find((s) => s.creditNotice?.fresh) || snaps.find((s) => s.creditNotice) || null;
+}
+
 async function maybeShowResetToast() {
-  if (resetToastId || menuOpen || dragging) return false;
+  if (resetToastId || creditToastId || menuOpen || dragging) return false;
   const next = nextResetSnap();
   if (!next) return false;
   await showResetToast(next);
+  return true;
+}
+
+async function maybeShowCreditToast() {
+  if (resetToastId || creditToastId || menuOpen || dragging) return false;
+  const next = nextCreditSnap();
+  if (!next) return false;
+  await showCreditToast(next);
   return true;
 }
 
@@ -1246,12 +1571,26 @@ async function closeResetToast(id) {
   hovered = null;
   paintHover();
   if (await maybeShowResetToast()) return;
+  if (await maybeShowCreditToast()) return;
+  if (await showUpdateToastIfIdle()) return;
+  await hideUsageTip();
+}
+
+async function closeCreditToast(id) {
+  const target = id || creditToastId;
+  if (!target) return;
+  await acknowledgeCredit(target);
+  if (menuOpen || dragging) return;
+  hovered = null;
+  paintHover();
+  if (await maybeShowResetToast()) return;
+  if (await maybeShowCreditToast()) return;
   if (await showUpdateToastIfIdle()) return;
   await hideUsageTip();
 }
 
 async function showUpdateToastIfIdle() {
-  return false;
+  return showUpdateToast({ relayout: true });
 }
 
 function promptableUpdate(info) {
@@ -1265,15 +1604,40 @@ function clearUpdatePrompt() {
 }
 
 async function hideUpdateToast() {
-  if (!updateToastOpen) return;
   updateToastOpen = false;
-  if (resetToastId || hovered || menuOpen) return;
-  await setTipClickable(false);
-  await hideUsageTip();
+  await publishUpdateHit(null, null);
+  await setUpdateClickable(false);
+  await api().event.emit("usagebar-update-card", { show: false });
+  const win = await getWindow("update");
+  await win?.hide();
 }
 
-async function showUpdateToast() {
-  // Update prompts live in the settings menu; no floating toast.
+async function showUpdateToast(opts = {}) {
+  const info = updateHasNewer(updateInfo) ? updateInfo : null;
+  if (!info || dragging) return false;
+  if (!opts.force) {
+    if (updateToastDismissed) return false;
+    if (isSkippedUpdate(info)) return false;
+    if (resetToastId || creditToastId) return false;
+  }
+  if (updateToastOpen && !opts.force && !opts.relayout) {
+    const win = await getWindow("update");
+    try {
+      if (await win?.isVisible()) return true;
+    } catch {
+      return true;
+    }
+  }
+  if (hovered && !resetToastId && !creditToastId && !menuOpen) {
+    hovered = null;
+    paintHover();
+    await hideUsageTip();
+    await setTipClickable(false);
+  }
+  updateToastOpen = true;
+  updateToastDismissed = false;
+  await layoutUpdateCard();
+  return true;
 }
 
 async function skipPromptedVersion() {
@@ -1282,6 +1646,7 @@ async function skipPromptedVersion() {
     prefs.skippedUpdateVersion = latest;
     await savePrefs();
   }
+  updateToastDismissed = true;
   clearUpdatePrompt();
 }
 
@@ -1326,31 +1691,41 @@ async function checkUpdate() {
   }
   let info = null;
   try {
-    info = (await invoke("check_update")) || null;
+    info = (await requestUpdateInfo()) || null;
   } catch {
     return;
   }
   rememberCheck(info);
   updateInfo = promptableUpdate(info);
   syncUpdateBadge();
-  await hideUpdateToast();
+  if (updateInfo) {
+    updateToastDismissed = false;
+    await showUpdateToast();
+  } else {
+    await hideUpdateToast();
+  }
 }
 
-async function checkUpdateManual() {
+async function checkUpdateManual(opts = {}) {
+  if (opts.showNotes) menuCheckWantNotes = true;
   if (menuChecking) return;
   menuChecking = true;
   menuCheckStatus = "checking";
   if (menuOpen) await showPanelMenu(false);
+  let info = null;
   try {
-    const info = await invoke("check_update");
+    info = await requestUpdateInfo();
     if (!rememberCheck(info)) {
       menuCheckStatus = "failed";
       menuCheckedInfo = null;
     } else {
       menuCheckedInfo = info;
       menuCheckStatus = updateHasNewer(info) ? "available" : "upToDate";
-      if (prefs.autoCheckUpdate) {
-        updateInfo = promptableUpdate(info);
+      if (updateHasNewer(info)) {
+        updateInfo = info;
+        syncUpdateBadge();
+      } else if (prefs.autoCheckUpdate) {
+        updateInfo = null;
         syncUpdateBadge();
       }
     }
@@ -1358,7 +1733,13 @@ async function checkUpdateManual() {
     menuCheckStatus = "failed";
   }
   menuChecking = false;
+  const showNotes = menuCheckWantNotes;
+  menuCheckWantNotes = false;
   if (menuOpen) await showPanelMenu(true);
+  if (updateHasNewer(info) && (showNotes || !isSkippedUpdate(info))) {
+    updateToastDismissed = false;
+    await showUpdateToast({ force: showNotes });
+  }
 }
 
 function stopUpdateTimer() {
@@ -1405,7 +1786,9 @@ async function applyLaunchAtLogin(want) {
 
 async function showResetToast(snap) {
   if (!snap?.id || menuOpen || dragging) return;
-  updateToastOpen = false;
+  if (updateToastOpen) await hideUpdateWindowOnly();
+  clearCreditToastTimer();
+  creditToastId = null;
   resetToastId = snap.id;
   hovered = snap.id;
   paintHover();
@@ -1420,8 +1803,31 @@ async function showResetToast(snap) {
   );
 }
 
+async function showCreditToast(snap) {
+  if (!snap?.id || menuOpen || dragging || resetToastId) return;
+  if (updateToastOpen) await hideUpdateWindowOnly();
+  creditToastId = snap.id;
+  hovered = snap.id;
+  paintHover();
+  await setTipClickable(true);
+  await renderTip();
+  const pos = await getCurrentWindow().outerPosition();
+  const size = await getCurrentWindow().outerSize();
+  const scale = await getCurrentWindow().scaleFactor();
+  await layoutTip(
+    { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale },
+    barSize(prefs.edge)
+  );
+  clearCreditToastTimer();
+  const id = snap.id;
+  creditToastTimer = setTimeout(() => {
+    closeCreditToast(id).catch((err) => console.error(err));
+  }, CREDIT_TOAST_MS);
+}
+
 async function setHovered(id) {
   if (resetToastId) return;
+  if (creditToastId && !id) return;
   if (hovered === id) return;
   const prev = hovered;
   hovered = id;
@@ -1430,10 +1836,12 @@ async function setHovered(id) {
   if (!id) {
     await hideUsageTip();
     await setTipClickable(false);
-    if (!menuOpen) await showUpdateToast();
     return;
   }
-  updateToastOpen = false;
+  if (updateToastOpen) {
+    updateToastDismissed = true;
+    await hideUpdateToast();
+  }
   await setTipClickable(false);
   if (gen !== hoverGen) return;
   const pos = await getCurrentWindow().outerPosition();
@@ -1484,7 +1892,7 @@ function paintShownPercents() {
 
 function applyIncomingSnap(snap) {
   if (!snap?.id) return;
-  const next = { ...snap, loading: false };
+  const next = applyNoticeAcks({ ...snap, loading: false });
   snaps = snaps.map((s) => (s.id === next.id ? next : s));
   renderBar();
   if (hovered === next.id) renderTip().catch((err) => console.error(err));
@@ -1495,6 +1903,7 @@ async function finishRefreshPaint() {
     await setHovered(null);
   }
   renderBar();
+  if (menuOpen || dragging) return;
   if (resetToastId) {
     const current = snaps.find((s) => s.id === resetToastId);
     if (current?.resetNotice) {
@@ -1503,8 +1912,21 @@ async function finishRefreshPaint() {
       return;
     }
     resetToastId = null;
+    await setTipClickable(false);
+  }
+  if (creditToastId) {
+    const current = snaps.find((s) => s.id === creditToastId);
+    if (current?.creditNotice) {
+      hovered = creditToastId;
+      await renderTip();
+      return;
+    }
+    clearCreditToastTimer();
+    creditToastId = null;
+    await setTipClickable(false);
   }
   if (await maybeShowResetToast()) return;
+  if (await maybeShowCreditToast()) return;
   if (hovered) await renderTip();
   else await showUpdateToast();
 }
@@ -1557,6 +1979,7 @@ async function setLocale(next) {
   prefs.locale = locale;
   applyLocale();
   savePrefs().catch((err) => console.error(err));
+  if (updateToastOpen) await layoutUpdateCard();
   if (hovered) await renderTip();
 }
 
@@ -1798,6 +2221,8 @@ async function showPanelMenu(reposition = true) {
   menuOpen = true;
   if (!wasOpen) {
     resetMenuCheck();
+    if (resetToastId) await acknowledgeReset(resetToastId);
+    if (creditToastId) await acknowledgeCredit(creditToastId);
     await invoke("set_menu_open", { open: true });
     setBarHot();
     await setHovered(null);
@@ -1830,6 +2255,7 @@ async function showPanelMenu(reposition = true) {
     else if (prefs.edge === "bottom") y = frame.y - winH + 2;
     else y = clamp(gy - winH + 26, screen.wy + 6, screen.wy + screen.wh - winH - 6);
     pointerAt = prefs.edge === "top" || prefs.edge === "bottom" ? gx - x : gy - y;
+    menuScreenBox = { x, y, w: winW, h: winH };
     menuCardFrame = {
       x: x - screen.x,
       y: y - screen.y,
@@ -1870,7 +2296,15 @@ async function showPanelMenu(reposition = true) {
     cardW: menuCardFrame.w,
     cardH: menuCardFrame.h,
   });
-  if (!wasOpen || reposition) await tipWin?.show();
+  if (!wasOpen || reposition) {
+    await tipWin?.show();
+    try {
+      await tipWin?.setFocus();
+    } catch {
+      /* optional */
+    }
+  }
+  if (updateToastOpen) await layoutUpdateCard();
   if (!wasOpen) {
     checkUpdateManual().catch((err) => console.error(err));
   }
@@ -1880,11 +2314,14 @@ async function closeMenuPanel() {
   if (!menuOpen) return;
   menuOpen = false;
   menuCardFrame = null;
+  menuScreenBox = null;
   await invoke("set_menu_open", { open: false });
   setBarHot();
   await setTipClickable(false);
   await hideUsageTip();
-  await showUpdateToast();
+  if (await maybeShowResetToast()) return;
+  if (await maybeShowCreditToast()) return;
+  if (updateToastOpen) await layoutUpdateCard();
 }
 
 async function handleMenuAction(id) {
@@ -1895,7 +2332,7 @@ async function handleMenuAction(id) {
   }
   if (id === "checkupdate") {
     if (menuInstalling) return;
-    await checkUpdateManual();
+    await checkUpdateManual({ showNotes: true });
     return;
   }
   if (id === "update" || id === "latest") {
@@ -1946,6 +2383,42 @@ async function handleMenuAction(id) {
   if (menuOpen) await showPanelMenu(false);
 }
 
+async function parkStickyTips() {
+  clearCreditToastTimer();
+  await hideUsageTip();
+  await setTipClickable(false);
+  if (updateToastOpen) {
+    const win = await getWindow("update");
+    await win?.hide();
+  }
+}
+
+async function restoreStickyTips() {
+  if (resetToastId) {
+    const snap = snaps.find((s) => s.id === resetToastId);
+    if (snap?.resetNotice) {
+      hovered = resetToastId;
+      paintHover();
+      await setTipClickable(true);
+      await renderTip();
+      const frame = await currentBarFrame();
+      await layoutTip(frame, barSize(prefs.edge));
+      return;
+    }
+    resetToastId = null;
+  }
+  if (creditToastId) {
+    const snap = snaps.find((s) => s.id === creditToastId);
+    if (snap?.creditNotice) {
+      await showCreditToast(snap);
+      return;
+    }
+    clearCreditToastTimer();
+    creditToastId = null;
+  }
+  if (updateToastOpen) await layoutUpdateCard();
+}
+
 async function applyLayout(payload) {
   if (!payload) return;
   const edgeChanged = payload.edge && payload.edge !== prefs.edge;
@@ -1956,13 +2429,20 @@ async function applyLayout(payload) {
   if (typeof payload.screenName === "string") prefs.screenName = payload.screenName;
   if (typeof payload.lastX === "number") prefs.lastX = payload.lastX;
   if (typeof payload.lastY === "number") prefs.lastY = payload.lastY;
-  dragging = !!payload.dragging;
+  const nextDrag = !!payload.dragging;
+  const ended = dragging && !nextDrag;
+  dragging = nextDrag;
   document.documentElement.classList.toggle("dragging", dragging);
-  if (dragging) await setHovered(null);
+  if (dragging) {
+    await parkStickyTips();
+    if (!resetToastId && !creditToastId) await setHovered(null);
+  }
   setBarHot();
   if (edgeChanged) {
     renderBar();
     if (!dragging) await placeWindows();
+  } else if (ended) {
+    await restoreStickyTips();
   }
 }
 
@@ -2046,19 +2526,35 @@ async function startBar() {
     setBarHot(!!e.payload);
   });
   await api().event.listen("usagebar-tip-ready", (e) => resolveTipReady(e.payload));
+  await api().event.listen("usagebar-update-ready", (e) => resolveUpdateReady(e.payload));
   await api().event.listen("usagebar-hover", (e) => {
     if (menuOpen || dragging) {
       if (hovered) setHovered(null).catch((err) => console.error(err));
       return;
     }
     if (resetToastId) return;
-    setHovered(e.payload || null).catch((err) => console.error(err));
+    const id = e.payload || null;
+    if (updateToastOpen && !id) return;
+    if (creditToastId) {
+      if (!id) return;
+      acknowledgeCredit(creditToastId)
+        .then(() => setHovered(id))
+        .catch((err) => console.error(err));
+      return;
+    }
+    setHovered(id).catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-reset-ack", (e) => {
     closeResetToast(e.payload).catch((err) => console.error(err));
   });
+  await api().event.listen("usagebar-credit-ack", (e) => {
+    closeCreditToast(e.payload).catch((err) => console.error(err));
+  });
   await api().event.listen("usagebar-update-open", () => {
     openUpdateFromPrompt().catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-update-skip", () => {
+    skipPromptedVersion().catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-update-progress", (e) => {
     const total = Number(e.payload?.total);
@@ -2176,48 +2672,154 @@ function resetTipLayout() {
   tip.style.height = "";
 }
 
+function creditExpClass(ms) {
+  const tone = creditExpiryTone(ms);
+  return tone ? ` credit-exp ${tone}` : " credit-exp";
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+const CHANGELOG_URL = "https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md";
+
+function safeHttpUrl(raw) {
+  try {
+    const url = new URL(String(raw || "").trim());
+    if (url.protocol === "http:" || url.protocol === "https:") return url.href;
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+function notesLink(label, href) {
+  const url = safeHttpUrl(href);
+  if (!url) return escapeHtml(label);
+  return `<a class="update-notes-link" href="${escapeHtml(url)}" data-open-url="${escapeHtml(url)}">${escapeHtml(label)}</a>`;
+}
+
+function inlineMd(s) {
+  const src = String(s || "");
+  const chunks = [];
+  const re = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(src))) {
+    chunks.push({ t: src.slice(last, m.index) });
+    chunks.push({ a: m[1], href: m[2] });
+    last = m.index + m[0].length;
+  }
+  chunks.push({ t: src.slice(last) });
+  const html = chunks
+    .map((c) => (c.a != null ? notesLink(c.a, c.href) : escapeHtml(c.t)))
+    .join("")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+  if (html.includes("data-open-url")) return html;
+  return html.replace(/CHANGELOG\.md/g, notesLink("CHANGELOG.md", CHANGELOG_URL));
+}
+
+function notesHtml(raw) {
+  const parts = [];
+  let list = [];
+  const flushList = () => {
+    if (!list.length) return;
+    parts.push(`<ul class="update-notes-list">${list.map((item) => `<li>${item}</li>`).join("")}</ul>`);
+    list = [];
+  };
+  for (const line of String(raw || "").split(/\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+    if (/^#{1,6}\s/.test(trimmed)) {
+      flushList();
+      continue;
+    }
+    const item = trimmed.match(/^[-*]\s+(.+)/);
+    if (item) {
+      list.push(inlineMd(item[1]));
+      continue;
+    }
+    flushList();
+    parts.push(`<p class="update-notes-p">${inlineMd(trimmed)}</p>`);
+  }
+  flushList();
+  return parts.join("");
+}
+
 function paintUsageCard(payload) {
   const snap = payload.snap;
   const spec = ICONS[snap.id];
   if (!spec) return;
   const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
-  const metricsHtml = !snap.metrics?.length
-    ? `<div class="empty${isQuerying(snap) ? " querying" : ""}">${localizeError(snap)}</div>`
-    : snap.metrics
-        .map((m, i) => {
-          const shown = shownPct(m.percent) ?? 0;
-          const color = usageColor(m.percent);
-          return `<div class="metric">
+  const soon = payload.mode === "creditSoon";
+  const notice = !soon && (payload.resetNotice || snap.resetNotice);
+  const creditNotice = payload.creditNotice || snap.creditNotice;
+  const banner = soon
+    ? `<div class="reset-banner"><div class="reset-title">${t().creditSoonTitle}</div></div>`
+    : notice
+      ? `<div class="reset-banner"><div class="reset-title">${t().resetTitle}</div></div>`
+      : "";
+  const close = soon
+    ? `<button type="button" class="tip-close" data-close-credit="${snap.id}" aria-label="Close">×</button>`
+    : notice
+      ? `<button type="button" class="tip-close" data-close-reset="${snap.id}" aria-label="Close">×</button>`
+      : "";
+  const metricsHtml = soon
+    ? ""
+    : !snap.metrics?.length
+      ? `<div class="empty${isQuerying(snap) ? " querying" : ""}">${localizeError(snap)}</div>`
+      : snap.metrics
+          .map((m, i) => {
+            const shown = shownPct(m.percent) ?? 0;
+            const color = usageColor(m.percent);
+            return `<div class="metric">
             <div class="metric-top"><span>${localizeMetricLabel(m.label)}</span><span class="metric-reset">${payload.resets?.[i] || ""}</span></div>
             <div class="track"><div class="fill" style="width:${Math.min(Math.max(shown, 0), 100)}%;background:${color}"></div></div>
             <div class="used">${quotaText(m.percent)}</div>
           </div>`;
-        })
-        .join("");
-  const notice = payload.resetNotice || snap.resetNotice;
-  const banner = notice
-    ? `<div class="reset-banner"><div class="reset-title">${t().resetTitle}</div></div>`
-    : "";
-  const close = notice
-    ? `<button type="button" class="tip-close" data-close-reset="${snap.id}" aria-label="Close">×</button>`
-    : "";
-  const credits = resetCreditsOf(snap);
-  const creditsHtml = !credits.length
-    ? ""
-    : `<div class="credit-block">
+          })
+          .join("");
+  const soonItems = soon ? creditNotice?.items || [] : [];
+  const credits = soon ? [] : resetCreditsOf(snap);
+  const creditsHtml = soon
+    ? `<div class="credit-block">
+      ${soonItems
+        .map(
+          (c) => `<div class="credit-soon-item">
+            <div class="credit-title">${localizeResetCreditTitle(c.title)}</div>
+            <div class="credit-soon-meta">
+              <span class="credit-left">${formatCreditRemaining(c.expiresAt)}</span>
+              <span class="${creditExpClass(c.expiresAt).trim()}">${formatCreditExpiry(c.expiresAt)}</span>
+            </div>
+          </div>`
+        )
+        .join("")}
+    </div>`
+    : !credits.length
+      ? ""
+      : `<div class="credit-block">
       <div class="credit-head">${t().resetCards}<span class="credit-count">${t().resetCardCount(credits.length)}</span></div>
       ${credits
         .map(
           (c) => `<div class="credit-row">
             <span class="credit-title">${localizeResetCreditTitle(c.title)}</span>
-            <span class="credit-exp">${formatCreditExpiry(c.expiresAt)}</span>
+            <span class="${creditExpClass(c.expiresAt).trim()}">${formatCreditExpiry(c.expiresAt)}</span>
           </div>`
         )
         .join("")}
     </div>`;
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
-  card.classList.remove("update-only", "menu-card", "tip-card-fade");
+  card.dataset.creditId = soon ? snap.id : "";
+  card.classList.remove("update-only", "update-notes", "menu-card", "tip-card-fade");
   card.innerHTML = `
     ${close}
     <div class="card-head">
@@ -2229,7 +2831,7 @@ function paintUsageCard(payload) {
     card.classList.add("tip-card-fade");
   }
   const tip = document.getElementById("tip");
-  tip.classList.remove("menu-tip", "update-only", "arrow-left", "arrow-right", "arrow-up", "arrow-down");
+  tip.classList.remove("menu-tip", "update-only", "update-notes", "arrow-left", "arrow-right", "arrow-up", "arrow-down");
   tip.classList.add("tip", "arrow-" + (payload.arrow || "right"));
   tip.classList.toggle("hot", tipHot);
 }
@@ -2252,6 +2854,7 @@ function paintTip(payload) {
     const card = document.getElementById("tip-card");
     root.classList.add("menu-backdrop");
     card.dataset.resetId = "";
+    card.classList.remove("update-only", "update-notes");
     card.classList.add("menu-card");
     card.innerHTML = menuPanelHtml(payload.state);
     tip.className = "tip menu-tip arrow-" + (payload.arrow || "right");
@@ -2272,44 +2875,83 @@ function paintTip(payload) {
   }
   if (payload.slide) {
     document.getElementById("tip-root")?.classList.remove("menu-backdrop");
-    if (ptr) {
-      ptr.hidden = false;
-      ptr.style.marginTop = "";
-      ptr.style.marginLeft = "";
-      ptr.style.alignSelf = "";
-    }
+    if (ptr) ptr.hidden = true;
     applyTipSlide(payload.slide);
     paintUsageCard({ ...payload, fade: !!payload.slide.fade });
     emitTipReady();
     return;
   }
   resetTipLayout();
-  if (ptr) {
-    ptr.hidden = false;
-    ptr.style.marginTop = "";
-    ptr.style.marginLeft = "";
-    ptr.style.alignSelf = "";
-  }
-  if (payload.kind === "update") {
-    const card = document.getElementById("tip-card");
-    card.dataset.resetId = "";
-    card.classList.remove("menu-card");
-    card.classList.add("update-only");
-    card.innerHTML = `<button type="button" class="update-link" data-open-release="1">${t().updateLine(
-      payload.latest
-    )}</button>`;
-    document.getElementById("tip").className =
-      "tip arrow-" + (payload.arrow || "right") + (tipHot ? " hot" : "");
-    return;
-  }
+  if (ptr) ptr.hidden = true;
   if (!payload.snap) return;
   paintUsageCard(payload);
+}
+
+function paintUpdateCard(payload) {
+  if (!payload?.show) {
+    resetTipLayout();
+    return;
+  }
+  prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  applyLocale();
+  const ptr = document.getElementById("tip-pointer");
+  if (ptr) ptr.hidden = true;
+  const card = document.getElementById("tip-card");
+  card.dataset.resetId = "";
+  card.dataset.creditId = "";
+  card.classList.remove("menu-card", "update-only", "tip-card-fade");
+  card.classList.add("update-notes");
+  const notes = notesHtml(payload.notes);
+  card.innerHTML = `
+    <button type="button" class="tip-close" data-close-update="1" aria-label="Close">×</button>
+    <div class="card-head">
+      <div class="title">${t().whatsNew}</div>
+    </div>
+    <div class="reset-banner"><div class="reset-title">${t().updateLine(payload.latest)}</div></div>
+    ${notes ? `<div class="update-notes-body">${notes}</div>` : ""}
+    <button type="button" class="update-install" data-open-release="1">${t().installVersion(payload.latest)}</button>`;
+  document.getElementById("tip").className = "tip arrow-" + (payload.arrow || "right") + " hot";
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const card = document.getElementById("tip-card");
+      const ch = card ? Math.ceil(card.scrollHeight || card.getBoundingClientRect().height) : 0;
+      api()
+        .event.emit("usagebar-update-ready", { h: ch })
+        .catch(() => {});
+    });
+  });
+}
+
+async function startUpdate() {
+  document.documentElement.classList.add("update");
+  document.getElementById("tip-root").hidden = false;
+  document.getElementById("tip").className = "tip arrow-right";
+  await api().event.listen("usagebar-update-card", (e) => paintUpdateCard(e.payload));
+  document.getElementById("tip-root").addEventListener("click", (e) => {
+    const link = e.target.closest("[data-open-url]");
+    if (link) {
+      e.preventDefault();
+      invoke("open_release_page", { url: link.dataset.openUrl }).catch(() => {});
+      return;
+    }
+    if (e.target.closest("[data-close-update]")) {
+      api().event.emit("usagebar-update-skip").catch(() => {});
+      return;
+    }
+    if (e.target.closest("[data-open-release]")) {
+      api().event.emit("usagebar-update-open").catch(() => {});
+    }
+  });
 }
 
 async function startTip() {
   document.getElementById("tip-root").hidden = false;
   document.getElementById("tip").className = "tip arrow-right";
   await api().event.listen("usagebar-tip", (e) => paintTip(e.payload));
+  let updateHitRect = null;
+  await api().event.listen("usagebar-update-hit", (e) => {
+    updateHitRect = e.payload || null;
+  });
   await api().event.listen("usagebar-tip-hover", (e) => {
     tipHot = !!e.payload;
     document.getElementById("tip")?.classList.toggle("hot", tipHot);
@@ -2336,11 +2978,25 @@ async function startTip() {
       document.getElementById("tip")?.classList.contains("menu-tip") &&
       !e.target.closest(".menu-card")
     ) {
+      if (
+        updateHitRect &&
+        e.clientX >= updateHitRect.x - 8 &&
+        e.clientX <= updateHitRect.x + updateHitRect.w + 8 &&
+        e.clientY >= updateHitRect.y - 8 &&
+        e.clientY <= updateHitRect.y + updateHitRect.h + 8
+      ) {
+        return;
+      }
       api().event.emit("usagebar-menu", "close").catch(() => {});
       return;
     }
     if (e.target.closest("[data-open-release]")) {
       api().event.emit("usagebar-update-open").catch(() => {});
+      return;
+    }
+    const creditBtn = e.target.closest("[data-close-credit]");
+    if (creditBtn) {
+      api().event.emit("usagebar-credit-ack", creditBtn.dataset.closeCredit).catch(() => {});
       return;
     }
     const btn = e.target.closest("[data-close-reset]");
@@ -2448,5 +3104,6 @@ async function startSettings() {
 
 const kind = new URLSearchParams(location.search).get("w") || "bar";
 if (kind === "tip") startTip().catch((err) => console.error(err));
+else if (kind === "update") startUpdate().catch((err) => console.error(err));
 else if (kind === "settings") startSettings().catch((err) => console.error(err));
 else startBar().catch((err) => console.error(err));
