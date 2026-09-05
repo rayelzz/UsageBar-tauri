@@ -1,6 +1,6 @@
 [package]
 name = "usagebar"
-version = "0.0.21"
+version = "0.0.22"
 description = "Cross-platform AI usage edge bar"
 authors = ["rayelzz"]
 edition = "2021"
@@ -24,6 +24,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
+aes-gcm = "0.10"
+sha2 = "0.10"
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3", default-features = false, features = [

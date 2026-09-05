@@ -48,9 +48,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Reset cards:** Codex, GLM, and ZCode show banked reset cards and expiry on the hover card (display only).
-            - **Wider hover card:** long model names stay on one line.
-            - **Faster refresh:** providers are queried in parallel.
+            - **Reset cards:** GLM and ZCode read the signed-in ZCode session. Grok reads grok.com `GetRemainingResets`. Codex is unchanged. Display only — cards are not redeemed here.
+            - Prepaid / Extra Usage is still not a reset card.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -74,9 +73,8 @@ jobs:
 
             ### 更新说明
 
-            - **重置卡：** Codex / GLM / ZCode 详情底部显示重置卡和到期时间（只展示）。
-            - **详情卡加宽：** 长模型名不再换行。
-            - **刷新更快：** 各供应商并行查询。
+            - **重置卡：** GLM / ZCode 读本机已登录的 ZCode 会话；Grok 读 grok.com `GetRemainingResets`。Codex 不变。只展示、不兑换。
+            - 预付余额 / Extra Usage 仍然不是重置卡。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

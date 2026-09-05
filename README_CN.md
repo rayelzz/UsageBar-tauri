@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 ### 功能
 
 - 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **提供商…** 里勾选并调整顺序
-- 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间按本机系统时区显示具体日期和时刻。Codex / GLM / ZCode 在有库存时，详情最下面还会列出重置卡和到期时间
+- 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间按本机系统时区显示具体日期和时刻。Codex / GLM / ZCode / Grok 在有库存时，详情最下面还会列出重置卡和到期时间
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 可拖动，自动贴左 / 右 / 上 / 下
 - 两种显示样式：**圆环用量**（完整圆环 + 百分比 + 黑底托）或 **透明图标**（同样的圆环和百分比，无底托）
@@ -59,9 +59,9 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5 小时 + 周额度（及月 / 额外窗口）；详情底部显示重置卡和到期时间 |
 | **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` + Grok Bot 周额度 | 月度账期：套餐 + API（及按需 / 团队共享 / Grok Bot 周额度） |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | 周和/或月额度（及产品 / 按需） |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡来自独立 inventory（或 quota 载荷里已带的列表）；探测失败则留空 |
-| **ZCode** | `~/.zcode/v2/config.json` 里的 Coding Plan Key | 与 GLM 同一套官方配额接口（按 BigModel / Z.ai 选主机） | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡与 GLM 同一套 inventory |
+| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | 周和/或月额度（及产品 / 按需）。重置卡来自 grok.com 库存（预付余额不是重置卡） |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡来自本机 ZCode 登录态（`zcode.z.ai` 的 coding-plan reset status），或 quota 载荷里已带的列表 |
+| **ZCode** | `~/.zcode/v2/config.json` 的 Coding Plan Key + `credentials.json` 登录态 | 与 GLM 同一套官方配额接口；重置卡走 `zcode.z.ai` `/api/v1/coding-plan/reset/status` | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。ZCode 已登录时显示 5 小时 / 周重置卡 |
 | **Claude** | macOS 钥匙串 `Claude Code-credentials`，或 `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5 小时 + 周额度 + 模型周额度（及月超额） |
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | 各模型剩余比例 + 重置 |
@@ -157,7 +157,7 @@ open /Applications/UsageBar.app
 在 shell 里导出 `GLM_API_KEY`（或 `ZAI_API_KEY` / `Z_AI_API_KEY`），或写 `~/.zai/config.json`，或在 cc-switch 里配置 GLM / 智谱 / z.ai。
 
 **ZCode 和 GLM 是同一个圆环吗？**  
-不是。ZCode 是智谱的编程 Agent，GLM 是模型 / API Key。菜单 **提供商…** 里的 **ZCode** 读 ZCode 已经保存的 Coding Plan Key；**GLM** 读 shell / `.zai` / cc-switch 的 Key。同一套餐会显示同一组百分比，不同账号则分开。UsageBar 不解密 ZCode 的 `enc:v1:` OAuth。
+不是。ZCode 是智谱的编程 Agent，GLM 是模型 / API Key。菜单 **提供商…** 里的 **ZCode** 读 ZCode 已经保存的 Coding Plan Key；**GLM** 读 shell / `.zai` / cc-switch 的 Key。同一套餐会显示同一组百分比，不同账号则分开。重置卡需要本机 ZCode 已登录（`~/.zcode/v2/credentials.json`）；UsageBar 只解密这份本地 `enc:v1:` 用来列出卡片，不会核销。
 
 **Windows / Linux 注意。**  
 Windows 需要 WebView2（安装器可引导下载）。托盘通常会显示图标，而不是只有标题文字。Linux 需要可用的系统托盘。

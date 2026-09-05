@@ -6,6 +6,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.22 — 2026-09-05
+
+- **GLM / ZCode reset cards.** Banked cards come from a signed-in ZCode session (`~/.zcode/v2/credentials.json` + `zcode.z.ai` coding-plan reset status), not the Coding Plan API key. Display only — they are not redeemed here.
+- **Grok reset cards.** After `grok login`, UsageBar lists grok.com `GetRemainingResets` tokens and expiry. CLI prepaid balance is still not a reset card.
+
 ### 0.0.21 — 2026-09-05
 
 - **Reset cards.** Codex, GLM, and ZCode list banked reset cards and expiry at the bottom of the hover card. Display only — they are not redeemed here. Grok Extra Usage / prepaid is not a reset card.
@@ -112,6 +117,11 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.22 — 2026-09-05
+
+- **GLM / ZCode 重置卡。** 卡来自本机已登录的 ZCode 会话（`~/.zcode/v2/credentials.json` + `zcode.z.ai` 的 coding-plan reset status），不是 Coding Plan API Key。只展示、不兑换。
+- **Grok 重置卡。** `grok login` 之后会列出 grok.com `GetRemainingResets` 的卡和到期时间。CLI 预付余额仍然不是重置卡。
 
 ### 0.0.21 — 2026-09-05
 

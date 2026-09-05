@@ -38,7 +38,7 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 ### Features
 
 - The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, and ZCode also list banked reset cards and their expiry at the bottom of the card when the inventory is present
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, ZCode, and Grok also list banked reset cards and their expiry at the bottom of the card when the inventory is present
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - Drag anywhere; snap to left / right / top / bottom
 - Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock)
@@ -59,9 +59,9 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5-hour + weekly (+ monthly / extra windows if present); banked reset cards and expiry at the bottom of the card |
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` + Grok Bot weekly status | Monthly billing cycle: included + API (+ on-demand / team pool / Grok Bot weekly if present) |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` | Weekly and/or monthly (+ products / on-demand if present) |
-| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Reset cards come from a separate inventory (or an embedded list on the quota payload); probe failure leaves this blank |
-| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key | Same official quota API as GLM (host follows BigModel / Z.ai) | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Same reset-card inventory as GLM |
+| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | Weekly and/or monthly (+ products / on-demand if present). Banked reset cards from the grok.com inventory (prepaid balance is not a reset card) |
+| **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Reset cards come from a ZCode login session (`zcode.z.ai` coding-plan reset status), or an embedded list on the quota payload |
+| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key + `credentials.json` login | Same official quota API as GLM; reset cards from `zcode.z.ai` `/api/v1/coding-plan/reset/status` | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Banked 5-hour / weekly reset cards when ZCode is signed in |
 | **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour + weekly + scoped weekly (+ monthly extra usage if present) |
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
@@ -166,7 +166,7 @@ Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.
 Export `GLM_API_KEY` (or `ZAI_API_KEY` / `Z_AI_API_KEY`) in your shell, or use `~/.zai/config.json`, or a GLM / 智谱 / z.ai provider in cc-switch.
 
 **ZCode vs GLM — same ring?**  
-No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. UsageBar does not decrypt ZCode’s `enc:v1:` OAuth blobs.
+No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. Reset cards need a signed-in ZCode session (`~/.zcode/v2/credentials.json`); UsageBar decrypts that local `enc:v1:` blob only to list cards, and never redeems them.
 
 **Windows / Linux notes.**  
 Windows needs WebView2 (the installer can bootstrap it). The tray usually shows an icon instead of title-only text. Linux needs a working system tray.

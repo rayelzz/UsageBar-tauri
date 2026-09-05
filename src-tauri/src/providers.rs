@@ -1,8 +1,12 @@
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Datelike, FixedOffset, Local, TimeZone, Utc};
 use regex::Regex;
 use rusqlite::Connection;
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -207,6 +211,37 @@ fn http_post_json(url: &str, headers: &[(&str, String)], body: &Value) -> Result
     Ok((code, json))
 }
 
+fn http_post_bytes(
+    url: &str,
+    headers: &[(&str, String)],
+    body: &[u8],
+    secs: u64,
+) -> Result<(u16, Vec<(String, String)>, Vec<u8>), String> {
+    let mut req = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(secs))
+        .build()
+        .map_err(|e| e.to_string())?
+        .post(url)
+        .body(body.to_vec());
+    for (k, v) in headers {
+        req = req.header(*k, v);
+    }
+    let resp = req.send().map_err(|e| e.to_string())?;
+    let code = resp.status().as_u16();
+    let hdrs = resp
+        .headers()
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.as_str().to_ascii_lowercase(),
+                v.to_str().unwrap_or("").to_string(),
+            )
+        })
+        .collect();
+    let bytes = resp.bytes().map_err(|e| e.to_string())?.to_vec();
+    Ok((code, hdrs, bytes))
+}
+
 fn http_post_form(url: &str, body: &str) -> Result<(u16, Value), String> {
     let resp = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -343,6 +378,7 @@ const CREDIT_LIST_KEYS: &[&str] = &[
 ];
 
 static ZHIPU_RESET_CACHE: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
+static ZCODE_RESET_MEMO: Mutex<Option<(i64, Vec<ResetCredit>)>> = Mutex::new(None);
 
 const ZHIPU_RESET_PATHS: &[&str] = &[
     "/api/monitor/usage/quota/reset-credits",
@@ -650,6 +686,174 @@ fn pull_reset_credits_from_paths(
 
 fn pull_zhipu_reset_credits(host: &str, headers: &[(&str, String)]) -> Vec<ResetCredit> {
     pull_reset_credits_from_paths(&ZHIPU_RESET_CACHE, &[host], headers, ZHIPU_RESET_PATHS)
+}
+
+fn zcode_node_platform() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => other,
+    }
+}
+
+fn zcode_os_username() -> String {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".into())
+}
+
+fn zcode_credential_secret() -> String {
+    if let Some(secret) = env_or_shell("ZCODE_CREDENTIAL_SECRET") {
+        return secret;
+    }
+    format!(
+        "zcode-credential-fallback:{}:{}:{}",
+        zcode_node_platform(),
+        home().display(),
+        zcode_os_username()
+    )
+}
+
+fn decrypt_zcode_blob(blob: &str, secret: &str) -> Option<String> {
+    if !blob.starts_with("enc:v1:") {
+        let trimmed = blob.trim();
+        return (!trimmed.is_empty()).then(|| trimmed.to_string());
+    }
+    let rest = &blob["enc:v1:".len()..];
+    let mut parts = rest.split('.');
+    let iv = URL_SAFE_NO_PAD.decode(parts.next()?).ok()?;
+    let tag = URL_SAFE_NO_PAD.decode(parts.next()?).ok()?;
+    let ct = URL_SAFE_NO_PAD.decode(parts.next()?).ok()?;
+    if parts.next().is_some() || iv.len() != 12 || tag.len() != 16 {
+        return None;
+    }
+    let key = Sha256::digest(secret.as_bytes());
+    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
+    let mut packed = ct;
+    packed.extend_from_slice(&tag);
+    let plain = cipher.decrypt(Nonce::from_slice(&iv), packed.as_ref()).ok()?;
+    String::from_utf8(plain).ok()
+}
+
+fn zcode_load_credential(store: &Value, key: &str, secret: &str) -> Option<String> {
+    let raw = store.get(key)?.as_str()?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    decrypt_zcode_blob(raw, secret).and_then(|v| {
+        let trimmed = v.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    })
+}
+
+fn zcode_session_auth() -> Option<(String, String)> {
+    let path = home().join(".zcode/v2/credentials.json");
+    let store = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
+    let secret = zcode_credential_secret();
+    let jwt = zcode_load_credential(&store, "zcodejwttoken", &secret)?;
+    let active = zcode_load_credential(&store, "oauth:active_provider", &secret)
+        .unwrap_or_else(|| "bigmodel".into());
+    let coding = if active == "zai" {
+        zcode_load_credential(&store, "oauth:zai:access_token", &secret)
+            .or_else(|| zcode_load_credential(&store, "oauth:bigmodel:access_token", &secret))?
+    } else {
+        zcode_load_credential(&store, "oauth:bigmodel:access_token", &secret)
+            .or_else(|| zcode_load_credential(&store, "oauth:zai:access_token", &secret))?
+    };
+    Some((jwt, coding))
+}
+
+fn append_zcode_resets(
+    out: &mut Vec<ResetCredit>,
+    items: Option<&Value>,
+    title: &str,
+    kind: &str,
+    now: i64,
+) {
+    let Some(arr) = items.and_then(|v| v.as_array()) else {
+        return;
+    };
+    for (i, item) in arr.iter().enumerate() {
+        let expires_at = credit_expires_at(item);
+        if expires_at.is_some_and(|ms| ms + 60_000 < now) {
+            continue;
+        }
+        out.push(ResetCredit {
+            id: format!(
+                "{kind}-{i}-{}",
+                expires_at.unwrap_or(0)
+            ),
+            title: title.into(),
+            status: "available".into(),
+            granted_at: None,
+            expires_at,
+        });
+    }
+}
+
+fn parse_zcode_reset_status(json: &Value) -> Vec<ResetCredit> {
+    if let Some(code) = json.get("code").and_then(|v| v.as_i64()) {
+        if code != 0 && code != 200 {
+            return vec![];
+        }
+    }
+    let root = reset_credits_root(json);
+    let now = now_ms();
+    let mut out = Vec::new();
+    append_zcode_resets(
+        &mut out,
+        root.get("available_five_hour_resets"),
+        "5-hour reset",
+        "five-hour",
+        now,
+    );
+    append_zcode_resets(
+        &mut out,
+        root.get("available_week_resets"),
+        "Weekly reset",
+        "week",
+        now,
+    );
+    out.sort_by_key(|c| c.expires_at.unwrap_or(i64::MAX));
+    out.truncate(6);
+    out
+}
+
+fn fetch_zcode_session_reset_credits() -> Vec<ResetCredit> {
+    let Some((jwt, coding)) = zcode_session_auth() else {
+        return vec![];
+    };
+    let authorization = if jwt.to_ascii_lowercase().starts_with("bearer ") {
+        jwt
+    } else {
+        format!("Bearer {jwt}")
+    };
+    let headers = [
+        ("Authorization", authorization),
+        ("X-Bigmodel-Authorization", coding),
+        ("Bigmodel-Target-Type", "PERSONAL".into()),
+        ("Accept", "application/json".into()),
+    ];
+    let url = "https://zcode.z.ai/api/v1/coding-plan/reset/status";
+    let Ok((200, json)) = http_get_json_timeout(url, &headers, 8) else {
+        return vec![];
+    };
+    parse_zcode_reset_status(&json)
+}
+
+fn pull_zcode_session_reset_credits() -> Vec<ResetCredit> {
+    if let Ok(memo) = ZCODE_RESET_MEMO.lock() {
+        if let Some((at, credits)) = memo.as_ref() {
+            if now_ms().saturating_sub(*at) < 12_000 {
+                return credits.clone();
+            }
+        }
+    }
+    let credits = fetch_zcode_session_reset_credits();
+    if let Ok(mut memo) = ZCODE_RESET_MEMO.lock() {
+        *memo = Some((now_ms(), credits.clone()));
+    }
+    credits
 }
 
 fn parse_codex(json: Value) -> ProviderSnapshot {
@@ -1152,7 +1356,22 @@ fn fetch_grok() -> ProviderSnapshot {
     if bodies.is_empty() {
         return empty("grok", "Grok Usage", &last_error);
     }
-    parse_grok_bodies(bodies)
+    let mut snap = parse_grok_bodies(bodies);
+    let authorization = headers
+        .iter()
+        .find(|(k, _)| *k == "Authorization")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    let mut credits = fetch_grok_remaining_resets(&authorization);
+    if credits.is_none() {
+        if let Some(new_token) =
+            refresh_grok(issuer.as_deref(), refresh.as_deref(), client_id.as_deref())
+        {
+            credits = fetch_grok_remaining_resets(&format!("Bearer {new_token}"));
+        }
+    }
+    snap.reset_credits = credits.unwrap_or_default();
+    snap
 }
 
 fn money_val(v: Option<&Value>) -> Option<f64> {
@@ -1255,6 +1474,248 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
         reset_notice: None,
         reset_credits: vec![],
     }
+}
+
+const GROK_RESETS_URL: &str = "https://grok.com/prod_mc_billing.ConsumerUiSvc/GetRemainingResets";
+const GROK_RESET_TOKEN_FIELD: u64 = 10;
+const GROK_RESET_TOKEN_ID_FIELD: u64 = 10;
+const GROK_RESET_TOKEN_END_FIELD: u64 = 30;
+const GROK_TIMESTAMP_SECONDS_FIELD: u64 = 1;
+
+fn fetch_grok_remaining_resets(authorization: &str) -> Option<Vec<ResetCredit>> {
+    if authorization.trim().is_empty() {
+        return None;
+    }
+    let headers = [
+        ("Authorization", authorization.to_string()),
+        ("Origin", "https://grok.com".into()),
+        ("Referer", "https://grok.com/?_s=usage".into()),
+        ("Accept", "*/*".into()),
+        ("Content-Type", "application/grpc-web+proto".into()),
+        ("x-grpc-web", "1".into()),
+        ("x-user-agent", "connect-es/2.1.1".into()),
+        ("User-Agent", "UsageBar".into()),
+    ];
+    let (code, resp_headers, body) =
+        http_post_bytes(GROK_RESETS_URL, &headers, &[0, 0, 0, 0, 0], 8).ok()?;
+    if code == 401 || code == 403 || code != 200 || body.is_empty() {
+        return None;
+    }
+    parse_grok_remaining_resets(&body, &resp_headers)
+}
+
+fn header_grpc_status(headers: &[(String, String)]) -> Option<i32> {
+    headers
+        .iter()
+        .find(|(k, _)| k == "grpc-status")
+        .and_then(|(_, v)| v.trim().parse().ok())
+}
+
+fn grpc_status_from_trailer(block: &[u8]) -> Option<i32> {
+    let text = std::str::from_utf8(block).ok()?;
+    for line in text.split(['\r', '\n']) {
+        let line = line.trim();
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        if key.eq_ignore_ascii_case("grpc-status") {
+            return value.trim().parse().ok();
+        }
+    }
+    None
+}
+
+fn grok_read_varint(data: &[u8], i: &mut usize) -> Option<u64> {
+    let mut x = 0u64;
+    let mut shift = 0;
+    while *i < data.len() {
+        let b = data[*i];
+        *i += 1;
+        x |= u64::from(b & 0x7f) << shift;
+        if b < 0x80 {
+            return Some(x);
+        }
+        shift += 7;
+        if shift > 63 {
+            return None;
+        }
+    }
+    None
+}
+
+struct GrokProtoField<'a> {
+    number: u64,
+    wire: u64,
+    varint: u64,
+    bytes: &'a [u8],
+}
+
+fn grok_proto_fields(data: &[u8]) -> Option<Vec<GrokProtoField<'_>>> {
+    let mut fields = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        let key = grok_read_varint(data, &mut i)?;
+        let number = key >> 3;
+        let wire = key & 7;
+        match wire {
+            0 => {
+                let varint = grok_read_varint(data, &mut i)?;
+                fields.push(GrokProtoField {
+                    number,
+                    wire,
+                    varint,
+                    bytes: &[],
+                });
+            }
+            1 => {
+                let end = i.checked_add(8)?;
+                if end > data.len() {
+                    return None;
+                }
+                fields.push(GrokProtoField {
+                    number,
+                    wire,
+                    varint: 0,
+                    bytes: &data[i..end],
+                });
+                i = end;
+            }
+            2 => {
+                let len = grok_read_varint(data, &mut i)? as usize;
+                let end = i.checked_add(len)?;
+                if end > data.len() {
+                    return None;
+                }
+                fields.push(GrokProtoField {
+                    number,
+                    wire,
+                    varint: 0,
+                    bytes: &data[i..end],
+                });
+                i = end;
+            }
+            5 => {
+                let end = i.checked_add(4)?;
+                if end > data.len() {
+                    return None;
+                }
+                fields.push(GrokProtoField {
+                    number,
+                    wire,
+                    varint: 0,
+                    bytes: &data[i..end],
+                });
+                i = end;
+            }
+            _ => return None,
+        }
+    }
+    Some(fields)
+}
+
+fn grok_split_grpc_web(data: &[u8]) -> Option<(Vec<&[u8]>, Vec<&[u8]>)> {
+    let mut frames = Vec::new();
+    let mut trailers = Vec::new();
+    let mut i = 0;
+    while i + 5 <= data.len() {
+        let flags = data[i];
+        let len = u32::from_be_bytes(data[i + 1..i + 5].try_into().ok()?) as usize;
+        i += 5;
+        let end = i.checked_add(len)?;
+        if end > data.len() {
+            return None;
+        }
+        let payload = &data[i..end];
+        i = end;
+        if flags & 0x80 != 0 {
+            trailers.push(payload);
+        } else {
+            frames.push(payload);
+        }
+    }
+    if i != data.len() {
+        return None;
+    }
+    Some((frames, trailers))
+}
+
+fn grok_timestamp_ms(data: &[u8]) -> Option<i64> {
+    for field in grok_proto_fields(data)? {
+        if field.number == GROK_TIMESTAMP_SECONDS_FIELD && field.wire == 0 {
+            return Some((field.varint as i64).saturating_mul(1000));
+        }
+    }
+    None
+}
+
+fn parse_grok_remaining_resets(
+    body: &[u8],
+    http_headers: &[(String, String)],
+) -> Option<Vec<ResetCredit>> {
+    if let Some(status) = header_grpc_status(http_headers) {
+        if status != 0 {
+            return None;
+        }
+    }
+    let (frames, trailers) = grok_split_grpc_web(body)?;
+    for trailer in &trailers {
+        if let Some(status) = grpc_status_from_trailer(trailer) {
+            if status != 0 {
+                return None;
+            }
+        }
+    }
+    if frames.is_empty() {
+        return None;
+    }
+    if frames.iter().all(|frame| frame.is_empty()) {
+        return Some(vec![]);
+    }
+    let now = now_ms();
+    let mut out = Vec::new();
+    let mut saw_tokens = false;
+    for frame in frames {
+        if frame.is_empty() {
+            continue;
+        }
+        let fields = grok_proto_fields(frame)?;
+        for field in fields {
+            if field.number != GROK_RESET_TOKEN_FIELD || field.wire != 2 {
+                continue;
+            }
+            saw_tokens = true;
+            let mut id = String::new();
+            let mut expires_at = None;
+            for inner in grok_proto_fields(field.bytes)? {
+                if inner.number == GROK_RESET_TOKEN_ID_FIELD && inner.wire == 2 {
+                    if let Ok(s) = std::str::from_utf8(inner.bytes) {
+                        id = s.trim().to_string();
+                    }
+                } else if inner.number == GROK_RESET_TOKEN_END_FIELD && inner.wire == 2 {
+                    expires_at = grok_timestamp_ms(inner.bytes);
+                }
+            }
+            if id.is_empty() {
+                continue;
+            }
+            if expires_at.is_some_and(|ms| ms + 60_000 < now) {
+                continue;
+            }
+            out.push(ResetCredit {
+                id,
+                title: "Full reset".into(),
+                status: "available".into(),
+                granted_at: None,
+                expires_at,
+            });
+        }
+    }
+    if !saw_tokens {
+        return None;
+    }
+    out.sort_by_key(|c| c.expires_at.unwrap_or(i64::MAX));
+    out.truncate(6);
+    Some(out)
 }
 
 fn grok_version() -> String {
@@ -1366,6 +1827,9 @@ fn fetch_zhipu_quota(id: &str, title: &str, key: &str, hosts: &[&str]) -> Provid
         let url = format!("{host}/api/monitor/usage/quota/limit");
         if let Ok((200, json)) = http_get_json(&url, &headers) {
             let mut snap = parse_glm(id, title, json);
+            if snap.reset_credits.is_empty() {
+                snap.reset_credits = pull_zcode_session_reset_credits();
+            }
             if snap.reset_credits.is_empty() {
                 snap.reset_credits = pull_zhipu_reset_credits(host, &headers);
             }
@@ -2923,5 +3387,150 @@ mod tests {
         assert_eq!(snap.metrics[1].label, "Completions");
         assert_eq!(snap.metrics[1].percent, 50.0);
         assert!(snap.metrics[0].resets_at.is_some());
+    }
+
+    fn encrypt_zcode_blob(plain: &str, secret: &str, iv: &[u8; 12]) -> String {
+        let key = Sha256::digest(secret.as_bytes());
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("aes key");
+        let packed = cipher
+            .encrypt(Nonce::from_slice(iv), plain.as_bytes())
+            .expect("encrypt");
+        let (ct, tag) = packed.split_at(packed.len() - 16);
+        format!(
+            "enc:v1:{}.{}.{}",
+            URL_SAFE_NO_PAD.encode(iv),
+            URL_SAFE_NO_PAD.encode(tag),
+            URL_SAFE_NO_PAD.encode(ct)
+        )
+    }
+
+    #[test]
+    fn zcode_blob_roundtrip_and_wrong_secret() {
+        let secret = "zcode-credential-fallback:darwin:/Users/rayel:rayel";
+        let blob = encrypt_zcode_blob("hello-token", secret, &[7u8; 12]);
+        assert!(blob.starts_with("enc:v1:"));
+        assert_eq!(
+            decrypt_zcode_blob(&blob, secret).as_deref(),
+            Some("hello-token")
+        );
+        assert!(decrypt_zcode_blob(&blob, "wrong-secret").is_none());
+        assert_eq!(
+            decrypt_zcode_blob("plain-token", secret).as_deref(),
+            Some("plain-token")
+        );
+    }
+
+    #[test]
+    fn parse_zcode_reset_status_keeps_usable_and_drops_expired() {
+        let credits = parse_zcode_reset_status(&json!({
+            "code": 0,
+            "data": {
+                "available_five_hour_resets": [
+                    { "expire_at": 1_600_000_000_000i64 },
+                    { "expire_at": 1_790_870_399_000i64 }
+                ],
+                "available_week_resets": [
+                    { "expire_at": 1_790_870_399_000i64 }
+                ]
+            }
+        }));
+        assert_eq!(credits.len(), 2);
+        assert_eq!(credits[0].title, "5-hour reset");
+        assert_eq!(credits[1].title, "Weekly reset");
+        assert_eq!(credits[0].expires_at, Some(1_790_870_399_000));
+        assert_eq!(credits[1].expires_at, Some(1_790_870_399_000));
+    }
+
+    #[test]
+    fn parse_zcode_reset_status_rejects_business_error() {
+        let credits = parse_zcode_reset_status(&json!({
+            "code": 3001,
+            "msg": "parameter error",
+            "data": {
+                "available_five_hour_resets": [{ "expire_at": 1_790_870_399_000i64 }]
+            }
+        }));
+        assert!(credits.is_empty());
+    }
+
+    fn put_varint(out: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            out.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn put_len_field(out: &mut Vec<u8>, number: u64, bytes: &[u8]) {
+        put_varint(out, (number << 3) | 2);
+        put_varint(out, bytes.len() as u64);
+        out.extend_from_slice(bytes);
+    }
+
+    fn put_varint_field(out: &mut Vec<u8>, number: u64, value: u64) {
+        put_varint(out, number << 3);
+        put_varint(out, value);
+    }
+
+    fn grpc_web_frame(flags: u8, payload: &[u8]) -> Vec<u8> {
+        let mut out = vec![flags];
+        out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    fn grok_reset_token_msg(id: &str, end_secs: i64) -> Vec<u8> {
+        let mut timestamp = Vec::new();
+        put_varint_field(&mut timestamp, 1, end_secs as u64);
+        let mut token = Vec::new();
+        put_len_field(&mut token, 10, id.as_bytes());
+        put_len_field(&mut token, 30, &timestamp);
+        let mut root = Vec::new();
+        put_len_field(&mut root, 10, &token);
+        root
+    }
+
+    fn grok_resets_body(payload: &[u8], status: i32) -> Vec<u8> {
+        let mut out = grpc_web_frame(0, payload);
+        out.extend_from_slice(&grpc_web_frame(
+            0x80,
+            format!("grpc-status:{status}\r\n").as_bytes(),
+        ));
+        out
+    }
+
+    #[test]
+    fn grok_remaining_resets_keeps_unexpired_and_drops_expired() {
+        let now = now_ms() / 1000;
+        let mut payload = grok_reset_token_msg("restok_old", now - 86_400);
+        payload.extend_from_slice(&grok_reset_token_msg("restok_new", now + 86_400));
+        let credits = parse_grok_remaining_resets(&grok_resets_body(&payload, 0), &[]).unwrap();
+        assert_eq!(credits.len(), 1);
+        assert_eq!(credits[0].id, "restok_new");
+        assert_eq!(credits[0].title, "Full reset");
+        assert!(credits[0].expires_at.is_some());
+    }
+
+    #[test]
+    fn grok_remaining_resets_empty_frame_is_known_zero() {
+        let credits = parse_grok_remaining_resets(&grok_resets_body(&[], 0), &[]).unwrap();
+        assert!(credits.is_empty());
+    }
+
+    #[test]
+    fn grok_remaining_resets_empty_or_rpc_error_is_unknown() {
+        assert!(parse_grok_remaining_resets(&[], &[]).is_none());
+        assert!(parse_grok_remaining_resets(&grok_resets_body(&grok_reset_token_msg("restok_x", 1_790_870_399), 16), &[]).is_none());
+        assert!(parse_grok_remaining_resets(
+            &grok_resets_body(&[0x08, 0x01], 0),
+            &[]
+        )
+        .is_none());
     }
 }
