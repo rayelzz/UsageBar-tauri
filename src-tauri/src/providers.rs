@@ -1401,24 +1401,44 @@ fn money_val(v: Option<&Value>) -> Option<f64> {
     json_f64(v.get("val")).or_else(|| json_f64(Some(v)))
 }
 
+/// proto3 JSON omits default zeros, so a live weekly window often has
+/// `currentPeriod` but no `creditUsagePercent`. The period itself is the quota.
+fn grok_period_metric(period: &Value) -> (&'static str, &'static str) {
+    let kind = period
+        .get("type")
+        .or_else(|| period.get("periodType"))
+        .or_else(|| period.get("period_type"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if kind.to_ascii_uppercase().contains("MONTHLY") {
+        ("monthly", "Monthly limit")
+    } else {
+        ("weekly", "Weekly allowance")
+    }
+}
+
 fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
     let mut metrics = vec![];
     let mut reset = None;
     for json in bodies {
         let config = json.get("config").cloned().unwrap_or(json);
+        let period_reset = config
+            .pointer("/currentPeriod/end")
+            .and_then(parse_date)
+            .or_else(|| config.get("billingPeriodEnd").and_then(parse_date));
         if reset.is_none() {
-            reset = config
-                .pointer("/currentPeriod/end")
-                .and_then(parse_date)
-                .or_else(|| config.get("billingPeriodEnd").and_then(parse_date));
+            reset = period_reset;
         }
-        if let Some(weekly) = json_f64(config.get("creditUsagePercent")) {
+        let window_reset = period_reset.or(reset);
+        if let Some(weekly) = json_f64(config.get("creditUsagePercent"))
+            .or_else(|| json_f64(config.get("credit_usage_percent")))
+        {
             if !metrics.iter().any(|m: &UsageMetric| m.id == "weekly") {
                 metrics.push(UsageMetric {
                     id: "weekly".into(),
                     label: "Weekly allowance".into(),
                     percent: weekly,
-                    resets_at: reset,
+                    resets_at: window_reset,
                 });
             }
         }
@@ -1435,15 +1455,15 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
                     continue;
                 }
                 let label = match name {
-                    "GrokBuild" => "Grok Build",
-                    "GrokChat" => "Grok Chat",
+                    "GrokBuild" | "PRODUCT_GROK_BUILD" => "Grok Build",
+                    "GrokChat" | "PRODUCT_GROK_CHAT" => "Grok Chat",
                     other => other,
                 };
                 metrics.push(UsageMetric {
                     id: name.into(),
                     label: label.into(),
                     percent: pct,
-                    resets_at: reset,
+                    resets_at: window_reset,
                 });
             }
         }
@@ -1457,7 +1477,7 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
                     id: "monthly".into(),
                     label: "Monthly limit".into(),
                     percent: pct,
-                    resets_at: reset,
+                    resets_at: window_reset,
                 });
             }
         }
@@ -1471,7 +1491,18 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
                     id: "ondemand".into(),
                     label: "On-demand".into(),
                     percent: pct,
-                    resets_at: reset,
+                    resets_at: window_reset,
+                });
+            }
+        }
+        if let Some(period) = config.get("currentPeriod") {
+            let (id, label) = grok_period_metric(period);
+            if !metrics.iter().any(|m| m.id == id) {
+                metrics.push(UsageMetric {
+                    id: id.into(),
+                    label: label.into(),
+                    percent: 0.0,
+                    resets_at: window_reset,
                 });
             }
         }
@@ -2870,19 +2901,78 @@ mod tests {
     }
 
     #[test]
-    fn grok_unified_billing_without_percent_is_empty() {
+    fn grok_unified_billing_without_percent_is_weekly_zero() {
+        // proto3 JSON drops creditUsagePercent when it is 0.
         let json = json!({
             "config": {
-                "currentPeriod": { "end": "2026-09-06T13:53:15.842986+00:00" },
+                "currentPeriod": {
+                    "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                    "start": "2026-09-06T13:53:15.842986+00:00",
+                    "end": "2026-09-13T13:53:15.842986+00:00"
+                },
                 "isUnifiedBillingUser": true,
                 "onDemandCap": { "val": 0 },
-                "onDemandUsed": { "val": 0 }
+                "onDemandUsed": { "val": 0 },
+                "prepaidBalance": { "val": 0 }
+            }
+        });
+        let snap = parse_grok_bodies(vec![json]);
+        assert_eq!(snap.error, None);
+        assert_eq!(snap.headline_percent, Some(0.0));
+        assert_eq!(snap.metrics.len(), 1);
+        assert_eq!(snap.metrics[0].id, "weekly");
+        assert_eq!(snap.metrics[0].label, "Weekly allowance");
+        assert_eq!(snap.metrics[0].percent, 0.0);
+        assert!(snap.metrics[0].resets_at.is_some());
+    }
+
+    #[test]
+    fn grok_unified_billing_without_period_is_empty() {
+        let json = json!({
+            "config": {
+                "isUnifiedBillingUser": true,
+                "onDemandCap": { "val": 0 }
             }
         });
         let snap = parse_grok_bodies(vec![json]);
         assert_eq!(snap.headline_percent, None);
         assert_eq!(snap.error.as_deref(), Some("no_quota"));
         assert!(snap.metrics.is_empty());
+    }
+
+    #[test]
+    fn grok_live_credits_and_dollar_bodies_show_weekly_zero() {
+        let credits = json!({
+            "config": {
+                "currentPeriod": {
+                    "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                    "start": "2026-09-06T13:53:15.842986+00:00",
+                    "end": "2026-09-13T13:53:15.842986+00:00"
+                },
+                "onDemandCap": { "val": 0 },
+                "onDemandUsed": { "val": 0 },
+                "isUnifiedBillingUser": true,
+                "prepaidBalance": { "val": 0 },
+                "topUpMethod": "TOP_UP_METHOD_SAVED_PAYMENT_METHOD",
+                "billingPeriodStart": "2026-09-06T13:53:15.842986+00:00",
+                "billingPeriodEnd": "2026-09-13T13:53:15.842986+00:00"
+            }
+        });
+        let dollar = json!({
+            "config": {
+                "monthlyLimit": { "val": 0 },
+                "used": { "val": 0 },
+                "onDemandCap": { "val": 0 },
+                "billingPeriodStart": "2026-09-01T00:00:00+00:00",
+                "billingPeriodEnd": "2026-10-01T00:00:00+00:00"
+            }
+        });
+        let snap = parse_grok_bodies(vec![credits, dollar]);
+        assert_eq!(snap.error, None);
+        assert_eq!(snap.headline_percent, Some(0.0));
+        assert_eq!(snap.metrics.len(), 1);
+        assert_eq!(snap.metrics[0].id, "weekly");
+        assert_eq!(snap.metrics[0].percent, 0.0);
     }
 
     #[test]

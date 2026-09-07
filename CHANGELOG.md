@@ -6,6 +6,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.24 — 2026-09-07
+
+- **Grok weekly usage.** Newer Grok CLI unified-billing JSON omits `creditUsagePercent` when usage is 0 (proto3). UsageBar now still shows the weekly window at 0% used, with the period reset time, instead of “No data”. Reset cards are unchanged.
+
 ### 0.0.23 — 2026-09-05
 
 - **Reset-card expiry reminder.** After each refresh, a card that enters 1 day left, then 5 / 4 / 3 / 2 / 1 hours, pulses the icon and shows a 30-second card. Hover the slot or click **×** to dismiss that milestone. Expiry text on the usage card turns yellow at ≤ 1 day and red at ≤ 8 hours.
@@ -122,6 +126,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.24 — 2026-09-07
+
+- **Grok 周额度。** 新版 Grok CLI 统一计费在用量为 0 时会省略 `creditUsagePercent`（proto3 JSON）。现在仍显示周窗口为已用 0%，并带重置时间，不再显示「暂无数据」。重置卡逻辑不变。
 
 ### 0.0.23 — 2026-09-05
 

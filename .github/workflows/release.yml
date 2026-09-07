@@ -51,8 +51,7 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Reset-card expiry:** When a card enters 1 day left, then 5 / 4 / 3 / 2 / 1 hours, the icon pulses and a 30-second card appears. Hover or **×** dismisses that milestone. Expiry text turns yellow at ≤ 1 day, red at ≤ 8 hours.
-            - **Update notes:** A new version opens a separate window with this section in the app language, beside the settings menu. Opening settings still checks once when auto-check is off. **×** skips that version.
+            - **Grok weekly usage:** Newer Grok CLI unified-billing JSON omits `creditUsagePercent` at 0%. UsageBar now shows the weekly window (0% used) and reset time instead of “No data”. Reset cards are unchanged.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -76,8 +75,7 @@ jobs:
 
             ### 更新说明
 
-            - **重置卡临期：** 进入到期前 1 天，以及 5 / 4 / 3 / 2 / 1 小时时，图标闪动并弹出 30 秒提醒。悬停或点 **×** 关闭该档。到期时间 ≤1 天变黄、≤8 小时变红。
-            - **更新说明：** 新版本用独立窗口按应用语言显示本段，不顶掉设置。未开自动检测时，打开设置仍会查一次。点 **×** 跳过该版本。
+            - **Grok 周额度：** 新版 Grok CLI 统一计费在 0% 时不再返回 `creditUsagePercent`。现在仍显示周窗口（已用 0%）和重置时间，不再「暂无数据」。重置卡不变。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 
