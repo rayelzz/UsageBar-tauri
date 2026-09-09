@@ -4,11 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>UsageBar</title>
+    <script>
+      (function () {
+        var w = new URLSearchParams(location.search).get("w");
+        if (w === "update") {
+          document.documentElement.classList.add("update");
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="bar-root" hidden>
       <div id="bar" class="bar">
+        <div id="bar-frost" class="bar-frost" hidden aria-hidden="true"></div>
         <svg id="dock-shape" class="dock-bg" aria-hidden="true"></svg>
         <div id="cells" class="cells"></div>
         <button id="gear-btn" class="gear-btn" type="button" aria-label="Settings">
@@ -26,14 +35,6 @@
           <div id="tip-pointer" class="pointer"></div>
           <div id="tip-card" class="card"></div>
         </div>
-      </div>
-    </div>
-    <div id="settings-root" hidden>
-      <div class="settings-page">
-        <h1 id="settings-title"></h1>
-        <p id="settings-hint" class="settings-hint"></p>
-        <p id="settings-count" class="settings-count"></p>
-        <div id="settings-list"></div>
       </div>
     </div>
     <script type="module" src="main.js"></script>

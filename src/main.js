@@ -145,9 +145,6 @@ function t() {
         snapRight: "贴右边",
         snapTop: "贴上边",
         snapBottom: "贴下边",
-        displayStyle: "显示样式",
-        ringUsage: "圆环用量",
-        transparentIcons: "透明图标",
         displayValue: "显示值",
         usedQuota: "已使用额度",
         remainingQuota: "剩余额度",
@@ -157,6 +154,12 @@ function t() {
         quit: "退出 UsageBar",
         tools: "提供商…",
         toolsTitle: "提供商",
+        toolsBack: "返回",
+        barOpacity: "面板不透明度",
+        barOpacityHint: "低于 60% 时字和图标会加深，拉到 0% 接近黑色",
+        barBlur: "模糊半径",
+        barBlurHint: "越高，背后越糊。不透明度低一些时更明显",
+        lookReset: "还原默认",
         toolsHint: "最少 1 个，最多 10 个。条的长度随数量变化。顺序即圆环从左到右 / 从上到下。没登录的提供商显示暂无数据。",
         toolsMax: "已经选了 10 个，请先取消一个再勾选。",
         toolsMin: "至少保留 1 个。",
@@ -204,9 +207,6 @@ function t() {
         snapRight: "Snap to right",
         snapTop: "Snap to top",
         snapBottom: "Snap to bottom",
-        displayStyle: "Display style",
-        ringUsage: "Ring usage",
-        transparentIcons: "Transparent",
         displayValue: "Display value",
         usedQuota: "Used quota",
         remainingQuota: "Remaining quota",
@@ -216,6 +216,12 @@ function t() {
         quit: "Quit UsageBar",
         tools: "Providers…",
         toolsTitle: "Providers",
+        toolsBack: "Back",
+        barOpacity: "Panel opacity",
+        barOpacityHint: "Below 60%, type and icons darken; at 0% they turn near-black",
+        barBlur: "Blur radius",
+        barBlurHint: "Higher blurs what’s behind. Easier to see when opacity is lower",
+        lookReset: "Reset",
         toolsHint: "Show 1–10 providers. The bar grows with the count. Order is left-to-right / top-to-bottom. Unsigned-in providers show No data.",
         toolsMax: "10 providers already selected. Uncheck one first.",
         toolsMin: "Keep at least 1 provider.",
@@ -406,6 +412,8 @@ function normalizeLoadedPrefs(p) {
   if (typeof next.lastX !== "number" || Number.isNaN(next.lastX)) next.lastX = -1;
   if (typeof next.lastY !== "number" || Number.isNaN(next.lastY)) next.lastY = -1;
   if (typeof next.along !== "number" || Number.isNaN(next.along)) next.along = -1;
+  next.barOpacity = clampBarOpacity(next.barOpacity);
+  next.barBlur = clampBarBlur(next.barBlur);
   return next;
 }
 
@@ -572,6 +580,11 @@ function glyph(id, size) {
     .join("")}</svg>`;
 }
 
+function ringTrack(c, r) {
+  return `<circle class="ring-track-outer" cx="${c}" cy="${c}" r="${r}"/>
+    <circle class="ring-track-inner" cx="${c}" cy="${c}" r="${r}"/>`;
+}
+
 function ringSvg(used, unknown) {
   const c = 13;
   const r = 10.25;
@@ -580,7 +593,7 @@ function ringSvg(used, unknown) {
   const color = unknown || shown == null ? "transparent" : usageColor(used);
   const dash = unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
   return `<svg viewBox="0 0 26 26">
-    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
+    ${ringTrack(c, r)}
     <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="2.5"
       stroke-linecap="round" stroke-dasharray="${dash} ${circ}" transform="rotate(-90 ${c} ${c})"/>
   </svg>${glyph(arguments[2], 16)}`;
@@ -679,10 +692,6 @@ function isVertical(edge) {
   return edge === "left" || edge === "right" || edge === "floating";
 }
 
-function isIcons() {
-  return prefs.displayStyle === "icons";
-}
-
 function barSize(edge) {
   const n = slotCount();
   if (isVertical(edge)) return { w: BAR_THICK, h: BAR_PAD + BAR_SLOT * n + gearAlong(edge) };
@@ -708,6 +717,155 @@ function logicalMonitor(m) {
 
 function clamp(v, lo, hi) {
   return Math.min(Math.max(v, lo), Math.max(lo, hi));
+}
+
+const BAR_OPACITY_DEFAULT = 1;
+const BAR_OPACITY_MIN = 0;
+const BAR_BLUR_MAX = 100;
+
+function clampBarOpacity(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return BAR_OPACITY_DEFAULT;
+  return clamp(n, BAR_OPACITY_MIN, 1);
+}
+
+function clampBarBlur(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(clamp(n, 0, BAR_BLUR_MAX));
+}
+
+function dockFill() {
+  return `rgba(0,0,0,${clampBarOpacity(prefs.barOpacity)})`;
+}
+
+const INK_START = 0.6;
+const GLYPH_LIGHT = [255, 255, 255];
+const GLYPH_INK = [0, 0, 0];
+
+function mixRgb(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+}
+
+function rgbCss(rgb, alpha) {
+  if (alpha == null) return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+function barInk() {
+  const alpha = clampBarOpacity(prefs.barOpacity);
+  return clamp((INK_START - alpha) / INK_START, 0, 1);
+}
+
+function paintFill(el, color) {
+  if (!el) return;
+  el.style.fill = color;
+  el.setAttribute("fill", color);
+}
+
+function paintStroke(el, color) {
+  if (!el) return;
+  el.style.stroke = color;
+  el.setAttribute("stroke", color);
+}
+
+function paintInkChrome() {
+  const ink = barInk();
+  const glyph = mixRgb(GLYPH_LIGHT, GLYPH_INK, ink);
+  const fill = rgbCss(glyph);
+  const muted = rgbCss(glyph, 0.72 + (1 - ink) * 0.06);
+  const outer = rgbCss(mixRgb([0, 0, 0], [255, 255, 255], ink), 0.55 + ink * 0.15);
+  const inner = rgbCss(mixRgb([255, 255, 255], [0, 0, 0], ink), 0.28 + ink * 0.12);
+  const bar = document.getElementById("bar");
+  if (bar) bar.style.color = fill;
+  document.querySelectorAll("#bar .glyph").forEach((svg) => {
+    paintFill(svg, fill);
+    svg.querySelectorAll("path").forEach((p) => paintFill(p, fill));
+  });
+  document.querySelectorAll("#bar .pct").forEach((el) => {
+    const color = el.closest(".unknown") ? muted : fill;
+    el.style.color = color;
+    el.style.webkitTextFillColor = color;
+  });
+  const gear = document.getElementById("gear-btn");
+  if (gear) {
+    gear.style.color = fill;
+    gear.style.webkitTextFillColor = fill;
+  }
+  document.querySelectorAll("#bar .ring-track-outer").forEach((el) => paintStroke(el, outer));
+  document.querySelectorAll("#bar .ring-track-inner").forEach((el) => paintStroke(el, inner));
+}
+
+function applyBarLook() {
+  const alpha = clampBarOpacity(prefs.barOpacity);
+  const blur = clampBarBlur(prefs.barBlur);
+  const ink = barInk();
+  const glyph = mixRgb(GLYPH_LIGHT, GLYPH_INK, ink);
+  const root = document.documentElement;
+  root.classList.toggle("bar-ink", ink > 0.5);
+  root.style.setProperty("--bar-alpha", String(alpha));
+  root.style.setProperty("--bar-blur", `${blur}px`);
+  root.style.setProperty("--glyph", rgbCss(glyph));
+  root.style.setProperty("--glyph-muted", rgbCss(glyph, 0.72 + (1 - ink) * 0.06));
+  root.style.setProperty("--ring-track-outer", rgbCss(mixRgb([0, 0, 0], [255, 255, 255], ink), 0.55 + ink * 0.15));
+  root.style.setProperty("--ring-track-inner", rgbCss(mixRgb([255, 255, 255], [20, 20, 22], ink), 0.28 + ink * 0.12));
+  const svg = document.getElementById("dock-shape");
+  if (svg) {
+    svg.querySelectorAll("path, circle.pod").forEach((el) => {
+      paintFill(el, dockFill());
+    });
+  }
+  paintInkChrome();
+  paintFrostMask(prefs.edge);
+}
+
+function frostFilterCss(blur) {
+  const px = Math.max(0, Number(blur) || 0);
+  if (px <= 0) return "none";
+  return `blur(${px}px)`;
+}
+
+function setFrostFilter(el, blur) {
+  const css = frostFilterCss(blur);
+  if (el.dataset.frostBlur === String(blur) && el.style.webkitBackdropFilter === css) {
+    return el;
+  }
+  const next = el.cloneNode(false);
+  next.hidden = el.hidden;
+  next.dataset.frostBlur = String(blur);
+  next.style.webkitBackdropFilter = css;
+  next.style.backdropFilter = css;
+  el.replaceWith(next);
+  return next;
+}
+
+function paintFrostMask(edge) {
+  let frost = document.getElementById("bar-frost");
+  if (!frost) return;
+  const blur = clampBarBlur(prefs.barBlur);
+  if (blur <= 0) {
+    frost.hidden = true;
+    frost.style.webkitMaskImage = "";
+    frost.style.maskImage = "";
+    frost.style.webkitBackdropFilter = "none";
+    frost.style.backdropFilter = "none";
+    delete frost.dataset.frostBlur;
+    return;
+  }
+  const size = barSize(edge);
+  const body = dockPath(size.w, size.h, edge);
+  const c = gearCenter(size.w, size.h, edge);
+  const pod = barHot ? `<circle cx="${c.x}" cy="${c.y}" r="${GEAR_R}" fill="white"/>` : "";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size.w} ${size.h}"><path fill="white" d="${body}"/>${pod}</svg>`;
+  const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+  frost.hidden = false;
+  frost.style.webkitMaskImage = url;
+  frost.style.maskImage = url;
+  setFrostFilter(frost, blur);
 }
 
 function nearest(frame, screen) {
@@ -786,6 +944,8 @@ let prefs = {
   skippedUpdateVersion: "",
   lastX: -1,
   lastY: -1,
+  barOpacity: 1,
+  barBlur: 0,
 };
 let prefsReady = false;
 let osName = "macos";
@@ -807,6 +967,7 @@ let refreshing = false;
 let refreshQueued = false;
 let prefsSaveTail = Promise.resolve();
 let menuOpen = false;
+let menuPage = "menu";
 let menuScreenBox = null;
 let resetToastId = null;
 let creditToastId = null;
@@ -828,6 +989,8 @@ let menuCheckWantNotes = false;
 let menuCheckStatus = "";
 const JUMP_ICON =
   '<svg class="m-jump" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11.5 11.5 5"/><path d="M7 5h4.5V9.5"/></svg>';
+const RESET_ICON =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 8a4.6 4.6 0 1 0 1.3-3.2"/><path d="M3.2 2.6v2.8h2.8"/></svg>';
 let barHot = false;
 let pointerOver = false;
 
@@ -839,7 +1002,6 @@ function setBarHot(on) {
   const barEl = document.getElementById("bar");
   if (barEl) {
     barEl.classList.toggle("hot", barHot);
-    barEl.classList.toggle("icons", isIcons());
   }
   paintDock(prefs.edge);
 }
@@ -859,20 +1021,11 @@ function placeGearBtn(edge) {
 function paintDock(edge) {
   const svg = document.getElementById("dock-shape");
   if (!svg) return;
-  if (isIcons()) {
-    svg.innerHTML = "";
-    svg.removeAttribute("viewBox");
-    svg.removeAttribute("width");
-    svg.removeAttribute("height");
-    svg.style.width = "";
-    svg.style.height = "";
-    svg.style.display = "none";
-    return;
-  }
   svg.style.display = "";
   const size = barSize(edge);
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
+  const fill = dockFill();
   svg.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
   svg.setAttribute("width", String(size.w));
   svg.setAttribute("height", String(size.h));
@@ -880,8 +1033,10 @@ function paintDock(edge) {
   svg.style.width = `${size.w}px`;
   svg.style.height = `${size.h}px`;
   svg.innerHTML = barHot
-    ? `<path d="${body}" /><circle class="pod" cx="${c.x}" cy="${c.y}" r="${GEAR_R}" />`
-    : `<path d="${body}" />`;
+    ? `<path d="${body}" fill="${fill}" /><circle class="pod" cx="${c.x}" cy="${c.y}" r="${GEAR_R}" fill="${fill}" />`
+    : `<path d="${body}" fill="${fill}" />`;
+  svg.querySelectorAll("path, circle.pod").forEach((el) => paintFill(el, fill));
+  paintFrostMask(edge);
 }
 
 function renderBar() {
@@ -889,7 +1044,7 @@ function renderBar() {
   const cells = document.getElementById("cells");
   const edge = prefs.edge;
   const vertical = isVertical(edge);
-  barEl.className = "bar" + (isIcons() ? " icons" : "") + (barHot ? " hot" : "");
+  barEl.className = "bar" + (barHot ? " hot" : "");
   cells.className = "cells " + (vertical ? "vertical" : "horizontal");
   const pad = padding(edge);
   cells.style.padding = `${pad.t}px ${pad.r}px ${pad.b}px ${pad.l}px`;
@@ -911,7 +1066,7 @@ function renderBar() {
         return `<div class="cell empty-slot unknown">
           <div class="ring">
             <svg viewBox="0 0 26 26">
-              <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
+              ${ringTrack(c, r)}
             </svg>
           </div>
           <div class="pct">—</div>
@@ -921,7 +1076,7 @@ function renderBar() {
       return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice || s.creditNotice ? " reset" : ""}" data-id="${s.id}">
         <div class="ring">
           <svg viewBox="0 0 26 26">
-            <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="2.5"/>
+            ${ringTrack(c, r)}
             <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="2.5"
               stroke-linecap="round" stroke-dasharray="${dash} ${circ}" transform="rotate(-90 ${c} ${c})"/>
           </svg>
@@ -933,6 +1088,7 @@ function renderBar() {
       </div>`;
     })
     .join("");
+  paintInkChrome();
 }
 
 const TIP_SLIDE_MS = 400;
@@ -1658,13 +1814,13 @@ async function installAvailableUpdate() {
   if (menuInstalling) return;
   menuInstalling = true;
   menuInstallPercent = null;
-  if (menuOpen) await showPanelMenu(false);
+  if (menuOpen) await refreshMenuIfOpen(false);
   try {
     await invoke("install_update");
   } catch {
     menuInstalling = false;
     menuCheckStatus = "installFailed";
-    if (menuOpen) await showPanelMenu(false);
+    if (menuOpen) await refreshMenuIfOpen(false);
     const url = (menuCheckedInfo || checkedInfo || updateInfo)?.url || null;
     await openRelease(url);
   }
@@ -1711,7 +1867,7 @@ async function checkUpdateManual(opts = {}) {
   if (menuChecking) return;
   menuChecking = true;
   menuCheckStatus = "checking";
-  if (menuOpen) await showPanelMenu(false);
+  if (menuOpen) await refreshMenuIfOpen(false);
   let info = null;
   try {
     info = await requestUpdateInfo();
@@ -1735,7 +1891,7 @@ async function checkUpdateManual(opts = {}) {
   menuChecking = false;
   const showNotes = menuCheckWantNotes;
   menuCheckWantNotes = false;
-  if (menuOpen) await showPanelMenu(true);
+  if (menuOpen) await refreshMenuIfOpen(true);
   if (updateHasNewer(info) && (showNotes || !isSkippedUpdate(info))) {
     updateToastDismissed = false;
     await showUpdateToast({ force: showNotes });
@@ -1776,11 +1932,11 @@ async function applyLaunchAtLogin(want) {
     if (actual === prefs.launchAtLogin) return;
     prefs.launchAtLogin = actual;
     savePrefs().catch((err) => console.error(err));
-    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
+    if (menuOpen) refreshMenuIfOpen(false).catch((err) => console.error(err));
   } catch (err) {
     console.error(err);
     prefs.launchAtLogin = !want;
-    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
+    if (menuOpen) refreshMenuIfOpen(false).catch((err) => console.error(err));
   }
 }
 
@@ -1877,8 +2033,7 @@ function paintShownPercents() {
     const shown = shownPct(snap.headlinePercent);
     const pctEl = el.querySelector(".pct");
     if (pctEl) pctEl.textContent = unknown || shown == null ? "—" : `${Math.round(shown)}%`;
-    const circles = el.querySelectorAll("circle");
-    const ring = circles[1];
+    const ring = el.querySelector("circle:not(.ring-track-outer):not(.ring-track-inner)");
     if (ring && !unknown && shown != null) {
       const r = Number(ring.getAttribute("r"));
       if (r > 0) {
@@ -1888,6 +2043,7 @@ function paintShownPercents() {
       }
     }
   });
+  paintInkChrome();
 }
 
 function applyIncomingSnap(snap) {
@@ -1983,20 +2139,6 @@ async function setLocale(next) {
   if (hovered) await renderTip();
 }
 
-async function setDisplayStyle(style) {
-  const next = style === "icons" ? "icons" : "full";
-  if (prefs.displayStyle === next) return;
-  await setHovered(null);
-  prefs.displayStyle = next;
-  try {
-    await invoke("set_display_style", { style: next });
-  } catch {
-    await savePrefs();
-  }
-  await placeWindows();
-  renderBar();
-}
-
 function setDisplayValue(value) {
   const next = value === "remaining" ? "remaining" : "used";
   if (prefs.displayValue === next) return;
@@ -2043,9 +2185,6 @@ async function onNativeMenu(id) {
     prefs.refreshInterval = Number(id.slice(9));
     savePrefs().catch((err) => console.error(err));
     restartTimer();
-  } else if (id.startsWith("style:")) {
-    await setDisplayStyle(id.slice(6));
-    return;
   } else if (id.startsWith("value:")) {
     await setDisplayValue(id.slice(6));
     return;
@@ -2061,7 +2200,7 @@ async function onNativeMenu(id) {
     savePrefs().catch((err) => console.error(err));
     applyAutoUpdatePref();
   } else if (id === "tools") {
-    await invoke("open_settings");
+    await showProvidersPanel(true);
     return;
   } else if (id === "quit") {
     await invoke("quit");
@@ -2070,6 +2209,7 @@ async function onNativeMenu(id) {
 }
 
 const MENU_W = 216;
+const PROVIDERS_W = 260;
 let menuCardFrame = null;
 
 function menuSpec(st) {
@@ -2101,12 +2241,27 @@ function menuSpec(st) {
       ui.edgeShort,
       ["left", "right", "top", "bottom"].map((e) => st.edge === e)
     ),
-    { k: "label", label: ui.displayStyle },
-    chips(
-      ["style:full", "style:icons"],
-      [ui.ringUsage, ui.transparentIcons],
-      [st.displayStyle !== "icons", st.displayStyle === "icons"]
-    ),
+    {
+      k: "slider",
+      id: "opacity",
+      label: ui.barOpacity,
+      hint: ui.barOpacityHint,
+      min: 0,
+      max: 100,
+      value: Math.round(clampBarOpacity(st.barOpacity) * 100),
+      suffix: "%",
+    },
+    {
+      k: "slider",
+      id: "blur",
+      label: ui.barBlur,
+      hint: ui.barBlurHint,
+      min: 0,
+      max: 100,
+      value: clampBarBlur(st.barBlur),
+      suffix: "",
+    },
+    { k: "sep" },
     { k: "label", label: ui.displayValue },
     chips(
       ["value:used", "value:remaining"],
@@ -2153,6 +2308,22 @@ function menuPanelHtml(st) {
           )
           .join("")}</div>`;
       }
+      if (r.k === "slider") {
+        const shown = r.suffix ? `${r.value}${r.suffix}` : String(r.value);
+        const resetTo = r.id === "opacity" ? 100 : 0;
+        const atDefault = Number(r.value) === resetTo;
+        return `<div class="m-slider">
+          <div class="m-slider-head">
+            <span class="m-slider-name">${r.label}</span>
+            <button type="button" class="m-slider-reset${atDefault ? " is-default" : ""}" data-look-reset="${r.id}" title="${t().lookReset}" aria-label="${t().lookReset}">${RESET_ICON}</button>
+          </div>
+          <div class="m-slider-hint">${r.hint || ""}</div>
+          <div class="m-slider-row">
+            <input type="range" min="${r.min}" max="${r.max}" step="1" value="${r.value}" data-look="${r.id}" />
+            <span class="m-slider-val" data-look-val="${r.id}">${shown}</span>
+          </div>
+        </div>`;
+      }
       const extra =
         (r.extraKind === "link" || r.extraKind === "install") && r.extra
           ? `<span class="m-extra link" data-mid="${r.extraId || "latest"}">${r.extra}${
@@ -2169,8 +2340,58 @@ function menuPanelHtml(st) {
 }
 
 function menuPanelHeight(st) {
-  const H = { row: 30, sep: 11, label: 20, chips: 30, info: 22 };
+  const H = { row: 30, sep: 11, label: 20, chips: 30, info: 22, slider: 58 };
   return menuSpec(st).reduce((sum, r) => sum + (H[r.k] || 0), 0) + 16;
+}
+
+function providersPanelHeight() {
+  return 28 + 60 + 20 + CATALOG_IDS.length * 40 + 16;
+}
+
+function providersPanelHtml(st) {
+  const ui = t();
+  const vis = normalizeVisible(st.visibleProviders);
+  const selected = new Set(vis);
+  const rest = CATALOG_IDS.filter((id) => !selected.has(id));
+  const warn = vis.length >= SLOT_MAX || vis.length <= SLOT_MIN;
+  const count =
+    vis.length >= SLOT_MAX ? ui.toolsMax : vis.length <= SLOT_MIN ? ui.toolsMin : ui.selectedCount(vis.length);
+  const rows = [...vis, ...rest]
+    .map((id) => {
+      const on = selected.has(id);
+      const idx = vis.indexOf(id);
+      const upOff = !on || idx <= 0;
+      const downOff = !on || idx < 0 || idx >= vis.length - 1;
+      const spec = ICONS[id];
+      const rule = spec?.evenOdd ? 'fill-rule="evenodd"' : "";
+      const icon = spec
+        ? `<span class="icon"><svg class="glyph" viewBox="${spec.viewBox}">${spec.d
+            .map((p) => `<path ${rule} d="${p}"/>`)
+            .join("")}</svg></span>`
+        : "";
+      return `<div class="settings-row" data-id="${id}">
+        <label>
+          <input type="checkbox" data-toggle="${id}" ${on ? "checked" : ""} ${
+            !on && vis.length >= SLOT_MAX ? "disabled" : ""
+          }/>
+          ${icon}
+          <span class="name">${vendorName(id)}</span>
+        </label>
+        <button type="button" data-move="${id}" data-dir="-1" ${upOff ? "disabled" : ""} title="${ui.moveUp}">↑</button>
+        <button type="button" data-move="${id}" data-dir="1" ${downOff ? "disabled" : ""} title="${ui.moveDown}">↓</button>
+      </div>`;
+    })
+    .join("");
+  return `
+    <div class="prov-head">
+      <button type="button" class="prov-back" data-mid="menu-back" title="${ui.toolsBack}" aria-label="${ui.toolsBack}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5 4.5 8 10 12.5"/></svg>
+      </button>
+      <div class="prov-title">${ui.toolsTitle}</div>
+    </div>
+    <p class="prov-hint">${ui.toolsHint}</p>
+    <p class="prov-count${warn ? " warn" : ""}">${count}</p>
+    <div class="prov-list">${rows}</div>`;
 }
 
 function menuStateNow() {
@@ -2180,7 +2401,8 @@ function menuStateNow() {
     locked: !!prefs.locked,
     clickThrough: !!prefs.clickThrough,
     edge: prefs.edge,
-    displayStyle: isIcons() ? "icons" : "full",
+    barOpacity: clampBarOpacity(prefs.barOpacity),
+    barBlur: clampBarBlur(prefs.barBlur),
     displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     launchAtLogin: !!prefs.launchAtLogin,
     autoCheckUpdate: !!prefs.autoCheckUpdate,
@@ -2216,7 +2438,7 @@ function menuStateNow() {
   };
 }
 
-async function showPanelMenu(reposition = true) {
+async function placeMenuOverlay(winW, needH, reposition) {
   const wasOpen = menuOpen;
   menuOpen = true;
   if (!wasOpen) {
@@ -2228,12 +2450,13 @@ async function showPanelMenu(reposition = true) {
     await setHovered(null);
     await setTipClickable(true);
   }
-  const st = menuStateNow();
   const arrow =
     prefs.edge === "left" ? "left" : prefs.edge === "top" ? "up" : prefs.edge === "bottom" ? "down" : "right";
   const tipWin = await getWindow("tip");
   let pointerAt = menuCardFrame?.pointerAt ?? null;
-  if (reposition || !wasOpen || !menuCardFrame) {
+  const sizeChanged =
+    !menuCardFrame || menuCardFrame.w !== winW || Math.abs((menuCardFrame.h || 0) - needH) > 2;
+  if (reposition || !wasOpen || sizeChanged) {
     const pos = await getCurrentWindow().outerPosition();
     const size = await getCurrentWindow().outerSize();
     const scale = await getCurrentWindow().scaleFactor();
@@ -2243,8 +2466,7 @@ async function showPanelMenu(reposition = true) {
     const g = gearCenter(frame.w, frame.h, prefs.edge);
     const gx = frame.x + g.x;
     const gy = frame.y + g.y;
-    const winW = MENU_W;
-    const winH = menuPanelHeight(st);
+    const winH = Math.min(needH, Math.max(160, screen.wh - 12));
     let x;
     let y;
     if (prefs.edge === "left") x = frame.x + frame.w - 2;
@@ -2275,7 +2497,6 @@ async function showPanelMenu(reposition = true) {
     cancelTipSlide();
     tipSlideFrame = null;
     tipStageFrame = null;
-    // 铺满当前屏：点卡片外的透明区域即可关闭，不依赖点穿/全局鼠标。
     await tipWin?.setSize(new (LogicalSize())(screen.w, screen.h));
     await tipWin?.setPosition(new (LogicalPosition())(screen.x, screen.y));
     try {
@@ -2284,6 +2505,22 @@ async function showPanelMenu(reposition = true) {
       /* optional */
     }
   }
+  return { wasOpen, tipWin, arrow, pointerAt };
+}
+
+function refreshMenuIfOpen(reposition = false) {
+  if (!menuOpen || menuPage !== "menu") return Promise.resolve();
+  return showPanelMenu(reposition);
+}
+
+async function showPanelMenu(reposition = true) {
+  menuPage = "menu";
+  const st = menuStateNow();
+  const { wasOpen, tipWin, arrow, pointerAt } = await placeMenuOverlay(
+    MENU_W,
+    menuPanelHeight(st),
+    reposition
+  );
   await api().event.emit("usagebar-tip", {
     show: true,
     kind: "menu",
@@ -2310,9 +2547,44 @@ async function showPanelMenu(reposition = true) {
   }
 }
 
+async function showProvidersPanel(reposition = true) {
+  menuPage = "providers";
+  const st = {
+    locale: isZh() ? "zh" : "en",
+    visibleProviders: normalizeVisible(prefs.visibleProviders),
+  };
+  const { wasOpen, tipWin, arrow, pointerAt } = await placeMenuOverlay(
+    PROVIDERS_W,
+    providersPanelHeight(),
+    reposition
+  );
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    kind: "providers",
+    state: st,
+    arrow,
+    locale: st.locale,
+    pointerAt,
+    cardX: menuCardFrame.x,
+    cardY: menuCardFrame.y,
+    cardW: menuCardFrame.w,
+    cardH: menuCardFrame.h,
+  });
+  if (!wasOpen || reposition) {
+    await tipWin?.show();
+    try {
+      await tipWin?.setFocus();
+    } catch {
+      /* optional */
+    }
+  }
+  if (updateToastOpen) await layoutUpdateCard();
+}
+
 async function closeMenuPanel() {
   if (!menuOpen) return;
   menuOpen = false;
+  menuPage = "menu";
   menuCardFrame = null;
   menuScreenBox = null;
   await invoke("set_menu_open", { open: false });
@@ -2344,7 +2616,15 @@ async function handleMenuAction(id) {
     refresh().catch((err) => console.error(err));
     return;
   }
-  if (id === "tools" || id === "quit") {
+  if (id === "menu-back") {
+    await showPanelMenu(true);
+    return;
+  }
+  if (id === "tools") {
+    await showProvidersPanel(true);
+    return;
+  }
+  if (id === "quit") {
     await closeMenuPanel();
     await onNativeMenu(id);
     return;
@@ -2352,11 +2632,6 @@ async function handleMenuAction(id) {
   if (id.startsWith("snap:")) {
     await onNativeMenu(id);
     if (menuOpen) await showPanelMenu(true);
-    return;
-  }
-  if (id.startsWith("style:")) {
-    await onNativeMenu(id);
-    if (menuOpen) await showPanelMenu(false);
     return;
   }
   if (MENU_TOGGLES.has(id)) {
@@ -2458,6 +2733,7 @@ async function startBar() {
     appVersion = "";
   }
   applyLocale();
+  applyBarLook();
   try {
     if (api().autostart) {
       prefs.launchAtLogin = await api().autostart.isEnabled();
@@ -2503,22 +2779,17 @@ async function startBar() {
     const prev = (prefs.visibleProviders || []).join(",");
     const prevAuto = !!prefs.autoCheckUpdate;
     const prevValue = prefs.displayValue;
-    const prevStyle = prefs.displayStyle;
     prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
+    applyBarLook();
     if (prevAuto !== prefs.autoCheckUpdate) applyAutoUpdatePref();
     if (prev !== prefs.visibleProviders.join(",")) {
       snaps = slotsFrom(snaps.filter((s) => s.id), true);
       renderBar();
       placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
-    } else if (prevValue !== prefs.displayValue || prevStyle !== prefs.displayStyle) {
-      if (prevStyle !== prefs.displayStyle) {
-        renderBar();
-        placeWindows().catch((err) => console.error(err));
-      } else {
-        paintShownPercents();
-      }
+    } else if (prevValue !== prefs.displayValue) {
+      paintShownPercents();
       if (hovered) renderTip().catch((err) => console.error(err));
     }
   });
@@ -2563,7 +2834,7 @@ async function startBar() {
     const pct = Math.min(100, Math.round((downloaded / total) * 100));
     if (pct === menuInstallPercent) return;
     menuInstallPercent = pct;
-    if (menuOpen) showPanelMenu(false).catch((err) => console.error(err));
+    if (menuOpen) refreshMenuIfOpen(false).catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-usage", (e) => {
     if (e.payload) applyIncomingSnap(e.payload);
@@ -2584,7 +2855,7 @@ function setMenuHover(el) {
 function paintChipSelection(el) {
   const id = el?.dataset?.mid || "";
   const prefix = id.split(":")[0];
-  if (!["interval", "snap", "style", "value", "locale"].includes(prefix)) return;
+  if (!["interval", "snap", "value", "locale"].includes(prefix)) return;
   const root = el.closest("#tip-card") || document;
   root.querySelectorAll(`.m-chip[data-mid^="${prefix}:"]`).forEach((chip) => {
     chip.classList.toggle("on", chip === el);
@@ -2845,9 +3116,12 @@ function paintTip(payload) {
   if (payload.displayValue) {
     prefs.displayValue = payload.displayValue === "remaining" ? "remaining" : "used";
   }
+  if (payload.kind === "providers" && payload.state?.visibleProviders) {
+    prefs.visibleProviders = normalizeVisible(payload.state.visibleProviders);
+  }
   applyLocale();
   const ptr = document.getElementById("tip-pointer");
-  if (payload.kind === "menu") {
+  if (payload.kind === "menu" || payload.kind === "providers") {
     clearTipSlide();
     const root = document.getElementById("tip-root");
     const tip = document.getElementById("tip");
@@ -2856,7 +3130,9 @@ function paintTip(payload) {
     card.dataset.resetId = "";
     card.classList.remove("update-only", "update-notes");
     card.classList.add("menu-card");
-    card.innerHTML = menuPanelHtml(payload.state);
+    card.classList.toggle("providers-card", payload.kind === "providers");
+    card.innerHTML =
+      payload.kind === "providers" ? providersPanelHtml(payload.state) : menuPanelHtml(payload.state);
     tip.className = "tip menu-tip arrow-" + (payload.arrow || "right");
     if (payload.cardX != null && payload.cardY != null) {
       tip.style.left = `${payload.cardX}px`;
@@ -2957,12 +3233,116 @@ async function startTip() {
     document.getElementById("tip")?.classList.toggle("hot", tipHot);
   });
   const tipRoot = document.getElementById("tip-root");
+  let lookDragging = false;
   tipRoot.addEventListener("pointermove", syncMenuHover);
   tipRoot.addEventListener("pointerleave", () => {
     lastMenuPointer = null;
     setMenuHover(null);
   });
+  tipRoot.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("[data-look-reset]")) e.stopPropagation();
+    if (!e.target.closest("input[type=range][data-look]")) return;
+    lookDragging = true;
+    e.stopPropagation();
+  });
+  window.addEventListener("pointerup", () => {
+    lookDragging = false;
+  });
+  window.addEventListener("pointercancel", () => {
+    lookDragging = false;
+  });
+  const paintProvidersCard = () => {
+    const card = document.getElementById("tip-card");
+    if (!card?.classList.contains("providers-card")) return;
+    card.innerHTML = providersPanelHtml({
+      visibleProviders: normalizeVisible(prefs.visibleProviders),
+    });
+  };
+  const saveVisibleProviders = (next) => {
+    prefs.visibleProviders = normalizeVisible(next);
+    invoke("set_visible_providers", { ids: prefs.visibleProviders })
+      .then(() => paintProvidersCard())
+      .catch((err) => console.error(err));
+  };
+  await api().event.listen("usagebar-prefs", (e) => {
+    if (!e.payload) return;
+    prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
+    applyLocale();
+    paintProvidersCard();
+  });
+  const applyLookSlider = (look, raw) => {
+    if (look === "opacity") {
+      prefs.barOpacity = raw / 100;
+      const val = tipRoot.querySelector('[data-look-val="opacity"]');
+      if (val) val.textContent = `${raw}%`;
+    } else if (look === "blur") {
+      prefs.barBlur = raw;
+      const val = tipRoot.querySelector('[data-look-val="blur"]');
+      if (val) val.textContent = String(raw);
+    } else {
+      return;
+    }
+    const range = tipRoot.querySelector(`input[data-look="${look}"]`);
+    if (range) range.value = String(raw);
+    const reset = tipRoot.querySelector(`[data-look-reset="${look}"]`);
+    if (reset) reset.classList.toggle("is-default", raw === (look === "opacity" ? 100 : 0));
+    invoke("set_bar_look", {
+      opacity: clampBarOpacity(prefs.barOpacity),
+      blur: clampBarBlur(prefs.barBlur),
+    }).catch((err) => console.error(err));
+  };
+  tipRoot.addEventListener("input", (e) => {
+    const range = e.target.closest("input[type=range][data-look]");
+    if (!range) return;
+    e.stopPropagation();
+    applyLookSlider(range.dataset.look, Number(range.value));
+  });
+  tipRoot.addEventListener("change", (e) => {
+    const input = e.target.closest("input[data-toggle]");
+    if (!input || !document.getElementById("tip-card")?.classList.contains("providers-card")) return;
+    const id = input.dataset.toggle;
+    let vis = normalizeVisible(prefs.visibleProviders);
+    if (input.checked) {
+      if (vis.includes(id)) return;
+      if (vis.length >= SLOT_MAX) {
+        input.checked = false;
+        paintProvidersCard();
+        return;
+      }
+      vis.push(id);
+    } else {
+      if (vis.length <= SLOT_MIN) {
+        input.checked = true;
+        paintProvidersCard();
+        return;
+      }
+      vis = vis.filter((x) => x !== id);
+    }
+    saveVisibleProviders(vis);
+  });
   tipRoot.addEventListener("click", (e) => {
+    const move = e.target.closest("button[data-move]");
+    if (move && !move.disabled && document.getElementById("tip-card")?.classList.contains("providers-card")) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = move.dataset.move;
+      const dir = Number(move.dataset.dir);
+      const vis = normalizeVisible(prefs.visibleProviders);
+      const i = vis.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= vis.length) return;
+      [vis[i], vis[j]] = [vis[j], vis[i]];
+      saveVisibleProviders(vis);
+      return;
+    }
+    const reset = e.target.closest("[data-look-reset]");
+    if (reset) {
+      e.preventDefault();
+      e.stopPropagation();
+      const look = reset.dataset.lookReset;
+      applyLookSlider(look, look === "opacity" ? 100 : 0);
+      return;
+    }
     const mid = e.target.closest("[data-mid]");
     if (mid) {
       if (MENU_TOGGLES.has(mid.dataset.mid)) {
@@ -2975,6 +3355,7 @@ async function startTip() {
       return;
     }
     if (
+      !lookDragging &&
       document.getElementById("tip")?.classList.contains("menu-tip") &&
       !e.target.closest(".menu-card")
     ) {
@@ -3005,105 +3386,7 @@ async function startTip() {
   });
 }
 
-function renderSettings() {
-  const ui = t();
-  const vis = normalizeVisible(prefs.visibleProviders);
-  const selected = new Set(vis);
-  document.getElementById("settings-title").textContent = ui.toolsTitle;
-  document.getElementById("settings-hint").textContent = ui.toolsHint;
-  const count = document.getElementById("settings-count");
-  count.textContent =
-    vis.length >= SLOT_MAX ? ui.toolsMax : vis.length <= SLOT_MIN ? ui.toolsMin : ui.selectedCount(vis.length);
-  count.classList.toggle("warn", vis.length >= SLOT_MAX || vis.length <= SLOT_MIN);
-  const rest = CATALOG_IDS.filter((id) => !selected.has(id));
-  const rows = [...vis, ...rest]
-    .map((id) => {
-      const on = selected.has(id);
-      const idx = vis.indexOf(id);
-      const upOff = !on || idx <= 0;
-      const downOff = !on || idx < 0 || idx >= vis.length - 1;
-      const spec = ICONS[id];
-      const rule = spec?.evenOdd ? 'fill-rule="evenodd"' : "";
-      const icon = spec
-        ? `<span class="icon"><svg class="glyph" viewBox="${spec.viewBox}">${spec.d
-            .map((p) => `<path ${rule} d="${p}"/>`)
-            .join("")}</svg></span>`
-        : "";
-      return `<div class="settings-row" data-id="${id}">
-        <label>
-          <input type="checkbox" data-toggle="${id}" ${on ? "checked" : ""} ${
-            !on && vis.length >= SLOT_MAX ? "disabled" : ""
-          }/>
-          ${icon}
-          <span class="name">${vendorName(id)}</span>
-        </label>
-        <button type="button" data-move="${id}" data-dir="-1" ${upOff ? "disabled" : ""} title="${ui.moveUp}">↑</button>
-        <button type="button" data-move="${id}" data-dir="1" ${downOff ? "disabled" : ""} title="${ui.moveDown}">↓</button>
-      </div>`;
-    })
-    .join("");
-  document.getElementById("settings-list").innerHTML = rows;
-}
-
-async function saveVisible(next) {
-  prefs.visibleProviders = normalizeVisible(next);
-  await invoke("set_visible_providers", { ids: prefs.visibleProviders });
-  renderSettings();
-}
-
-async function startSettings() {
-  document.documentElement.classList.add("settings");
-  document.getElementById("settings-root").hidden = false;
-  prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
-  prefsReady = true;
-  applyLocale();
-  renderSettings();
-  const root = document.getElementById("settings-root");
-  root.addEventListener("change", (e) => {
-    const input = e.target.closest("input[data-toggle]");
-    if (!input) return;
-    const id = input.dataset.toggle;
-    let vis = normalizeVisible(prefs.visibleProviders);
-    if (input.checked) {
-      if (vis.includes(id)) return;
-      if (vis.length >= SLOT_MAX) {
-        input.checked = false;
-        renderSettings();
-        return;
-      }
-      vis.push(id);
-    } else {
-      if (vis.length <= SLOT_MIN) {
-        input.checked = true;
-        renderSettings();
-        return;
-      }
-      vis = vis.filter((x) => x !== id);
-    }
-    saveVisible(vis).catch((err) => console.error(err));
-  });
-  root.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-move]");
-    if (!btn || btn.disabled) return;
-    const id = btn.dataset.move;
-    const dir = Number(btn.dataset.dir);
-    const vis = normalizeVisible(prefs.visibleProviders);
-    const i = vis.indexOf(id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= vis.length) return;
-    [vis[i], vis[j]] = [vis[j], vis[i]];
-    saveVisible(vis).catch((err) => console.error(err));
-  });
-  await api().event.listen("usagebar-prefs", (e) => {
-    if (!e.payload) return;
-    prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
-    applyLocale();
-    renderSettings();
-  });
-}
-
 const kind = new URLSearchParams(location.search).get("w") || "bar";
 if (kind === "tip") startTip().catch((err) => console.error(err));
 else if (kind === "update") startUpdate().catch((err) => console.error(err));
-else if (kind === "settings") startSettings().catch((err) => console.error(err));
 else startBar().catch((err) => console.error(err));

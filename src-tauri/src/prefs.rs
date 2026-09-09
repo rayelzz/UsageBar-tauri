@@ -23,6 +23,31 @@ pub struct Prefs {
     /// Last placed origin in logical pixels. Negative means unset.
     pub last_x: f64,
     pub last_y: f64,
+    /// Main bar fill opacity, 0.0–1.0. Default is fully opaque.
+    pub bar_opacity: f64,
+    /// Backdrop blur radius in CSS pixels, 0–100. 0 keeps the current solid fill.
+    pub bar_blur: f64,
+}
+
+pub const BAR_OPACITY_DEFAULT: f64 = 1.0;
+pub const BAR_OPACITY_MIN: f64 = 0.0;
+pub const BAR_OPACITY_MAX: f64 = 1.0;
+pub const BAR_BLUR_MAX: f64 = 100.0;
+
+pub fn normalize_bar_opacity(value: f64) -> f64 {
+    if !value.is_finite() {
+        BAR_OPACITY_DEFAULT
+    } else {
+        value.clamp(BAR_OPACITY_MIN, BAR_OPACITY_MAX)
+    }
+}
+
+pub fn normalize_bar_blur(value: f64) -> f64 {
+    if !value.is_finite() {
+        0.0
+    } else {
+        value.clamp(0.0, BAR_BLUR_MAX).round()
+    }
 }
 
 pub const CATALOG: &[&str] = &[
@@ -118,6 +143,8 @@ impl Default for Prefs {
             skipped_update_version: String::new(),
             last_x: UNSET,
             last_y: UNSET,
+            bar_opacity: BAR_OPACITY_DEFAULT,
+            bar_blur: 0.0,
         }
     }
 }
@@ -152,6 +179,8 @@ impl Prefs {
         {
             self.refresh_interval = 60;
         }
+        self.bar_opacity = normalize_bar_opacity(self.bar_opacity);
+        self.bar_blur = normalize_bar_blur(self.bar_blur);
         self
     }
 }
@@ -177,13 +206,15 @@ pub fn merge(base: Prefs, mut next: Prefs) -> Prefs {
 }
 
 /// Full-window snapshots are often stale. Keep geometry unless the edge changed
-/// (snap). `visible_providers` and `display_style` are owned by dedicated
-/// commands so a stale `set_prefs` cannot revert them.
+/// (snap). `visible_providers`, `display_style`, and bar look are owned by
+/// dedicated commands so a stale `set_prefs` cannot revert them.
 pub fn apply_incoming(base: Prefs, incoming: Prefs) -> Prefs {
     let edge_changed = incoming.edge != base.edge;
     let mut prefs = merge(base.clone(), incoming);
     prefs.visible_providers = base.visible_providers;
     prefs.display_style = base.display_style;
+    prefs.bar_opacity = base.bar_opacity;
+    prefs.bar_blur = base.bar_blur;
     if !edge_changed {
         prefs.along = base.along;
         prefs.last_x = base.last_x;
@@ -201,7 +232,6 @@ pub fn tray_needs_update(before: &Prefs, after: &Prefs) -> bool {
         || before.locked != after.locked
         || before.click_through != after.click_through
         || before.edge != after.edge
-        || before.display_style != after.display_style
         || before.display_value != after.display_value
         || before.launch_at_login != after.launch_at_login
 }
@@ -305,6 +335,25 @@ mod tests {
     fn normalize_caps_at_ten() {
         let ids: Vec<String> = CATALOG.iter().map(|s| (*s).to_string()).cycle().take(20).collect();
         assert_eq!(normalize_visible(&ids).len(), CATALOG.len().min(SLOT_MAX));
+    }
+
+    #[test]
+    fn bar_look_defaults_and_clamps() {
+        let prefs = Prefs::default();
+        assert_eq!(prefs.bar_opacity, BAR_OPACITY_DEFAULT);
+        assert_eq!(prefs.bar_blur, 0.0);
+        assert_eq!(normalize_bar_opacity(f64::NAN), BAR_OPACITY_DEFAULT);
+        assert_eq!(normalize_bar_opacity(0.05), 0.05);
+        assert_eq!(normalize_bar_opacity(0.0), 0.0);
+        assert_eq!(normalize_bar_opacity(-1.0), BAR_OPACITY_MIN);
+        assert_eq!(normalize_bar_opacity(2.0), BAR_OPACITY_MAX);
+        assert_eq!(normalize_bar_blur(-3.0), 0.0);
+        assert_eq!(normalize_bar_blur(40.4), 40.0);
+        assert_eq!(normalize_bar_blur(100.4), 100.0);
+        assert_eq!(normalize_bar_blur(12.4), 12.0);
+        let parsed = parse_text(r#"{"edge":"right"}"#);
+        assert_eq!(parsed.bar_opacity, BAR_OPACITY_DEFAULT);
+        assert_eq!(parsed.bar_blur, 0.0);
     }
 
     #[test]
@@ -462,6 +511,21 @@ mod tests {
         incoming.display_value = "remaining".into();
         let applied = apply_incoming(base, incoming);
         assert_eq!(applied.display_style, "icons");
+        assert_eq!(applied.display_value, "remaining");
+    }
+
+    #[test]
+    fn apply_incoming_ignores_stale_bar_look() {
+        let mut base = Prefs::default();
+        base.bar_opacity = 0.55;
+        base.bar_blur = 12.0;
+        let mut incoming = base.clone();
+        incoming.bar_opacity = 1.0;
+        incoming.bar_blur = 0.0;
+        incoming.display_value = "remaining".into();
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.bar_opacity, 0.55);
+        assert_eq!(applied.bar_blur, 12.0);
         assert_eq!(applied.display_value, "remaining");
     }
 

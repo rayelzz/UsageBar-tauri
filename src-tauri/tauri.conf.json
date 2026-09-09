@@ -62,25 +62,6 @@
         "visible": false,
         "focus": false,
         "focusable": false
-      },
-      {
-        "label": "settings",
-        "title": "Providers",
-        "url": "index.html?w=settings",
-        "width": 420,
-        "height": 680,
-        "minWidth": 360,
-        "minHeight": 420,
-        "resizable": true,
-        "decorations": true,
-        "transparent": false,
-        "shadow": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": false,
-        "visible": false,
-        "center": true,
-        "theme": "Dark",
-        "backgroundColor": "#141416"
       }
     ],
     "security": {

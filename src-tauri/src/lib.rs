@@ -90,32 +90,27 @@ fn set_visible_providers(app: AppHandle, ids: Vec<String>) {
 }
 
 #[tauri::command]
-fn set_display_style(app: AppHandle, style: String) {
-    let style = if style == "icons" { "icons" } else { "full" }.to_string();
-    let (prefs, tray) = if let Some(state) = app.try_state::<Overlay>() {
+fn set_bar_look(app: AppHandle, opacity: f64, blur: f64) {
+    let opacity = prefs::normalize_bar_opacity(opacity);
+    let blur = prefs::normalize_bar_blur(blur);
+    let prefs = if let Some(state) = app.try_state::<Overlay>() {
         let Ok(mut slot) = state.prefs.lock() else {
             return;
         };
-        let before = slot.clone();
-        if slot.display_style == style {
-            let current = slot.clone();
-            drop(slot);
-            let _ = app.emit("usagebar-prefs", &current);
+        if (slot.bar_opacity - opacity).abs() < 0.0001 && (slot.bar_blur - blur).abs() < 0.0001 {
             return;
         }
-        slot.display_style = style;
-        let prefs = slot.clone();
-        (prefs.clone(), prefs::tray_needs_update(&before, &prefs))
+        slot.bar_opacity = opacity;
+        slot.bar_blur = blur;
+        slot.clone()
     } else {
         let mut prefs = prefs::load();
-        prefs.display_style = style;
-        (prefs.clone(), true)
+        prefs.bar_opacity = opacity;
+        prefs.bar_blur = blur;
+        prefs
     };
     prefs::save(&prefs);
     let _ = app.emit("usagebar-prefs", &prefs);
-    if tray {
-        schedule_tray(app, prefs);
-    }
 }
 
 fn schedule_tray(app: AppHandle, prefs: Prefs) {
@@ -207,20 +202,6 @@ fn open_release_page(app: AppHandle, url: Option<String>) {
 #[tauri::command]
 fn quit(app: AppHandle) {
     app.exit(0);
-}
-
-#[tauri::command]
-fn open_settings(app: AppHandle) {
-    let loc = app
-        .try_state::<Overlay>()
-        .and_then(|state| state.prefs.lock().ok().map(|p| p.locale.clone()))
-        .unwrap_or_else(|| prefs::load().locale);
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.set_title(i18n::tools_window(&loc));
-        let _ = win.show();
-        let _ = win.unminimize();
-        let _ = win.set_focus();
-    }
 }
 
 #[tauri::command]
@@ -325,25 +306,6 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
         prefs.edge == "bottom",
         None::<&str>,
     )?;
-    let style_full = CheckMenuItem::with_id(
-        app,
-        "style:full",
-        i18n::ring_usage(loc),
-        true,
-        prefs.display_style != "icons",
-        None::<&str>,
-    )?;
-    let style_icons = CheckMenuItem::with_id(
-        app,
-        "style:icons",
-        i18n::transparent_icons(loc),
-        true,
-        prefs.display_style == "icons",
-        None::<&str>,
-    )?;
-    let style_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&style_full, &style_icons];
-    let style_sub =
-        Submenu::with_id_and_items(app, "display-style", i18n::display_style(loc), true, &style_refs)?;
     let value_used = CheckMenuItem::with_id(
         app,
         "value:used",
@@ -392,7 +354,6 @@ fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::
             &right,
             &top,
             &bottom,
-            &style_sub,
             &value_sub,
             &lang_sub,
             &tools,
@@ -469,7 +430,7 @@ pub fn run() {
             get_prefs,
             set_prefs,
             set_visible_providers,
-            set_display_style,
+            set_bar_look,
             place_bar,
             set_pointer,
             set_menu_open,
@@ -483,8 +444,7 @@ pub fn run() {
             open_release_page,
             quit,
             os_name,
-            tray_rect,
-            open_settings
+            tray_rect
         ])
         .setup(|app| {
             // 应用整体为暗色设计，原生菜单 / 设置窗口统一走暗色外观。
@@ -523,16 +483,6 @@ pub fn run() {
                     let _ = update.set_visible_on_all_workspaces(true);
                 }
             }
-            if let Some(settings) = app.get_webview_window("settings") {
-                let hide = settings.clone();
-                settings.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = hide.hide();
-                    }
-                });
-            }
-
             let prefs = prefs::load();
             app.manage(Overlay::new(prefs.clone()));
             if overlay::place(app.handle()).is_none() {

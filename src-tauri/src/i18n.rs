@@ -72,30 +72,6 @@ pub fn snap_bottom(locale: &str) -> &'static str {
     }
 }
 
-pub fn display_style(locale: &str) -> &'static str {
-    if is_zh(locale) {
-        "显示样式"
-    } else {
-        "Display style"
-    }
-}
-
-pub fn ring_usage(locale: &str) -> &'static str {
-    if is_zh(locale) {
-        "圆环用量"
-    } else {
-        "Ring usage"
-    }
-}
-
-pub fn transparent_icons(locale: &str) -> &'static str {
-    if is_zh(locale) {
-        "透明图标"
-    } else {
-        "Transparent icons"
-    }
-}
-
 pub fn display_value(locale: &str) -> &'static str {
     if is_zh(locale) {
         "显示值"
@@ -133,14 +109,6 @@ pub fn tools(locale: &str) -> &'static str {
         "提供商…"
     } else {
         "Providers…"
-    }
-}
-
-pub fn tools_window(locale: &str) -> &'static str {
-    if is_zh(locale) {
-        "提供商"
-    } else {
-        "Providers"
     }
 }
 
