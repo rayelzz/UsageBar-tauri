@@ -765,18 +765,24 @@ html.update .tip {
 }
 
 .m-row .m-grow {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .m-extra {
   margin-left: auto;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .m-extra.muted {
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 400;
   cursor: default;
 }
 

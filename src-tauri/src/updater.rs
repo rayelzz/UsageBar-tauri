@@ -5,6 +5,8 @@ use tauri_plugin_updater::UpdaterExt;
 
 const RELEASES_API: &str = "https://api.github.com/repos/rayelzz/UsageBar-tauri/releases/latest";
 pub const RELEASES_PAGE: &str = "https://github.com/rayelzz/UsageBar-tauri/releases/latest";
+const LATEST_JSON: &str =
+    "https://github.com/rayelzz/UsageBar-tauri/releases/latest/download/latest.json";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,13 +119,48 @@ fn is_newer(latest: &str, current: &str) -> bool {
     }
 }
 
-pub fn check() -> Option<UpdateInfo> {
+fn http_client() -> Option<reqwest::blocking::Client> {
     let current = env!("CARGO_PKG_VERSION");
-    let client = reqwest::blocking::Client::builder()
+    reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent(format!("UsageBar/{current}"))
+        .redirect(reqwest::redirect::Policy::limited(8))
         .build()
-        .ok()?;
+        .ok()
+}
+
+fn update_info(latest: &str, url: &str, notes: &str) -> UpdateInfo {
+    let current = env!("CARGO_PKG_VERSION");
+    let latest = latest.trim().trim_start_matches('v').to_string();
+    let (notes_en, notes_zh) = parse_release_notes(notes);
+    UpdateInfo {
+        current: current.into(),
+        latest: latest.clone(),
+        url: if url.is_empty() {
+            RELEASES_PAGE.into()
+        } else {
+            url.into()
+        },
+        has_update: is_newer(&latest, current),
+        notes_en,
+        notes_zh,
+    }
+}
+
+fn check_from_latest_json() -> Option<UpdateInfo> {
+    let client = http_client()?;
+    let resp = client.get(LATEST_JSON).send().ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: Value = resp.json().ok()?;
+    let latest = json.get("version")?.as_str()?;
+    let notes = json.get("notes").and_then(|v| v.as_str()).unwrap_or("");
+    Some(update_info(latest, RELEASES_PAGE, notes))
+}
+
+fn check_from_github_api() -> Option<UpdateInfo> {
+    let client = http_client()?;
     let resp = client
         .get(RELEASES_API)
         .header("Accept", "application/vnd.github+json")
@@ -133,23 +170,17 @@ pub fn check() -> Option<UpdateInfo> {
         return None;
     }
     let json: Value = resp.json().ok()?;
-    let tag = json.get("tag_name")?.as_str()?;
-    let latest = tag.trim().trim_start_matches('v').to_string();
+    let latest = json.get("tag_name")?.as_str()?;
     let url = json
         .get("html_url")
         .and_then(|v| v.as_str())
-        .unwrap_or(RELEASES_PAGE)
-        .to_string();
+        .unwrap_or(RELEASES_PAGE);
     let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("");
-    let (notes_en, notes_zh) = parse_release_notes(body);
-    Some(UpdateInfo {
-        current: current.into(),
-        latest: latest.clone(),
-        url,
-        has_update: is_newer(&latest, current),
-        notes_en,
-        notes_zh,
-    })
+    Some(update_info(latest, url, body))
+}
+
+pub fn check() -> Option<UpdateInfo> {
+    check_from_latest_json().or_else(check_from_github_api)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -161,34 +192,7 @@ pub struct UpdateProgress {
 }
 
 fn latest_json_url() -> Option<String> {
-    let current = env!("CARGO_PKG_VERSION");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent(format!("UsageBar/{current}"))
-        .build()
-        .ok()?;
-    let json: Value = client
-        .get(RELEASES_API)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .ok()?
-        .json()
-        .ok()?;
-    json.get("assets")
-        .and_then(|a| a.as_array())
-        .and_then(|arr| {
-            arr.iter().find_map(|asset| {
-                let name = asset.get("name")?.as_str()?;
-                if name == "latest.json" {
-                    asset
-                        .get("browser_download_url")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                } else {
-                    None
-                }
-            })
-        })
+    Some(LATEST_JSON.into())
 }
 
 pub async fn install(app: AppHandle) -> Result<(), String> {
@@ -308,5 +312,19 @@ See [CHANGELOG.md](https://example.com) for the full history.
         let (en, zh) = parse_release_notes("### Download\n\n- dmg\n");
         assert!(en.is_none());
         assert!(zh.is_none());
+    }
+
+    #[test]
+    fn latest_json_feeds_check_without_github_api() {
+        let info = update_info(
+            "v0.0.25",
+            RELEASES_PAGE,
+            "### What’s new\n\n- English note.\n\n### 更新说明\n\n- 中文说明。\n",
+        );
+        assert_eq!(info.latest, "0.0.25");
+        assert_eq!(info.current, current_version());
+        assert_eq!(info.has_update, is_newer("0.0.25", &info.current));
+        assert!(info.notes_en.as_deref().unwrap_or("").contains("English note"));
+        assert!(info.notes_zh.as_deref().unwrap_or("").contains("中文说明"));
     }
 }

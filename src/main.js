@@ -236,7 +236,7 @@ function t() {
         checkUpdate: "Check for update",
         checkingUpdate: "Checking…",
         updateUpToDate: "Up to date",
-        updateCheckFailed: "Couldn’t check for updates. Try again later.",
+        updateCheckFailed: "Check failed. Try later.",
         installingUpdate: "Installing update…",
         updateInstallFailed: "Install failed. Opened the download page.",
         settings: "Settings",
