@@ -25,7 +25,7 @@ pub struct Prefs {
     pub last_y: f64,
     /// Main bar fill opacity, 0.0–1.0. Default is fully opaque.
     pub bar_opacity: f64,
-    /// Backdrop blur radius in CSS pixels, 0–100. 0 keeps the current solid fill.
+    /// Window-server backdrop blur radius, 0–100. 0 keeps a solid fill.
     pub bar_blur: f64,
 }
 

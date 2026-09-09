@@ -1,6 +1,6 @@
 [package]
 name = "usagebar"
-version = "0.0.24"
+version = "0.0.25"
 description = "Cross-platform AI usage edge bar"
 authors = ["rayelzz"]
 edition = "2021"
@@ -29,10 +29,16 @@ sha2 = "0.10"
 base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSEvent",
     "NSFont",
     "NSFontDescriptor",
+    "NSView",
+    "NSWindow",
+    "NSBezierPath",
+    "NSResponder",
     "objc2-core-foundation",
 ] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSString", "NSValue", "NSGeometry"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFCGTypes"] }

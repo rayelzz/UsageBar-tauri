@@ -735,8 +735,14 @@ function clampBarBlur(v) {
   return Math.round(clamp(n, 0, BAR_BLUR_MAX));
 }
 
+function lookFillAlpha() {
+  const alpha = clampBarOpacity(prefs.barOpacity);
+  if (clampBarBlur(prefs.barBlur) <= 0) return alpha;
+  return Math.max(alpha, 0.04);
+}
+
 function dockFill() {
-  return `rgba(0,0,0,${clampBarOpacity(prefs.barOpacity)})`;
+  return `rgba(0,0,0,${lookFillAlpha()})`;
 }
 
 const INK_START = 0.6;
@@ -800,19 +806,114 @@ function paintInkChrome() {
   document.querySelectorAll("#bar .ring-track-inner").forEach((el) => paintStroke(el, inner));
 }
 
-function applyBarLook() {
-  const alpha = clampBarOpacity(prefs.barOpacity);
-  const blur = clampBarBlur(prefs.barBlur);
+function overlayInkColors() {
+  const ink = barInk();
+  const glyph = mixRgb(GLYPH_LIGHT, GLYPH_INK, ink);
+  return {
+    ink,
+    fill: rgbCss(glyph),
+    muted: rgbCss(glyph, 0.72 + (1 - ink) * 0.06),
+    faint: rgbCss(glyph, 0.4 + (1 - ink) * 0.04),
+  };
+}
+
+function paintText(el, color) {
+  if (!el) return;
+  el.style.color = color;
+  el.style.webkitTextFillColor = color;
+}
+
+function applyOverlayTokens() {
   const ink = barInk();
   const glyph = mixRgb(GLYPH_LIGHT, GLYPH_INK, ink);
   const root = document.documentElement;
   root.classList.toggle("bar-ink", ink > 0.5);
-  root.style.setProperty("--bar-alpha", String(alpha));
-  root.style.setProperty("--bar-blur", `${blur}px`);
+  root.style.setProperty("--bar-alpha", String(lookFillAlpha()));
   root.style.setProperty("--glyph", rgbCss(glyph));
   root.style.setProperty("--glyph-muted", rgbCss(glyph, 0.72 + (1 - ink) * 0.06));
+  root.style.setProperty("--card-fill", dockFill());
   root.style.setProperty("--ring-track-outer", rgbCss(mixRgb([0, 0, 0], [255, 255, 255], ink), 0.55 + ink * 0.15));
   root.style.setProperty("--ring-track-inner", rgbCss(mixRgb([255, 255, 255], [20, 20, 22], ink), 0.28 + ink * 0.12));
+}
+
+function paintOverlayPointer(fill) {
+  const ptr = document.getElementById("tip-pointer");
+  const tip = document.getElementById("tip");
+  if (!ptr || !tip) return;
+  ptr.style.borderTopColor = "transparent";
+  ptr.style.borderRightColor = "transparent";
+  ptr.style.borderBottomColor = "transparent";
+  ptr.style.borderLeftColor = "transparent";
+  if (tip.classList.contains("arrow-right")) ptr.style.borderLeftColor = fill;
+  else if (tip.classList.contains("arrow-left")) ptr.style.borderRightColor = fill;
+  else if (tip.classList.contains("arrow-up")) ptr.style.borderBottomColor = fill;
+  else if (tip.classList.contains("arrow-down")) ptr.style.borderTopColor = fill;
+}
+
+function paintOverlayChrome() {
+  const card = document.getElementById("tip-card");
+  if (!card) return;
+  const alpha = clampBarOpacity(prefs.barOpacity);
+  const colors = overlayInkColors();
+  const fill = dockFill();
+  card.style.background = fill;
+  card.style.color = colors.fill;
+  card.style.boxShadow = alpha <= 0.08 ? "none" : `0 6px 16px rgba(0,0,0,${(0.35 * alpha).toFixed(3)})`;
+  paintOverlayPointer(fill);
+  card.querySelectorAll(".glyph").forEach((svg) => {
+    paintFill(svg, colors.fill);
+    svg.querySelectorAll("path").forEach((p) => paintFill(p, colors.fill));
+  });
+  const mutedSels = [
+    ".empty",
+    ".credit-head",
+    ".credit-count",
+    ".credit-exp:not(.warn):not(.urgent)",
+    ".credit-left",
+    ".metric-top",
+    ".metric-reset",
+    ".prov-hint",
+    ".prov-count:not(.warn)",
+    ".m-extra.muted",
+    ".m-label",
+    ".m-info",
+    ".m-slider-name",
+    ".m-slider-hint",
+    ".update-notes-p",
+  ];
+  const fillSels = [
+    ".card-head .title",
+    ".credit-title",
+    ".used",
+    ".tip-close",
+    ".prov-back",
+    ".prov-title",
+    ".settings-row .name",
+    ".settings-row button",
+    ".m-grow",
+    ".m-chip:not(.on)",
+    ".m-slider-val",
+    ".m-slider-reset",
+    ".update-notes-list li",
+  ];
+  card.querySelectorAll(mutedSels.join(",")).forEach((el) => paintText(el, colors.muted));
+  card.querySelectorAll(fillSels.join(",")).forEach((el) => {
+    if (el.closest(".m-extra.link, .reset-title, .update-install, .update-notes-link, .credit-exp.warn, .credit-exp.urgent")) {
+      return;
+    }
+    paintText(el, colors.fill);
+  });
+  card.querySelectorAll(".m-slider-hint").forEach((el) => paintText(el, colors.faint));
+  pushOverlayFrost();
+}
+
+function applyOverlayLook() {
+  applyOverlayTokens();
+  paintOverlayChrome();
+}
+
+function applyBarLook() {
+  applyOverlayTokens();
   const svg = document.getElementById("dock-shape");
   if (svg) {
     svg.querySelectorAll("path, circle.pod").forEach((el) => {
@@ -820,52 +921,39 @@ function applyBarLook() {
     });
   }
   paintInkChrome();
-  paintFrostMask(prefs.edge);
+  pushBarFrost();
 }
 
-function frostFilterCss(blur) {
-  const px = Math.max(0, Number(blur) || 0);
-  if (px <= 0) return "none";
-  return `blur(${px}px)`;
+function frostActive() {
+  return clampBarBlur(prefs.barBlur) > 0;
 }
 
-function setFrostFilter(el, blur) {
-  const css = frostFilterCss(blur);
-  if (el.dataset.frostBlur === String(blur) && el.style.webkitBackdropFilter === css) {
-    return el;
-  }
-  const next = el.cloneNode(false);
-  next.hidden = el.hidden;
-  next.dataset.frostBlur = String(blur);
-  next.style.webkitBackdropFilter = css;
-  next.style.backdropFilter = css;
-  el.replaceWith(next);
-  return next;
+function setWindowBlur(label, blur) {
+  invoke("set_window_blur", { window: label, blur }).catch((err) => console.error(err));
 }
 
-function paintFrostMask(edge) {
-  let frost = document.getElementById("bar-frost");
-  if (!frost) return;
-  const blur = clampBarBlur(prefs.barBlur);
-  if (blur <= 0) {
-    frost.hidden = true;
-    frost.style.webkitMaskImage = "";
-    frost.style.maskImage = "";
-    frost.style.webkitBackdropFilter = "none";
-    frost.style.backdropFilter = "none";
-    delete frost.dataset.frostBlur;
+function pushBarFrost() {
+  setWindowBlur("bar", frostActive() ? clampBarBlur(prefs.barBlur) : 0);
+}
+
+function cardFitsWindow(card) {
+  const r = card.getBoundingClientRect();
+  if (r.width < 2 || r.height < 2) return false;
+  return window.innerWidth <= r.width + 3 && window.innerHeight <= r.height + 3;
+}
+
+function pushOverlayFrost() {
+  const label = document.documentElement.classList.contains("update") ? "update" : "tip";
+  const card = document.getElementById("tip-card");
+  if (!frostActive() || !card || document.getElementById("tip-root")?.hidden) {
+    setWindowBlur(label, 0);
     return;
   }
-  const size = barSize(edge);
-  const body = dockPath(size.w, size.h, edge);
-  const c = gearCenter(size.w, size.h, edge);
-  const pod = barHot ? `<circle cx="${c.x}" cy="${c.y}" r="${GEAR_R}" fill="white"/>` : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size.w} ${size.h}"><path fill="white" d="${body}"/>${pod}</svg>`;
-  const url = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
-  frost.hidden = false;
-  frost.style.webkitMaskImage = url;
-  frost.style.maskImage = url;
-  setFrostFilter(frost, blur);
+  if (!cardFitsWindow(card)) {
+    setWindowBlur(label, 0);
+    return;
+  }
+  setWindowBlur(label, clampBarBlur(prefs.barBlur));
 }
 
 function nearest(frame, screen) {
@@ -1021,22 +1109,45 @@ function placeGearBtn(edge) {
 function paintDock(edge) {
   const svg = document.getElementById("dock-shape");
   if (!svg) return;
-  svg.style.display = "";
   const size = barSize(edge);
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
   const fill = dockFill();
-  svg.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
-  svg.setAttribute("width", String(size.w));
-  svg.setAttribute("height", String(size.h));
-  svg.removeAttribute("preserveAspectRatio");
-  svg.style.width = `${size.w}px`;
-  svg.style.height = `${size.h}px`;
-  svg.innerHTML = barHot
-    ? `<path d="${body}" fill="${fill}" /><circle class="pod" cx="${c.x}" cy="${c.y}" r="${GEAR_R}" fill="${fill}" />`
-    : `<path d="${body}" fill="${fill}" />`;
+  const geomKey = `${size.w}x${size.h}:${edge}`;
+  const ns = "http://www.w3.org/2000/svg";
+  svg.style.display = "";
+  let path = svg.querySelector("path");
+  const geomChanged = svg.dataset.dockGeom !== geomKey;
+  if (geomChanged) {
+    svg.setAttribute("viewBox", `0 0 ${size.w} ${size.h}`);
+    svg.setAttribute("width", String(size.w));
+    svg.setAttribute("height", String(size.h));
+    svg.removeAttribute("preserveAspectRatio");
+    svg.style.width = `${size.w}px`;
+    svg.style.height = `${size.h}px`;
+    svg.dataset.dockGeom = geomKey;
+    if (!path) {
+      path = document.createElementNS(ns, "path");
+      svg.insertBefore(path, svg.firstChild);
+    }
+    path.setAttribute("d", body);
+  } else if (path && path.getAttribute("d") !== body) {
+    path.setAttribute("d", body);
+  }
+  let pod = svg.querySelector("circle.pod");
+  if (barHot) {
+    if (!pod) {
+      pod = document.createElementNS(ns, "circle");
+      pod.setAttribute("class", "pod");
+      svg.appendChild(pod);
+    }
+    pod.setAttribute("cx", String(c.x));
+    pod.setAttribute("cy", String(c.y));
+    pod.setAttribute("r", String(GEAR_R));
+  } else if (pod) {
+    pod.remove();
+  }
   svg.querySelectorAll("path, circle.pod").forEach((el) => paintFill(el, fill));
-  paintFrostMask(edge);
 }
 
 function renderBar() {
@@ -1093,6 +1204,7 @@ function renderBar() {
 
 const TIP_SLIDE_MS = 400;
 const TIP_W = 340;
+const TIP_W_CAP = 560;
 const TIP_TRAVEL_H = 360;
 const TIP_H_CAP = 640;
 const TIP_FIT_PAD = 10;
@@ -1267,12 +1379,14 @@ function tipTargetFrame(frame, opts = {}) {
   if (!snap && !opts.update) return null;
   const count = Math.max(snaps.length, 1);
   const idx = opts.update ? count - 1 : Math.max(0, snaps.findIndex((s) => s.id === id));
-  const th = opts.update
-    ? opts.h || updateTipHeight(updateNotesText(updateInfo))
-    : opts.travel
-      ? Math.max(TIP_TRAVEL_H, tipHeight(snap))
-      : tipHeight(snap);
-  const tw = opts.update ? opts.w || TIP_W : TIP_W;
+  const th = opts.h
+    ? opts.h
+    : opts.update
+      ? updateTipHeight(updateNotesText(updateInfo))
+      : opts.travel
+        ? Math.max(TIP_TRAVEL_H, tipHeight(snap))
+        : tipHeight(snap);
+  const tw = opts.w || TIP_W;
   const pad = padding(prefs.edge);
   const start = isVertical(prefs.edge) ? pad.t : pad.l;
   const end = isVertical(prefs.edge) ? pad.b : pad.r;
@@ -1305,6 +1419,11 @@ function tipTravelBounds(frame) {
     if (f) bounds = unionRects(bounds, f);
   }
   return bounds;
+}
+
+function tipHostRect(barFrame, target) {
+  if (frostActive()) return { ...target };
+  return tipTravelBounds(barFrame) || target;
 }
 
 function tipSlideFrom(target, stage, extra = {}) {
@@ -1350,20 +1469,58 @@ function waitTipReady() {
   });
 }
 
-function measuredTipHeight() {
+function measuredTipCard() {
+  const card = document.getElementById("tip-card");
+  if (!card) return { w: 0, h: 0 };
   const tip = document.getElementById("tip");
-  if (!tip) return 0;
-  return Math.ceil(tip.getBoundingClientRect().height);
+  const mover = document.getElementById("tip-mover");
+  const prev = [card, tip, mover].filter(Boolean).map((el) => ({
+    el,
+    width: el.style.width,
+    minWidth: el.style.minWidth,
+  }));
+  for (const { el } of prev) {
+    el.style.width = "max-content";
+    el.style.minWidth = "max-content";
+  }
+  const r = card.getBoundingClientRect();
+  let w = Math.max(r.width, card.scrollWidth);
+  const h = Math.max(r.height, card.scrollHeight);
+  card.querySelectorAll(".metric-top, .credit-row, .credit-head, .card-head").forEach((el) => {
+    w = Math.max(w, el.scrollWidth + 28);
+  });
+  for (const item of prev) {
+    item.el.style.width = item.width;
+    item.el.style.minWidth = item.minWidth;
+  }
+  return { w: Math.ceil(w), h: Math.ceil(h) };
+}
+
+function clampTipSize(w, h, screen) {
+  const maxW = screen ? Math.max(TIP_W, screen.ww - 12) : TIP_W_CAP;
+  const maxH = screen ? Math.min(TIP_H_CAP, screen.wh - 12) : TIP_H_CAP;
+  return {
+    w: Math.min(Math.max(Math.ceil(w || TIP_W), TIP_W), maxW),
+    h: Math.min(Math.max(Math.ceil(h || 2), 2), maxH),
+  };
+}
+
+function measuredTipHeight() {
+  return measuredTipCard().h;
 }
 
 function emitTipReady() {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      api()
-        .event.emit("usagebar-tip-ready", { h: measuredTipHeight() })
-        .catch(() => {});
-    });
-  });
+  const send = () => {
+    const box = measuredTipCard();
+    api()
+      .event.emit("usagebar-tip-ready", { h: box.h, w: box.w })
+      .catch(() => {});
+  };
+  if (measuredTipCard().h >= 2) {
+    send();
+    return;
+  }
+  requestAnimationFrame(send);
 }
 
 function waitUpdateReady() {
@@ -1382,16 +1539,31 @@ function waitUpdateReady() {
   });
 }
 
-async function growTipStage(tipWin, needH) {
+function refreshWindowBlur() {
+  invoke("refresh_window_blur").catch(() => {});
+  pushBarFrost();
+  api().event.emit("usagebar-frost-sync").catch(() => {});
+}
+
+async function growTipStage(tipWin, needH, needW) {
   if (!tipWin || !tipStageFrame) return;
-  const want = Math.min(Math.ceil(needH) + TIP_FIT_PAD, TIP_H_CAP);
-  if (want <= tipStageFrame.h + 1) return;
-  const next = { ...tipStageFrame, h: want };
+  const pad = frostActive() ? 0 : TIP_FIT_PAD;
+  const wantH = Math.min(Math.ceil(needH) + pad, TIP_H_CAP);
+  const rawW = needW >= 2 ? Math.ceil(needW) : tipStageFrame.w;
+  const sizedW = Math.min(Math.max(rawW, TIP_W), TIP_W_CAP);
+  const wantW = frostActive() ? sizedW : Math.max(tipStageFrame.w, sizedW);
+  if (frostActive()) {
+    if (Math.abs(wantH - tipStageFrame.h) <= 1 && Math.abs(wantW - tipStageFrame.w) <= 1) return;
+  } else if (wantH <= tipStageFrame.h + 1) {
+    return;
+  }
+  const next = { ...tipStageFrame, w: wantW, h: wantH };
   if (prefs.edge === "bottom") {
     next.y = tipStageFrame.y + tipStageFrame.h - next.h;
   }
   await placeTipWindow(tipWin, next);
   tipStageFrame = next;
+  refreshWindowBlur();
 }
 
 async function placeTipWindow(tipWin, rect) {
@@ -1404,8 +1576,29 @@ async function placeTipWindow(tipWin, rect) {
   await tipWin.setPosition(new (LogicalPosition())(rect.x, rect.y));
 }
 
+let lastTipPaintKey = "";
+
+function tipPaintKey(snap) {
+  if (!snap) return "";
+  return [
+    snap.id,
+    snap.headlinePercent,
+    snap.loading ? 1 : 0,
+    snap.error || "",
+    (snap.metrics || []).map((m) => `${m.label}:${m.percent}:${m.used}:${m.resetsAt}`).join("|"),
+    snap.resetNotice ? 1 : 0,
+    snap.creditNotice ? JSON.stringify(snap.creditNotice) : "",
+    prefs.displayValue,
+    prefs.locale,
+    tipArrow(),
+    creditToastId || "",
+    resetToastId || "",
+  ].join("\t");
+}
+
 async function hideUsageTip() {
   if (menuOpen) return;
+  lastTipPaintKey = "";
   cancelTipSlide();
   tipSlideFrame = null;
   tipStageFrame = null;
@@ -1417,14 +1610,39 @@ async function hideUsageTip() {
 async function showUsageTip(barFrame, opts = {}) {
   if (menuOpen) return;
   const tipWin = await getWindow("tip");
-  const target = tipTargetFrame(barFrame);
   const payload = tipContentPayload();
-  if (!tipWin || !target || !payload) {
+  if (!tipWin || !payload) {
     await tipWin?.hide();
     return;
   }
   const gen = ++tipSlideGen;
-  const stage = tipTravelBounds(barFrame) || target;
+  if (frostActive()) {
+    setWindowBlur("tip", 0);
+    lastTipPaintKey = tipPaintKey(payload.snap);
+    const ready = waitTipReady();
+    await api().event.emit("usagebar-tip", payload);
+    const measured = await ready;
+    if (gen !== tipSlideGen) return;
+    const snap = payload.snap;
+    const list = await monitors();
+    const screen = await monitorAt({ x: barFrame.x + barFrame.w / 2, y: barFrame.y + barFrame.h / 2 }, list);
+    const size = clampTipSize(measured?.w || TIP_W, measured?.h || tipHeight(snap), screen);
+    const target = clampRectToScreen(tipTargetFrame(barFrame, size), screen);
+    if (!target) return;
+    await placeTipWindow(tipWin, target);
+    if (gen !== tipSlideGen) return;
+    tipStageFrame = { ...target };
+    tipSlideFrame = { ...target };
+    await tipWin.show();
+    await api().event.emit("usagebar-frost-sync");
+    return;
+  }
+  const target = tipTargetFrame(barFrame);
+  if (!target) {
+    await tipWin.hide();
+    return;
+  }
+  const stage = tipHostRect(barFrame, target);
   const first = !tipStageFrame;
   const barMoved = !first && !rectsClose(tipStageFrame, stage);
   const switching = !first && !barMoved && !!opts.from;
@@ -1438,11 +1656,12 @@ async function showUsageTip(barFrame, opts = {}) {
     duration: switching ? TIP_SLIDE_MS : 0,
     fade: switching,
   });
+  lastTipPaintKey = tipPaintKey(payload.snap);
   const ready = waitTipReady();
   await api().event.emit("usagebar-tip", { ...payload, slide });
   const measured = await ready;
   if (gen !== tipSlideGen) return;
-  if (measured?.h) await growTipStage(tipWin, measured.h);
+  if (measured?.h) await growTipStage(tipWin, measured.h, measured.w);
   if (gen !== tipSlideGen) return;
   let visible = false;
   try {
@@ -1450,7 +1669,9 @@ async function showUsageTip(barFrame, opts = {}) {
   } catch {
     visible = false;
   }
-  if (!visible) await tipWin.show();
+  const becameVisible = !visible;
+  if (becameVisible) await tipWin.show();
+  if (first || barMoved || becameVisible) refreshWindowBlur();
   if (gen !== tipSlideGen && !hovered && !menuOpen && !resetToastId && !creditToastId) {
     await tipWin.hide();
   }
@@ -1458,6 +1679,11 @@ async function showUsageTip(barFrame, opts = {}) {
 
 async function renderTip(opts = {}) {
   if (menuOpen) return;
+  if (frostActive() && hovered && !opts.skipSize) {
+    const frame = await currentBarFrame();
+    if (frame) await showUsageTip(frame);
+    return;
+  }
   const snap = snaps.find((s) => s.id === hovered);
   const tipWin = await getWindow("tip");
   const payload = tipContentPayload();
@@ -1466,13 +1692,16 @@ async function renderTip(opts = {}) {
     return;
   }
   if (tipStageFrame && tipSlideFrame && !resetToastId && !creditToastId && !opts.forceSize) {
+    const key = tipPaintKey(snap);
+    if (key && key === lastTipPaintKey) return;
+    lastTipPaintKey = key;
     const ready = waitTipReady();
     await api().event.emit("usagebar-tip", {
       ...payload,
       slide: tipSlideFrom(tipSlideFrame, tipStageFrame, { duration: 0, keep: true }),
     });
     const measured = await ready;
-    if (measured?.h) await growTipStage(tipWin, measured.h);
+    if (measured?.h) await growTipStage(tipWin, measured.h, measured.w);
     return;
   }
   await api().event.emit("usagebar-tip", payload);
@@ -1599,46 +1828,30 @@ async function layoutUpdateCard() {
   if (gen !== updateLayoutGen) return;
   const list = await monitors();
   const screen = await monitorAt({ x: frame.x + frame.w / 2, y: frame.y + frame.h / 2 }, list);
-  let target = updateCardFrame(frame, updateTipHeight(payload.notes), screen);
-  if (!target || gen !== updateLayoutGen) return;
   await setUpdateClickable(true);
   if (gen !== updateLayoutGen) return;
-  await placeTipWindow(win, target);
-  if (gen !== updateLayoutGen) return;
-  await publishUpdateHit(target, screen);
+  if (frostActive()) setWindowBlur("update", 0);
   const ready = waitUpdateReady();
   await api().event.emit("usagebar-update-card", payload);
   const measured = await ready;
   if (gen !== updateLayoutGen) return;
-  if (measured?.h) {
-    const grown = updateCardFrame(frame, Math.min(Math.max(measured.h + TIP_FIT_PAD, target.h), TIP_H_CAP), screen);
-    if (grown && (Math.abs(grown.h - target.h) > 2 || Math.abs(grown.x - target.x) > 2 || Math.abs(grown.y - target.y) > 2)) {
-      target = grown;
-      await placeTipWindow(win, target);
-      if (gen !== updateLayoutGen) return;
-      await publishUpdateHit(target, screen);
-    }
-  }
+  const h = frostActive()
+    ? Math.min(Math.max(measured?.h || updateTipHeight(payload.notes), 2), TIP_H_CAP)
+    : Math.min(Math.max((measured?.h || 0) + TIP_FIT_PAD, updateTipHeight(payload.notes)), TIP_H_CAP);
+  const target = updateCardFrame(frame, h, screen);
+  if (!target || gen !== updateLayoutGen) return;
+  await placeTipWindow(win, target);
+  if (gen !== updateLayoutGen) return;
+  await publishUpdateHit(target, screen);
   if (gen !== updateLayoutGen) return;
   await raiseUpdateWindow();
+  if (frostActive()) await api().event.emit("usagebar-frost-sync");
+  else refreshWindowBlur();
 }
 
 async function layoutTip(frame, size, opts = {}) {
   if (menuOpen) return;
-  const tipWin = await getWindow("tip");
-  const target = tipTargetFrame(frame, opts);
-  if (!tipWin || !target) return;
-  if (resetToastId || creditToastId) {
-    cancelTipSlide();
-    tipStageFrame = null;
-    tipSlideFrame = { ...target };
-    await placeTipWindow(tipWin, target);
-    const payload = tipContentPayload();
-    if (payload) await api().event.emit("usagebar-tip", payload);
-    await tipWin.show();
-    return;
-  }
-  await showUsageTip(frame);
+  await showUsageTip(frame, opts);
 }
 
 function paintHover() {
@@ -2050,7 +2263,14 @@ function applyIncomingSnap(snap) {
   if (!snap?.id) return;
   const next = applyNoticeAcks({ ...snap, loading: false });
   snaps = snaps.map((s) => (s.id === next.id ? next : s));
-  renderBar();
+  const el = document.querySelector(`#cells [data-id="${next.id}"]`);
+  if (!el) {
+    renderBar();
+  } else {
+    el.classList.toggle("unknown", next.headlinePercent == null);
+    el.classList.toggle("reset", !!(next.resetNotice || next.creditNotice));
+    paintShownPercents();
+  }
   if (hovered === next.id) renderTip().catch((err) => console.error(err));
 }
 
@@ -2295,7 +2515,8 @@ function menuSpec(st) {
 }
 
 function menuPanelHtml(st) {
-  return menuSpec(st)
+  const closeLabel = st.locale === "zh" ? "关闭" : "Close";
+  return `<button type="button" class="tip-close" data-mid="close" aria-label="${closeLabel}">×</button>${menuSpec(st)
     .map((r) => {
       if (r.k === "sep") return `<div class="m-sep"></div>`;
       if (r.k === "label") return `<div class="m-label">${r.label}</div>`;
@@ -2336,7 +2557,7 @@ function menuPanelHtml(st) {
         r.check ? "✓" : ""
       }</span><span class="m-grow">${r.label}</span>${extra}</button>`;
     })
-    .join("");
+    .join("")}`;
 }
 
 function menuPanelHeight(st) {
@@ -2479,8 +2700,8 @@ async function placeMenuOverlay(winW, needH, reposition) {
     pointerAt = prefs.edge === "top" || prefs.edge === "bottom" ? gx - x : gy - y;
     menuScreenBox = { x, y, w: winW, h: winH };
     menuCardFrame = {
-      x: x - screen.x,
-      y: y - screen.y,
+      x: 0,
+      y: 0,
       w: winW,
       h: winH,
       pointerAt,
@@ -2497,8 +2718,7 @@ async function placeMenuOverlay(winW, needH, reposition) {
     cancelTipSlide();
     tipSlideFrame = null;
     tipStageFrame = null;
-    await tipWin?.setSize(new (LogicalSize())(screen.w, screen.h));
-    await tipWin?.setPosition(new (LogicalPosition())(screen.x, screen.y));
+    if (tipWin) await placeTipWindow(tipWin, { x, y, w: winW, h: winH });
     try {
       await tipWin?.setAlwaysOnTop(true);
     } catch {
@@ -2535,6 +2755,7 @@ async function showPanelMenu(reposition = true) {
   });
   if (!wasOpen || reposition) {
     await tipWin?.show();
+    refreshWindowBlur();
     try {
       await tipWin?.setFocus();
     } catch {
@@ -2572,6 +2793,7 @@ async function showProvidersPanel(reposition = true) {
   });
   if (!wasOpen || reposition) {
     await tipWin?.show();
+    refreshWindowBlur();
     try {
       await tipWin?.setFocus();
     } catch {
@@ -2734,6 +2956,7 @@ async function startBar() {
   }
   applyLocale();
   applyBarLook();
+  refreshWindowBlur();
   try {
     if (api().autostart) {
       prefs.launchAtLogin = await api().autostart.isEnabled();
@@ -2779,6 +3002,7 @@ async function startBar() {
     const prev = (prefs.visibleProviders || []).join(",");
     const prevAuto = !!prefs.autoCheckUpdate;
     const prevValue = prefs.displayValue;
+    const prevBlurOn = clampBarBlur(prefs.barBlur) > 0;
     prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
     applyBarLook();
@@ -2791,6 +3015,11 @@ async function startBar() {
     } else if (prevValue !== prefs.displayValue) {
       paintShownPercents();
       if (hovered) renderTip().catch((err) => console.error(err));
+    } else if (hovered && prevBlurOn !== clampBarBlur(prefs.barBlur) > 0) {
+      tipStageFrame = null;
+      currentBarFrame()
+        .then((frame) => showUsageTip(frame))
+        .catch((err) => console.error(err));
     }
   });
   await api().event.listen("usagebar-over", (e) => {
@@ -2864,6 +3093,7 @@ function paintChipSelection(el) {
 
 function menuItemFromPoint(x, y) {
   const stack = document.elementsFromPoint?.(x, y) || [];
+  if (stack.some((node) => node.closest?.(".tip-close"))) return null;
   for (const node of stack) {
     const item = node.closest?.(".m-row, .m-chip");
     if (item && item.closest(".menu-card") && !item.classList.contains("dim")) return item;
@@ -2877,18 +3107,11 @@ function syncMenuHover(e) {
   setMenuHover(p ? menuItemFromPoint(p.x, p.y) : null);
 }
 
-function readTranslate(el) {
-  const raw = getComputedStyle(el).transform;
-  if (!raw || raw === "none") return { x: 0, y: 0 };
-  try {
-    const m = new DOMMatrixReadOnly(raw);
-    return { x: m.m41, y: m.m42 };
-  } catch {
-    const parts = raw.match(/matrix\((.+)\)/);
-    if (!parts) return { x: 0, y: 0 };
-    const n = parts[1].split(",").map(Number);
-    return { x: n[4] || 0, y: n[5] || 0 };
-  }
+function readSlidePos(el) {
+  return {
+    x: Number.parseFloat(el.style.left) || 0,
+    y: Number.parseFloat(el.style.top) || 0,
+  };
 }
 
 function clearTipSlide() {
@@ -2898,6 +3121,8 @@ function clearTipSlide() {
   if (!mover) return;
   mover.style.transition = "none";
   mover.style.transform = "";
+  mover.style.left = "";
+  mover.style.top = "";
   mover.style.height = "";
   delete mover.dataset.sliding;
   document.getElementById("tip-card")?.classList.remove("tip-card-fade");
@@ -2915,19 +3140,22 @@ function applyTipSlide(s) {
   const placed = mover.dataset.sliding === "1";
   if (s.keep && placed) return;
   if (s.duration > 0 && placed) {
-    const cur = readTranslate(mover);
+    const cur = readSlidePos(mover);
     mover.style.transition = "none";
-    mover.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0)`;
+    mover.style.left = `${cur.x}px`;
+    mover.style.top = `${cur.y}px`;
     mover.style.height = "";
     void mover.offsetWidth;
     requestAnimationFrame(() => {
-      mover.style.transition = `transform ${s.duration}ms ${ease}`;
-      mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      mover.style.transition = `left ${s.duration}ms ${ease}, top ${s.duration}ms ${ease}`;
+      mover.style.left = `${x}px`;
+      mover.style.top = `${y}px`;
     });
     return;
   }
   mover.style.transition = "none";
-  mover.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  mover.style.left = `${x}px`;
+  mover.style.top = `${y}px`;
   mover.style.height = "";
   mover.dataset.sliding = "1";
 }
@@ -3110,6 +3338,7 @@ function paintUsageCard(payload) {
 function paintTip(payload) {
   if (!payload?.show) {
     resetTipLayout();
+    setWindowBlur("tip", 0);
     return;
   }
   prefs.locale = payload.locale === "zh" ? "zh" : "en";
@@ -3146,6 +3375,7 @@ function paintTip(payload) {
       ptr.style.marginLeft = "";
       ptr.style.alignSelf = "";
     }
+    paintOverlayChrome();
     requestAnimationFrame(() => syncMenuHover());
     return;
   }
@@ -3154,6 +3384,7 @@ function paintTip(payload) {
     if (ptr) ptr.hidden = true;
     applyTipSlide(payload.slide);
     paintUsageCard({ ...payload, fade: !!payload.slide.fade });
+    paintOverlayChrome();
     emitTipReady();
     return;
   }
@@ -3161,11 +3392,14 @@ function paintTip(payload) {
   if (ptr) ptr.hidden = true;
   if (!payload.snap) return;
   paintUsageCard(payload);
+  paintOverlayChrome();
+  emitTipReady();
 }
 
 function paintUpdateCard(payload) {
   if (!payload?.show) {
     resetTipLayout();
+    setWindowBlur("update", 0);
     return;
   }
   prefs.locale = payload.locale === "zh" ? "zh" : "en";
@@ -3187,14 +3421,21 @@ function paintUpdateCard(payload) {
     ${notes ? `<div class="update-notes-body">${notes}</div>` : ""}
     <button type="button" class="update-install" data-open-release="1">${t().installVersion(payload.latest)}</button>`;
   document.getElementById("tip").className = "tip arrow-" + (payload.arrow || "right") + " hot";
+  paintOverlayChrome();
+  const box = document.getElementById("tip-card");
+  const ch = box ? Math.ceil(box.scrollHeight || box.getBoundingClientRect().height) : 0;
+  if (ch >= 2) {
+    api()
+      .event.emit("usagebar-update-ready", { h: ch })
+      .catch(() => {});
+    return;
+  }
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const card = document.getElementById("tip-card");
-      const ch = card ? Math.ceil(card.scrollHeight || card.getBoundingClientRect().height) : 0;
-      api()
-        .event.emit("usagebar-update-ready", { h: ch })
-        .catch(() => {});
-    });
+    const card = document.getElementById("tip-card");
+    const h = card ? Math.ceil(card.scrollHeight || card.getBoundingClientRect().height) : 0;
+    api()
+      .event.emit("usagebar-update-ready", { h })
+      .catch(() => {});
   });
 }
 
@@ -3202,6 +3443,19 @@ async function startUpdate() {
   document.documentElement.classList.add("update");
   document.getElementById("tip-root").hidden = false;
   document.getElementById("tip").className = "tip arrow-right";
+  prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
+  applyOverlayLook();
+  refreshWindowBlur();
+  window.addEventListener("resize", () => pushOverlayFrost());
+  await api().event.listen("usagebar-frost-sync", () => {
+    pushOverlayFrost();
+  });
+  await api().event.listen("usagebar-prefs", (e) => {
+    if (!e.payload) return;
+    prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
+    applyLocale();
+    applyOverlayLook();
+  });
   await api().event.listen("usagebar-update-card", (e) => paintUpdateCard(e.payload));
   document.getElementById("tip-root").addEventListener("click", (e) => {
     const link = e.target.closest("[data-open-url]");
@@ -3223,6 +3477,13 @@ async function startUpdate() {
 async function startTip() {
   document.getElementById("tip-root").hidden = false;
   document.getElementById("tip").className = "tip arrow-right";
+  prefs = normalizeLoadedPrefs(await invoke("get_prefs"));
+  applyOverlayLook();
+  refreshWindowBlur();
+  window.addEventListener("resize", () => pushOverlayFrost());
+  await api().event.listen("usagebar-frost-sync", () => {
+    pushOverlayFrost();
+  });
   await api().event.listen("usagebar-tip", (e) => paintTip(e.payload));
   let updateHitRect = null;
   await api().event.listen("usagebar-update-hit", (e) => {
@@ -3257,6 +3518,7 @@ async function startTip() {
     card.innerHTML = providersPanelHtml({
       visibleProviders: normalizeVisible(prefs.visibleProviders),
     });
+    paintOverlayChrome();
   };
   const saveVisibleProviders = (next) => {
     prefs.visibleProviders = normalizeVisible(next);
@@ -3268,6 +3530,7 @@ async function startTip() {
     if (!e.payload) return;
     prefs = normalizeLoadedPrefs({ ...prefs, ...e.payload });
     applyLocale();
+    applyOverlayLook();
     paintProvidersCard();
   });
   const applyLookSlider = (look, raw) => {
@@ -3286,6 +3549,7 @@ async function startTip() {
     if (range) range.value = String(raw);
     const reset = tipRoot.querySelector(`[data-look-reset="${look}"]`);
     if (reset) reset.classList.toggle("is-default", raw === (look === "opacity" ? 100 : 0));
+    applyOverlayLook();
     invoke("set_bar_look", {
       opacity: clampBarOpacity(prefs.barOpacity),
       blur: clampBarBlur(prefs.barBlur),

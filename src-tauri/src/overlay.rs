@@ -596,6 +596,9 @@ fn set_frame(state: &Overlay, bar: &tauri::WebviewWindow, x: f64, y: f64, w: f64
             });
         }
     }
+    if let Ok(prefs) = state.prefs.lock() {
+        crate::frost::apply_window(bar, prefs.bar_blur);
+    }
 }
 
 #[derive(Clone, Serialize)]

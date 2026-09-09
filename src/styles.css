@@ -11,6 +11,8 @@ html, body {
   -webkit-user-drag: none;
   --glyph: #fff;
   --glyph-muted: rgba(255, 255, 255, 0.78);
+  --card-fill: rgba(0, 0, 0, 1);
+  --bar-alpha: 1;
   --ring-track-outer: rgba(0, 0, 0, 0.55);
   --ring-track-inner: rgba(255, 255, 255, 0.28);
 }
@@ -66,19 +68,6 @@ html.update .tip {
 .dock-bg path,
 .dock-bg circle.pod {
   fill: rgba(0, 0, 0, var(--bar-alpha, 1));
-}
-
-.bar-frost {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-  mask-size: 100% 100%;
-  -webkit-mask-size: 100% 100%;
 }
 
 .bar svg, .bar img {
@@ -269,7 +258,9 @@ html.update .tip {
   background: rgba(77, 219, 107, 0.16);
 }
 
-.card.update-notes .tip-close {
+.card.update-notes .tip-close,
+.card.menu-card:not(.providers-card) .tip-close {
+  z-index: 2;
   opacity: 1;
   pointer-events: auto;
 }
@@ -287,7 +278,7 @@ html.update .tip {
   margin: 0 0 8px;
   font-size: 12px;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--glyph, #fff);
 }
 
 .update-notes-list li:last-child {
@@ -298,7 +289,7 @@ html.update .tip {
   margin: 0 0 8px;
   font-size: 11px;
   line-height: 1.45;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
 }
 
 .update-notes-p:last-child {
@@ -344,7 +335,9 @@ html.update .tip {
 .glyph { fill: #fff; }
 
 #bar .glyph,
-#bar .glyph path {
+#bar .glyph path,
+.card .glyph,
+.card .glyph path {
   fill: var(--glyph, #fff);
 }
 
@@ -356,9 +349,9 @@ html.update .tip {
 
 .tip {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   width: 100%;
-  height: 100%;
+  height: auto;
   overflow: visible;
 }
 
@@ -367,14 +360,25 @@ html.update .tip {
 .tip.arrow-up { flex-direction: column; }
 .tip.arrow-down { flex-direction: column-reverse; }
 
+.card-stack {
+  position: relative;
+  width: 100%;
+}
+
+.tip.menu-tip .card-stack {
+  width: 100%;
+  height: 100%;
+}
+
 .card {
   position: relative;
-  width: 320px;
+  z-index: 1;
+  width: 100%;
   box-sizing: border-box;
   padding: 14px;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.94);
-  color: #fff;
+  background: rgba(0, 0, 0, var(--bar-alpha, 1));
+  color: var(--glyph, #fff);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   overflow: visible;
 }
@@ -387,9 +391,8 @@ html.update .tip {
   position: absolute;
   left: 0;
   top: 0;
-  width: 340px;
+  width: 100%;
   height: auto;
-  will-change: transform;
 }
 
 #tip-root.tip-slide-stage.tip-pin-bottom #tip-mover {
@@ -398,7 +401,7 @@ html.update .tip {
 }
 
 #tip-root.tip-slide-stage .tip {
-  width: 340px;
+  width: 100%;
   height: auto;
 }
 
@@ -421,7 +424,7 @@ html.update .tip {
   border: 0;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  color: var(--glyph, #fff);
   font: 16px/22px ui-rounded, "SF Pro Rounded", sans-serif;
   cursor: pointer;
   opacity: 0;
@@ -454,11 +457,11 @@ html.update .tip {
 
 .empty {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
 }
 
 .empty.querying {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.72));
   animation: querying-pulse 1.1s ease-in-out infinite;
 }
 
@@ -484,12 +487,12 @@ html.update .tip {
   margin-bottom: 8px;
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
 }
 
 .credit-count {
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.38));
 }
 
 .credit-row {
@@ -506,7 +509,7 @@ html.update .tip {
   min-width: 0;
   font-size: 11px;
   font-weight: 500;
-  color: #fff;
+  color: var(--glyph, #fff);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -514,7 +517,7 @@ html.update .tip {
 .credit-exp {
   flex: 0 0 auto;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.4));
   white-space: nowrap;
 }
 
@@ -534,7 +537,7 @@ html.update .tip {
 
 .credit-left {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.72));
   white-space: nowrap;
 }
 
@@ -544,17 +547,18 @@ html.update .tip {
   align-items: baseline;
   gap: 8px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.72));
 }
 
 .metric-top > span:first-child {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
 .metric-reset {
   flex: 0 0 auto;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.4));
   white-space: nowrap;
 }
 
@@ -576,7 +580,7 @@ html.update .tip {
 .used {
   font-size: 11px;
   font-weight: 500;
-  color: #fff;
+  color: var(--glyph, #fff);
 }
 
 .pointer {
@@ -588,25 +592,25 @@ html.update .tip {
 
 .tip.arrow-right .pointer {
   border-width: 8px 0 8px 10px;
-  border-color: transparent transparent transparent rgba(0, 0, 0, 0.94);
+  border-color: transparent transparent transparent var(--card-fill, rgba(0, 0, 0, 0.94));
   margin-right: -1px;
 }
 
 .tip.arrow-left .pointer {
   border-width: 8px 10px 8px 0;
-  border-color: transparent rgba(0, 0, 0, 0.94) transparent transparent;
+  border-color: transparent var(--card-fill, rgba(0, 0, 0, 0.94)) transparent transparent;
   margin-left: -1px;
 }
 
 .tip.arrow-up .pointer {
   border-width: 0 8px 10px 8px;
-  border-color: transparent transparent rgba(0, 0, 0, 0.94) transparent;
+  border-color: transparent transparent var(--card-fill, rgba(0, 0, 0, 0.94)) transparent;
   margin-bottom: -1px;
 }
 
 .tip.arrow-down .pointer {
   border-width: 10px 8px 0 8px;
-  border-color: rgba(0, 0, 0, 0.94) transparent transparent transparent;
+  border-color: var(--card-fill, rgba(0, 0, 0, 0.94)) transparent transparent transparent;
   margin-top: -1px;
 }
 
@@ -633,6 +637,10 @@ html.update .tip {
   overflow: auto;
 }
 
+.card.menu-card:not(.providers-card) > .m-row:first-of-type {
+  width: calc(100% - 30px);
+}
+
 .card.menu-card.providers-card {
   padding: 10px 10px 12px;
 }
@@ -655,7 +663,7 @@ html.update .tip {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #fff;
+  color: var(--glyph, #fff);
   cursor: pointer;
   flex: 0 0 22px;
   -webkit-appearance: none;
@@ -676,20 +684,20 @@ html.update .tip {
   min-width: 0;
   font-size: 13px;
   font-weight: 650;
-  color: #fff;
+  color: var(--glyph, #fff);
 }
 
 .prov-hint {
   margin: 0 0 6px;
   font-size: 10px;
   line-height: 1.35;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.4));
 }
 
 .prov-count {
   margin: 0 0 8px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.45));
 }
 
 .prov-count.warn {
@@ -733,7 +741,7 @@ html.update .tip {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #fff;
+  color: var(--glyph, #fff);
   font: 500 12px/1 ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif;
   text-align: left;
   cursor: pointer;
@@ -781,7 +789,7 @@ html.update .tip {
 }
 
 .m-extra.muted {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
   font-weight: 400;
   cursor: default;
 }
@@ -814,7 +822,7 @@ html.update .tip {
   height: 20px;
   padding: 6px 8px 0;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.45));
   box-sizing: border-box;
 }
 
@@ -822,7 +830,7 @@ html.update .tip {
   height: 22px;
   padding: 2px 8px 0 26px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
   box-sizing: border-box;
   font-variant-numeric: tabular-nums;
 }
@@ -842,7 +850,7 @@ html.update .tip {
   border: 0;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.8));
   font: 500 10.5px/1 ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif;
   white-space: nowrap;
   overflow: hidden;
@@ -856,7 +864,7 @@ html.update .tip {
 .m-chip.is-hover,
 .m-chip:active {
   background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  color: var(--glyph, #fff);
 }
 
 .m-chip.on {
@@ -893,7 +901,7 @@ html.update .tip {
 .m-slider-name {
   min-width: 0;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.45));
 }
 
 .m-slider-reset {
@@ -906,7 +914,7 @@ html.update .tip {
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #fff;
+  color: var(--glyph, #fff);
   cursor: pointer;
   flex: 0 0 16px;
   -webkit-appearance: none;
@@ -924,7 +932,7 @@ html.update .tip {
 }
 
 .m-slider-reset.is-default {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.55));
   pointer-events: none;
 }
 
@@ -932,7 +940,7 @@ html.update .tip {
   height: 13px;
   margin: 1px 0 4px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.28));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -950,7 +958,7 @@ html.update .tip {
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--glyph, #fff);
   text-align: right;
 }
 

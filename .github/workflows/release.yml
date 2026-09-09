@@ -51,7 +51,9 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Grok weekly usage:** Newer Grok CLI unified-billing JSON omits `creditUsagePercent` at 0%. UsageBar now shows the weekly window (0% used) and reset time instead of “No data”. Reset cards are unchanged.
+            - **Opacity and blur:** Gear-menu sliders (default: opaque, no blur). Below 60% opacity, text goes dark. macOS frost follows the bar and rounded cards — no extra square, ghost panel, or full-screen smear.
+            - **Settings stay in the popover:** Providers, look sliders, and **×** to close. Hovering **×** no longer highlights Refresh now.
+            - **Wider top/bottom cards** for long model names. Update check reads `latest.json` so GitHub API limits do not fail the gear check.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -75,7 +77,9 @@ jobs:
 
             ### 更新说明
 
-            - **Grok 周额度：** 新版 Grok CLI 统一计费在 0% 时不再返回 `creditUsagePercent`。现在仍显示周窗口（已用 0%）和重置时间，不再「暂无数据」。重置卡不变。
+            - **不透明度和模糊：** 齿轮菜单里两个滑条（默认不透明、不模糊）。不透明度低于 60% 时字变深。macOS 毛玻璃贴着条和圆角卡片，不再多出方块、第二块面板或整屏糊。
+            - **设置仍在弹出层：** 提供商、外观滑条，右上角 **×** 关闭。鼠标在 × 上时不会高亮「立即刷新」。
+            - **贴顶 / 贴底详情会加宽。** 检测更新先读 `latest.json`，不再被 GitHub API 限流打成失败。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

@@ -6,6 +6,14 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.25 — 2026-09-09
+
+- **Opacity and blur in the gear menu.** Two sliders: panel opacity (0–100%) and blur radius (0–100%). Default is fully opaque, no blur. Below 60% opacity, text and icons shift toward black so they stay readable on a light desktop. Color rings, green buttons, and expiry yellow/red stay as-is.
+- **Frost stays on the bar and cards.** On macOS the system blur follows the dock shape and the 14px card corners. It no longer paints a larger square behind the card, a second ghost panel, or a full-screen smear. Switching providers sizes the window to the card first, then turns blur on, so the frost does not lag or leak underneath.
+- **Settings stay in the gear popover.** Opacity, blur, and **Providers…** live on the same tip layer — no separate settings window. **×** closes the panel; hovering **×** no longer highlights **Refresh now**.
+- **Wider hover card on top / bottom.** Long lines such as `GPT-5.3-Codex-Spark · weekly` plus the reset time grow the card instead of clipping.
+- **Update check via `latest.json`.** The gear **Check for update** reads the GitHub release `latest.json` first, so GitHub API rate limits no longer fail the check. Status text stays on one line.
+
 ### 0.0.24 — 2026-09-07
 
 - **Grok weekly usage.** Newer Grok CLI unified-billing JSON omits `creditUsagePercent` when usage is 0 (proto3). UsageBar now still shows the weekly window at 0% used, with the period reset time, instead of “No data”. Reset cards are unchanged.
@@ -126,6 +134,14 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.25 — 2026-09-09
+
+- **设置里的不透明度和模糊。** 两个滑条：面板不透明度 0–100%、模糊半径 0–100%。默认不透明、不模糊。不透明度低于 60% 时，字和图标会往黑色靠，浅色桌面上仍能看清。彩环、绿按钮、到期黄红不变。
+- **毛玻璃贴着条和卡片。** macOS 上系统模糊跟胶囊条和 14px 圆角卡片走，不再在卡片后面铺更大的方块、复制出第二块面板，或糊满整屏。换供应商时先按卡片收窗口再开糊，磨砂不会慢半拍或从底下溢出来。
+- **设置仍在齿轮弹出层。** 不透明度、模糊和 **提供商…** 都画在同一层，不再单独开设置窗。右上角 **×** 关闭面板；鼠标在 × 上时不会再高亮「立即刷新」。
+- **贴顶 / 贴底时详情会加宽。** `GPT-5.3-Codex-Spark · 周额度` 加重置时间会把卡片撑开，不再裁切。
+- **更新检测走 `latest.json`。** 齿轮里的 **检测更新** 先读 GitHub Release 的 `latest.json`，不再被 GitHub API 限流打成失败。状态文案保持一行。
 
 ### 0.0.24 — 2026-09-07
 

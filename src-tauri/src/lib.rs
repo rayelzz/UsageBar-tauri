@@ -1,3 +1,4 @@
+mod frost;
 mod i18n;
 mod overlay;
 mod prefs;
@@ -59,6 +60,7 @@ fn set_prefs(app: AppHandle, prefs: Prefs) {
         }
     }
     prefs::save(&prefs);
+    frost::apply_from_app(&app);
     let _ = app.emit("usagebar-prefs", &prefs);
     if prefs::tray_needs_update(&base, &prefs) {
         schedule_tray(app, prefs);
@@ -98,6 +100,7 @@ fn set_bar_look(app: AppHandle, opacity: f64, blur: f64) {
             return;
         };
         if (slot.bar_opacity - opacity).abs() < 0.0001 && (slot.bar_blur - blur).abs() < 0.0001 {
+            frost::apply_from_app(&app);
             return;
         }
         slot.bar_opacity = opacity;
@@ -110,7 +113,21 @@ fn set_bar_look(app: AppHandle, opacity: f64, blur: f64) {
         prefs
     };
     prefs::save(&prefs);
+    frost::apply_from_app(&app);
     let _ = app.emit("usagebar-prefs", &prefs);
+}
+
+#[tauri::command]
+fn refresh_window_blur(app: AppHandle) {
+    frost::apply_from_app(&app);
+}
+
+#[tauri::command]
+fn set_window_blur(app: AppHandle, window: String, blur: f64) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        frost::set_window_blur(&handle, &window, blur);
+    });
 }
 
 fn schedule_tray(app: AppHandle, prefs: Prefs) {
@@ -431,6 +448,8 @@ pub fn run() {
             set_prefs,
             set_visible_providers,
             set_bar_look,
+            refresh_window_blur,
+            set_window_blur,
             place_bar,
             set_pointer,
             set_menu_open,
@@ -524,6 +543,20 @@ pub fn run() {
                 });
             }
             apply_tray(app.handle(), &prefs);
+            frost::apply_from_app(app.handle());
+            for label in ["bar", "tip", "update"] {
+                if let Some(win) = app.get_webview_window(label) {
+                    let handle = app.handle().clone();
+                    let _ = win.on_window_event(move |event| {
+                        if matches!(
+                            event,
+                            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_)
+                        ) {
+                            frost::apply_from_app(&handle);
+                        }
+                    });
+                }
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
