@@ -1,3 +1,4 @@
+mod dock_shape;
 mod frost;
 mod i18n;
 mod overlay;
@@ -10,7 +11,7 @@ use overlay::Overlay;
 use prefs::Prefs;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
@@ -63,6 +64,7 @@ fn set_prefs(app: AppHandle, prefs: Prefs) {
     frost::apply_from_app(&app);
     let _ = app.emit("usagebar-prefs", &prefs);
     if prefs::tray_needs_update(&base, &prefs) {
+        apply_app_icon(&app, &prefs);
         schedule_tray(app, prefs);
     }
 }
@@ -256,130 +258,84 @@ fn tray_rect(app: AppHandle) -> Option<TrayRect> {
 }
 
 fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::Wry>> {
-    let loc = prefs.locale.as_str();
-    let refresh = MenuItem::with_id(app, "refresh", i18n::refresh_now(loc), true, None::<&str>)?;
-    let intervals = [15u64, 30, 60, 120, 300, 600, 0];
-    let mut refresh_items = Vec::new();
-    for sec in intervals {
-        refresh_items.push(CheckMenuItem::with_id(
-            app,
-            format!("interval:{sec}"),
-            i18n::interval_label(loc, sec),
-            true,
-            prefs.refresh_interval == sec,
-            None::<&str>,
-        )?);
+    let quit = MenuItem::with_id(app, "quit", i18n::quit(prefs.locale.as_str()), true, Some("q"))?;
+    Menu::with_items(app, &[&quit])
+}
+
+fn apply_app_icon(app: &AppHandle, prefs: &Prefs) {
+    let show_tray = prefs.app_icon == "menubar";
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_visible(show_tray);
+        #[cfg(target_os = "macos")]
+        if show_tray {
+            style_macos_status_item(&tray);
+        }
     }
-    let refresh_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = refresh_items
-        .iter()
-        .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
-        .collect();
-    let refresh_sub =
-        Submenu::with_id_and_items(app, "auto-refresh", i18n::auto_refresh(loc), true, &refresh_refs)?;
-    let lock = MenuItem::with_id(
-        app,
-        "lock",
-        i18n::lock_position(loc, prefs.locked),
-        true,
-        None::<&str>,
-    )?;
-    let click = CheckMenuItem::with_id(
-        app,
-        "click",
-        i18n::click_through(loc),
-        true,
-        prefs.click_through,
-        None::<&str>,
-    )?;
-    let left = CheckMenuItem::with_id(
-        app,
-        "snap:left",
-        i18n::snap_left(loc),
-        true,
-        prefs.edge == "left",
-        None::<&str>,
-    )?;
-    let right = CheckMenuItem::with_id(
-        app,
-        "snap:right",
-        i18n::snap_right(loc),
-        true,
-        prefs.edge == "right",
-        None::<&str>,
-    )?;
-    let top = CheckMenuItem::with_id(
-        app,
-        "snap:top",
-        i18n::snap_top(loc),
-        true,
-        prefs.edge == "top",
-        None::<&str>,
-    )?;
-    let bottom = CheckMenuItem::with_id(
-        app,
-        "snap:bottom",
-        i18n::snap_bottom(loc),
-        true,
-        prefs.edge == "bottom",
-        None::<&str>,
-    )?;
-    let value_used = CheckMenuItem::with_id(
-        app,
-        "value:used",
-        i18n::used_quota(loc),
-        true,
-        prefs.display_value != "remaining",
-        None::<&str>,
-    )?;
-    let value_remaining = CheckMenuItem::with_id(
-        app,
-        "value:remaining",
-        i18n::remaining_quota(loc),
-        true,
-        prefs.display_value == "remaining",
-        None::<&str>,
-    )?;
-    let value_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&value_used, &value_remaining];
-    let value_sub =
-        Submenu::with_id_and_items(app, "display-value", i18n::display_value(loc), true, &value_refs)?;
-    let zh = i18n::is_zh(loc);
-    let lang_en = CheckMenuItem::with_id(app, "locale:en", "English", true, !zh, None::<&str>)?;
-    let lang_zh = CheckMenuItem::with_id(app, "locale:zh", "中文", true, zh, None::<&str>)?;
-    let lang_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&lang_en, &lang_zh];
-    let lang_sub = Submenu::with_id_and_items(app, "language", i18n::language(loc), true, &lang_refs)?;
-    let tools = MenuItem::with_id(app, "tools", i18n::tools(loc), true, None::<&str>)?;
-    let login = CheckMenuItem::with_id(
-        app,
-        "login",
-        i18n::open_at_login(loc),
-        true,
-        prefs.launch_at_login,
-        None::<&str>,
-    )?;
-    let quit = MenuItem::with_id(app, "quit", i18n::quit(loc), true, Some("q"))?;
-    let sep = PredefinedMenuItem::separator(app)?;
-    Menu::with_items(
-        app,
-        &[
-            &refresh,
-            &refresh_sub,
-            &sep,
-            &lock,
-            &click,
-            &sep,
-            &left,
-            &right,
-            &top,
-            &bottom,
-            &value_sub,
-            &lang_sub,
-            &tools,
-            &sep,
-            &login,
-            &sep,
-            &quit,
-        ],
-    )
+    #[cfg(target_os = "macos")]
+    set_macos_dock_visible(app, prefs.app_icon == "dock");
+    #[cfg(not(target_os = "macos"))]
+    if let Some(bar) = app.get_webview_window("bar") {
+        let _ = bar.set_skip_taskbar(prefs.app_icon != "dock");
+    }
+    reveal_bar(app);
+}
+
+fn reveal_bar(app: &AppHandle) {
+    let Some(bar) = app.get_webview_window("bar") else {
+        return;
+    };
+    let _ = bar.set_always_on_top(true);
+    let _ = bar.show();
+    #[cfg(target_os = "macos")]
+    if let Ok(ptr) = bar.ns_window() {
+        if !ptr.is_null() {
+            unsafe {
+                let win = ptr as *mut objc2::runtime::AnyObject;
+                let _: () = objc2::msg_send![win, orderFrontRegardless];
+            }
+        }
+    }
+    frost::apply_from_app(app);
+}
+
+/// Hide/show the Dock icon without Tauri's 1s hide-after-show debounce.
+/// UIElement 变换后必须把条再顶到前面，否则透明窗会停在窗口列表里却不画。
+#[cfg(target_os = "macos")]
+fn set_macos_dock_visible(_app: &AppHandle, visible: bool) {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    #[repr(C)]
+    struct ProcessSerialNumber {
+        high_long_of_psn: u32,
+        low_long_of_psn: u32,
+    }
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn TransformProcessType(psn: *const ProcessSerialNumber, transform_state: i32) -> i32;
+    }
+
+    const CURRENT_PROCESS: u32 = 2;
+    const TO_FOREGROUND: i32 = 1;
+    const TO_UI_ELEMENT: i32 = 4;
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let ns_app = NSApplication::sharedApplication(mtm);
+    if !visible {
+        for window in ns_app.windows() {
+            window.setCanHide(false);
+        }
+    }
+    let psn = ProcessSerialNumber {
+        high_long_of_psn: 0,
+        low_long_of_psn: CURRENT_PROCESS,
+    };
+    unsafe {
+        TransformProcessType(&psn, if visible { TO_FOREGROUND } else { TO_UI_ELEMENT });
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -468,6 +424,7 @@ pub fn run() {
         .setup(|app| {
             // 应用整体为暗色设计，原生菜单 / 设置窗口统一走暗色外观。
             app.handle().set_theme(Some(tauri::Theme::Dark));
+            let prefs = prefs::load();
             for (label, win) in app.webview_windows() {
                 if label != "bar" && label != "tip" {
                     let _ = win.hide();
@@ -502,7 +459,6 @@ pub fn run() {
                     let _ = update.set_visible_on_all_workspaces(true);
                 }
             }
-            let prefs = prefs::load();
             app.manage(Overlay::new(prefs.clone()));
             if overlay::place(app.handle()).is_none() {
                 if let Some(bar) = app.get_webview_window("bar") {
@@ -543,6 +499,7 @@ pub fn run() {
                 });
             }
             apply_tray(app.handle(), &prefs);
+            apply_app_icon(app.handle(), &prefs);
             frost::apply_from_app(app.handle());
             for label in ["bar", "tip", "update"] {
                 if let Some(win) = app.get_webview_window(label) {
@@ -559,6 +516,16 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running UsageBar");
+        .build(tauri::generate_context!())
+        .expect("error while building UsageBar")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                let _ = app.emit("usagebar-reopen", ());
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app, event);
+            }
+        });
 }

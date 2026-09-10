@@ -150,6 +150,10 @@ function t() {
         remainingQuota: "剩余额度",
         displayValueHint: "圆环、百分比和详情都按这个值显示。颜色仍按剩余额度：不足 20% 红，20%–40% 黄，其余绿。",
         language: "语言",
+        appIcon: "应用图标",
+        appIconDock: "程序坞",
+        appIconMenubar: "菜单栏",
+        appIconNeither: "都不显示",
         openAtLogin: "登录时打开",
         quit: "退出 UsageBar",
         tools: "提供商…",
@@ -212,6 +216,10 @@ function t() {
         remainingQuota: "Remaining quota",
         displayValueHint: "Rings, percents, and the detail card follow this value. Colors still follow remaining: red below 20%, yellow 20–40%, green otherwise.",
         language: "Language",
+        appIcon: "App icon",
+        appIconDock: "Dock",
+        appIconMenubar: "Menu bar",
+        appIconNeither: "Neither",
         openAtLogin: "Open at login",
         quit: "Quit UsageBar",
         tools: "Providers…",
@@ -414,7 +422,27 @@ function normalizeLoadedPrefs(p) {
   if (typeof next.along !== "number" || Number.isNaN(next.along)) next.along = -1;
   next.barOpacity = clampBarOpacity(next.barOpacity);
   next.barBlur = clampBarBlur(next.barBlur);
+  next.appIcon = normalizeAppIcon(next.appIcon);
   return next;
+}
+
+function normalizeAppIcon(value) {
+  return value === "dock" || value === "menubar" ? value : "neither";
+}
+
+function appIconNeitherHint() {
+  if (isZh()) {
+    if (osName === "windows") return "没有图标。可从开始菜单再打开，或点条上的齿轮改回来。";
+    if (osName === "linux") return "没有图标。可从应用程序列表再打开，或点条上的齿轮改回来。";
+    return "没有图标。可从「应用程序」再打开，或点条上的齿轮改回来。";
+  }
+  if (osName === "windows") {
+    return "No icon anywhere. Open UsageBar from the Start menu, or click the gear on the bar.";
+  }
+  if (osName === "linux") {
+    return "No icon anywhere. Open UsageBar from the app list, or click the gear on the bar.";
+  }
+  return "No icon anywhere. Open UsageBar from Applications, or click the gear on the bar.";
 }
 
 function updateHasNewer(info) {
@@ -617,15 +645,14 @@ const K = 0.5523;
 const S = 0.72;
 
 function dockPath(w, h, edge) {
-  const frost = frostActive();
   if (edge === "floating") {
-    const hh = frost ? h : h - gearAlong(edge);
+    const hh = h - gearAlong(edge);
     const r = Math.min(w, hh) / 2;
     return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${hh - r} A${r},${r} 0 0 1 ${w - r},${hh} H${r} A${r},${r} 0 0 1 0,${hh - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
   }
   const vertical = edge === "left" || edge === "right";
-  const bw = vertical ? w : frost ? w : w - gearAlong(edge);
-  const bh = vertical ? (frost ? h : h - gearAlong(edge)) : h;
+  const bw = vertical ? w : w - gearAlong(edge);
+  const bh = vertical ? h - gearAlong(edge) : h;
   const along = vertical ? bh : bw;
   const [f, r] = radii(bw, bh, along);
   const pad = 1;
@@ -1030,6 +1057,7 @@ let prefs = {
   lastY: -1,
   barOpacity: 1,
   barBlur: 0,
+  appIcon: "neither",
 };
 let prefsReady = false;
 let osName = "macos";
@@ -1052,6 +1080,9 @@ let refreshQueued = false;
 let prefsSaveTail = Promise.resolve();
 let menuOpen = false;
 let menuPage = "menu";
+let menuHold = null;
+let menuLeaveTimer = null;
+const MENU_HOVER_GRACE_MS = 100;
 let menuScreenBox = null;
 let resetToastId = null;
 let creditToastId = null;
@@ -1109,7 +1140,7 @@ function paintDock(edge) {
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
   const fill = dockFill();
-  const geomKey = `${size.w}x${size.h}:${edge}:${frostActive() ? 1 : 0}`;
+  const geomKey = `${size.w}x${size.h}:${edge}`;
   const ns = "http://www.w3.org/2000/svg";
   svg.style.display = "";
   let path = svg.querySelector("path");
@@ -1131,18 +1162,14 @@ function paintDock(edge) {
     path.setAttribute("d", body);
   }
   let pod = svg.querySelector("circle.pod");
-  if (barHot) {
-    if (!pod) {
-      pod = document.createElementNS(ns, "circle");
-      pod.setAttribute("class", "pod");
-      svg.appendChild(pod);
-    }
-    pod.setAttribute("cx", String(c.x));
-    pod.setAttribute("cy", String(c.y));
-    pod.setAttribute("r", String(GEAR_R));
-  } else if (pod) {
-    pod.remove();
+  if (!pod) {
+    pod = document.createElementNS(ns, "circle");
+    pod.setAttribute("class", "pod");
+    svg.appendChild(pod);
   }
+  pod.setAttribute("cx", String(c.x));
+  pod.setAttribute("cy", String(c.y));
+  pod.setAttribute("r", String(GEAR_R));
   svg.querySelectorAll("path, circle.pod").forEach((el) => paintFill(el, fill));
 }
 
@@ -2486,6 +2513,17 @@ function menuSpec(st) {
     ),
     { k: "label", label: ui.language },
     chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
+    { k: "label", label: ui.appIcon },
+    chips(
+      ["icon:dock", "icon:menubar", "icon:neither"],
+      [ui.appIconDock, ui.appIconMenubar, ui.appIconNeither],
+      [st.appIcon === "dock", st.appIcon === "menubar", st.appIcon === "neither"]
+    ),
+  ];
+  if (st.appIcon === "neither") {
+    rows.push({ k: "hint", label: st.appIconNeitherHint || appIconNeitherHint() });
+  }
+  rows.push(
     { k: "sep" },
     { k: "row", id: "tools", label: ui.tools },
     { k: "sep" },
@@ -2500,7 +2538,7 @@ function menuSpec(st) {
       extraId: "latest",
       cls: st.checking || st.installing ? "dim" : "",
     },
-  ];
+  );
   rows.push(
     { k: "row", id: "autoupdate", label: ui.autoCheckUpdate, check: st.autoCheckUpdate },
     { k: "row", id: "login", label: ui.openAtLogin, check: st.launchAtLogin },
@@ -2517,6 +2555,7 @@ function menuPanelHtml(st) {
       if (r.k === "sep") return `<div class="m-sep"></div>`;
       if (r.k === "label") return `<div class="m-label">${r.label}</div>`;
       if (r.k === "info") return `<div class="m-info">${r.label}</div>`;
+      if (r.k === "hint") return `<div class="m-hint">${r.label}</div>`;
       if (r.k === "chips") {
         return `<div class="m-chips">${r.ids
           .map(
@@ -2557,7 +2596,7 @@ function menuPanelHtml(st) {
 }
 
 function menuPanelHeight(st) {
-  const H = { row: 30, sep: 11, label: 20, chips: 30, info: 22, slider: 58 };
+  const H = { row: 30, sep: 11, label: 20, chips: 30, info: 22, slider: 58, hint: 48 };
   return menuSpec(st).reduce((sum, r) => sum + (H[r.k] || 0), 0) + 16;
 }
 
@@ -2621,6 +2660,8 @@ function menuStateNow() {
     barOpacity: clampBarOpacity(prefs.barOpacity),
     barBlur: clampBarBlur(prefs.barBlur),
     displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
+    appIcon: normalizeAppIcon(prefs.appIcon),
+    appIconNeitherHint: appIconNeitherHint(),
     launchAtLogin: !!prefs.launchAtLogin,
     autoCheckUpdate: !!prefs.autoCheckUpdate,
     current: appVersion || "",
@@ -2724,12 +2765,29 @@ async function placeMenuOverlay(winW, needH, reposition) {
   return { wasOpen, tipWin, arrow, pointerAt };
 }
 
+function cancelHoverMenuClose() {
+  if (menuLeaveTimer) {
+    clearTimeout(menuLeaveTimer);
+    menuLeaveTimer = null;
+  }
+}
+
+function scheduleHoverMenuClose() {
+  cancelHoverMenuClose();
+  menuLeaveTimer = setTimeout(() => {
+    menuLeaveTimer = null;
+    if (menuHold === "hover") closeMenuPanel().catch((err) => console.error(err));
+  }, MENU_HOVER_GRACE_MS);
+}
+
 function refreshMenuIfOpen(reposition = false) {
   if (!menuOpen || menuPage !== "menu") return Promise.resolve();
   return showPanelMenu(reposition);
 }
 
-async function showPanelMenu(reposition = true) {
+async function showPanelMenu(reposition = true, hold) {
+  if (hold === "pin") menuHold = "pin";
+  else if (!menuHold) menuHold = hold || "hover";
   menuPage = "menu";
   const st = menuStateNow();
   const { wasOpen, tipWin, arrow, pointerAt } = await placeMenuOverlay(
@@ -2801,8 +2859,10 @@ async function showProvidersPanel(reposition = true) {
 
 async function closeMenuPanel() {
   if (!menuOpen) return;
+  cancelHoverMenuClose();
   menuOpen = false;
   menuPage = "menu";
+  menuHold = null;
   menuCardFrame = null;
   menuScreenBox = null;
   await invoke("set_menu_open", { open: false });
@@ -2867,9 +2927,17 @@ async function handleMenuAction(id) {
     setDisplayValue(id.slice(6));
     return;
   }
+  if (id.startsWith("icon:")) {
+    const next = normalizeAppIcon(id.slice(5));
+    if (prefs.appIcon === next) return;
+    prefs.appIcon = next;
+    savePrefs().catch((err) => console.error(err));
+    if (menuOpen) await showPanelMenu(true);
+    return;
+  }
   if (id.startsWith("locale:")) {
     await setLocale(id.slice(7));
-    if (menuOpen) await showPanelMenu(false);
+    if (menuOpen) await showPanelMenu(prefs.appIcon === "neither");
     return;
   }
   await onNativeMenu(id);
@@ -2965,18 +3033,24 @@ async function startBar() {
   refresh().catch((err) => console.error(err));
   restartTimer();
   applyAutoUpdatePref();
-  document.getElementById("gear-btn").addEventListener("pointerdown", (e) => {
+  const gearBtn = document.getElementById("gear-btn");
+  gearBtn.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
   });
-  document.getElementById("gear-btn").addEventListener("click", (e) => {
+  gearBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (menuOpen) closeMenuPanel().catch((err) => console.error(err));
-    else showPanelMenu().catch((err) => console.error(err));
+  });
+  gearBtn.addEventListener("pointerenter", () => {
+    cancelHoverMenuClose();
+    if (!menuOpen && !dragging) showPanelMenu(true, "hover").catch((err) => console.error(err));
+  });
+  gearBtn.addEventListener("pointerleave", () => {
+    if (menuHold === "hover") scheduleHoverMenuClose();
   });
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    if (!menuOpen) showPanelMenu().catch((err) => console.error(err));
+    showPanelMenu(true, "pin").catch((err) => console.error(err));
   });
   document.addEventListener("pointerdown", (e) => {
     if (e.button === 0) invoke("set_pointer", { left: true }).catch(() => {});
@@ -2989,6 +3063,9 @@ async function startBar() {
   });
   await api().event.listen("usagebar-menu", (e) => {
     handleMenuAction(e.payload).catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-reopen", () => {
+    showPanelMenu(true, "pin").catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-layout", (e) => {
     applyLayout(e.payload).catch((err) => console.error(err));
@@ -3024,12 +3101,34 @@ async function startBar() {
   await api().event.listen("usagebar-tip-ready", (e) => resolveTipReady(e.payload));
   await api().event.listen("usagebar-update-ready", (e) => resolveUpdateReady(e.payload));
   await api().event.listen("usagebar-hover", (e) => {
-    if (menuOpen || dragging) {
+    if (dragging) {
+      cancelHoverMenuClose();
+      if (menuHold === "hover") closeMenuPanel().catch((err) => console.error(err));
       if (hovered) setHovered(null).catch((err) => console.error(err));
       return;
     }
-    if (resetToastId) return;
     const id = e.payload || null;
+    if (id === "gear") {
+      cancelHoverMenuClose();
+      if (!menuOpen) showPanelMenu(true, "hover").catch((err) => console.error(err));
+      return;
+    }
+    if (menuHold === "pin") return;
+    if (menuHold === "hover") {
+      if (!id) {
+        scheduleHoverMenuClose();
+        return;
+      }
+      cancelHoverMenuClose();
+      closeMenuPanel()
+        .then(() => {
+          if (resetToastId) return;
+          setHovered(id);
+        })
+        .catch((err) => console.error(err));
+      return;
+    }
+    if (resetToastId) return;
     if (updateToastOpen && !id) return;
     if (creditToastId) {
       if (!id) return;
@@ -3039,6 +3138,11 @@ async function startBar() {
       return;
     }
     setHovered(id).catch((err) => console.error(err));
+  });
+  await api().event.listen("usagebar-tip-hover", (e) => {
+    if (menuHold !== "hover") return;
+    if (e.payload) cancelHoverMenuClose();
+    else scheduleHoverMenuClose();
   });
   await api().event.listen("usagebar-reset-ack", (e) => {
     closeResetToast(e.payload).catch((err) => console.error(err));
@@ -3492,9 +3596,13 @@ async function startTip() {
   const tipRoot = document.getElementById("tip-root");
   let lookDragging = false;
   tipRoot.addEventListener("pointermove", syncMenuHover);
+  tipRoot.addEventListener("pointerenter", () => {
+    api().event.emit("usagebar-tip-hover", true).catch(() => {});
+  });
   tipRoot.addEventListener("pointerleave", () => {
     lastMenuPointer = null;
     setMenuHover(null);
+    api().event.emit("usagebar-tip-hover", false).catch(() => {});
   });
   tipRoot.addEventListener("pointerdown", (e) => {
     if (e.target.closest("[data-look-reset]")) e.stopPropagation();

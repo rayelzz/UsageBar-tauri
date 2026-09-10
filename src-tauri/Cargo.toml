@@ -1,6 +1,6 @@
 [package]
 name = "usagebar"
-version = "0.0.26"
+version = "0.0.27"
 description = "Cross-platform AI usage edge bar"
 authors = ["rayelzz"]
 edition = "2021"
@@ -31,9 +31,14 @@ base64 = "0.22"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "NSApplication",
+    "NSColor",
     "NSEvent",
     "NSFont",
     "NSFontDescriptor",
+    "NSGraphics",
+    "NSGraphicsContext",
+    "NSImage",
     "NSView",
     "NSWindow",
     "NSBezierPath",

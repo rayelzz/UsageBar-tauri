@@ -51,8 +51,9 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Edge-hug dock with blur:** Frost no longer turns the bar into a floating capsule. The wall stays flat, the inner curve matches the unblurred dock, and the gear sits inside that curve so the bottom does not leave a leftover frost square.
-            - **Opacity and blur** stay in the gear menu (default: opaque, no blur). Below 60% opacity, text goes dark. Cards keep 14px rounded frost.
+            - **Shaped frost:** Blur sits inside the D-shaped dock and a separate circular gear cabin. No more rectangular leaks at the ends, or a fused frost slab between the bar and the gear.
+            - **Always-visible gear cabin.** Hover the gear to open settings; move away to close. Right-click the bar pins the panel.
+            - **App icon:** Dock, menu bar, or neither (default). Menu-bar **UB** is quit-only; settings stay on the gear.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -76,8 +77,9 @@ jobs:
 
             ### 更新说明
 
-            - **开模糊仍走贴边弧线：** 不再收成悬浮胶囊。靠墙保持平贴，内侧弧线和未模糊时一致，齿轮进弧线里，底部不再单独漏方糊。
-            - **不透明度和模糊** 仍在齿轮菜单（默认不透明、不模糊）。低于 60% 时字变深。卡片仍是 14px 圆角毛玻璃。
+            - **磨砂跟 D 形条身和独立齿轮舱走。** 不再整块矩形漏直角，条和齿轮之间也不再糊成一块。
+            - **齿轮舱一直在。** 悬停打开设置，移开关闭。右键条钉住面板。
+            - **应用图标：** 程序坞 / 菜单栏 / 都不显示（默认）。菜单栏 **UB** 只留退出；设置仍在齿轮。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 

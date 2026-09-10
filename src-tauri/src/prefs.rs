@@ -27,6 +27,8 @@ pub struct Prefs {
     pub bar_opacity: f64,
     /// Window-server backdrop blur radius, 0–100. 0 keeps a solid fill.
     pub bar_blur: f64,
+    /// Where the app icon lives: dock, menubar, or neither.
+    pub app_icon: String,
 }
 
 pub const BAR_OPACITY_DEFAULT: f64 = 1.0;
@@ -78,6 +80,18 @@ pub fn normalize_display_value(value: &str) -> String {
         "remaining".into()
     } else {
         "used".into()
+    }
+}
+
+pub fn default_app_icon() -> String {
+    "neither".into()
+}
+
+pub fn normalize_app_icon(value: &str) -> String {
+    if value == "dock" || value == "menubar" || value == "neither" {
+        value.into()
+    } else {
+        default_app_icon()
     }
 }
 
@@ -145,6 +159,7 @@ impl Default for Prefs {
             last_y: UNSET,
             bar_opacity: BAR_OPACITY_DEFAULT,
             bar_blur: 0.0,
+            app_icon: default_app_icon(),
         }
     }
 }
@@ -181,6 +196,7 @@ impl Prefs {
         }
         self.bar_opacity = normalize_bar_opacity(self.bar_opacity);
         self.bar_blur = normalize_bar_blur(self.bar_blur);
+        self.app_icon = normalize_app_icon(&self.app_icon);
         self
     }
 }
@@ -234,6 +250,7 @@ pub fn tray_needs_update(before: &Prefs, after: &Prefs) -> bool {
         || before.edge != after.edge
         || before.display_value != after.display_value
         || before.launch_at_login != after.launch_at_login
+        || before.app_icon != after.app_icon
 }
 
 pub fn parse_text(text: &str) -> Prefs {
@@ -551,6 +568,43 @@ mod tests {
         after.along = 50.0;
         assert!(!tray_needs_update(&before, &after));
         after.locale = "zh".into();
+        assert!(tray_needs_update(&before, &after));
+    }
+
+    #[test]
+    fn app_icon_defaults_and_sanitizes() {
+        let prefs = Prefs::default();
+        assert_eq!(prefs.app_icon, "neither");
+        assert_eq!(normalize_app_icon("dock"), "dock");
+        assert_eq!(normalize_app_icon("neither"), "neither");
+        assert_eq!(normalize_app_icon("menubar"), "menubar");
+        assert_eq!(normalize_app_icon("nope"), "neither");
+        assert_eq!(normalize_app_icon(""), "neither");
+        let parsed = parse_text(r#"{"edge":"right"}"#);
+        assert_eq!(parsed.app_icon, "neither");
+        let parsed = parse_text(r#"{"appIcon":"menubar"}"#);
+        assert_eq!(parsed.app_icon, "menubar");
+        let parsed = parse_text(r#"{"appIcon":"floating"}"#);
+        assert_eq!(parsed.app_icon, "neither");
+    }
+
+    #[test]
+    fn apply_incoming_takes_app_icon() {
+        let mut base = Prefs::default();
+        base.app_icon = "menubar".into();
+        let mut incoming = base.clone();
+        incoming.app_icon = "dock".into();
+        incoming.last_x = 10.0;
+        let applied = apply_incoming(base, incoming);
+        assert_eq!(applied.app_icon, "dock");
+        assert_eq!(applied.last_x, -1.0);
+    }
+
+    #[test]
+    fn tray_needs_update_on_app_icon() {
+        let before = Prefs::default();
+        let mut after = before.clone();
+        after.app_icon = "menubar".into();
         assert!(tray_needs_update(&before, &after));
     }
 }

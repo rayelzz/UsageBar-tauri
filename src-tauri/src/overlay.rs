@@ -218,12 +218,25 @@ fn tick(app: &AppHandle) {
         state.press_on_gear.store(true, Ordering::Release);
     }
 
-    // 菜单打开时别再查 tip 窗口或拖条：全屏 tip 的 outer_size 很贵，还会和点击抢主线程。
     if menu_open {
         if pressed && !on_gear && !over_menu_card(scale, cursor.x, cursor.y) && !over_update_card(scale, cursor.x, cursor.y)
         {
             let _ = app.emit("usagebar-menu", "close");
         }
+        update_hover(
+            app,
+            state,
+            &prefs,
+            over,
+            false,
+            scale,
+            px,
+            py,
+            pw,
+            ph,
+            cursor.x,
+            cursor.y,
+        );
         return;
     }
 
@@ -290,7 +303,7 @@ fn update_hover(
     mx: f64,
     my: f64,
 ) {
-    if dragging || MENU_OPEN.load(Ordering::Relaxed) {
+    if dragging {
         emit_tip_hot(app, state, false);
         emit_hover(app, state, None);
         return;
@@ -298,6 +311,21 @@ fn update_hover(
     let hot = over_tip(app, mx, my);
     emit_tip_hot(app, state, hot);
     if hot {
+        return;
+    }
+    if over
+        && over_gear(
+            &prefs.edge,
+            scale,
+            px,
+            py,
+            pw,
+            ph,
+            mx,
+            my,
+        )
+    {
+        emit_hover(app, state, Some("gear".into()));
         return;
     }
     let next = hover_id(prefs, over, scale, px, py, pw, ph, mx, my);
@@ -337,13 +365,18 @@ fn hover_id(
     if inner <= 0.0 {
         return None;
     }
+    if coord < inset_start || coord >= along - inset_end {
+        return None;
+    }
     let slot = inner / count;
     if slot <= 0.0 {
         return None;
     }
-    let max = (slots.len() as i32) - 1;
     let idx = ((coord - inset_start) / slot).floor() as i32;
-    Some(slots[idx.clamp(0, max) as usize].clone())
+    if idx < 0 || idx >= slots.len() as i32 {
+        return None;
+    }
+    Some(slots[idx as usize].clone())
 }
 
 fn over_card(card: Option<[f64; 4]>, scale: f64, mx: f64, my: f64) -> bool {
@@ -597,7 +630,7 @@ fn set_frame(state: &Overlay, bar: &tauri::WebviewWindow, x: f64, y: f64, w: f64
         }
     }
     if let Ok(prefs) = state.prefs.lock() {
-        crate::frost::apply_window(bar, prefs.bar_blur);
+        crate::frost::apply_bar(bar, &prefs);
     }
 }
 

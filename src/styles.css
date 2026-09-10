@@ -86,18 +86,11 @@ html.update .tip {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transform: scale(0.5);
-  pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.18s ease;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.bar.hot .gear-btn {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .gear-btn .gear-icon {
@@ -944,6 +937,16 @@ html.update .tip {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.m-hint {
+  min-height: 36px;
+  padding: 0 8px 8px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--glyph-muted, rgba(255, 255, 255, 0.4));
+  box-sizing: border-box;
+  white-space: normal;
 }
 
 .m-slider-row {

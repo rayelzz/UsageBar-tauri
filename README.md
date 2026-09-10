@@ -35,13 +35,13 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - A reset card also pulses that icon and pops a 30-second “expiring” card (1 day before, then once at 5 / 4 / 3 / 2 / 1 hours). Hover the slot for the usual usage card, or click **×**; the same milestone does not repeat
 - Drag anywhere; snap to left / right / top / bottom
-- Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock). The gear menu also has **panel opacity** and **blur**; on macOS the frost follows the bar and rounded cards. Below 60% opacity, text and icons go dark
+- Two display styles: **Ring usage** (full rings + percent + dark dock) or **Transparent icons** (same rings and percents, no dock). The gear menu also has **panel opacity** and **blur**; on macOS the frost follows the D-shaped dock, a separate gear cabin, and rounded cards. Below 60% opacity, text and icons go dark
 - Display value: **Used quota** (default) or **Remaining quota**. Rings, percents, and the detail card follow the choice; colors still follow remaining (red ≤ 20%, yellow ≤ 40%, green otherwise)
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
-- A detached settings gear sits past the end of the bar (the original bar shape is unchanged). Hover to show it; click to open the same dark menu as **UB**. **×** or click outside the panel to close
+- A detached settings gear sits in its own circular cabin past the end of the bar (the dock shape is unchanged). Hover the gear to open settings; move away to close. Right-click the bar pins the same menu. **×** also closes it
 - Automatic update checks are **off** by default. Opening the gear menu still checks once; a new version pops a separate notes window from the GitHub release (**What’s new** / **更新说明**, matching the app language) beside the settings menu. **×** skips that version; hovering a slot hides the card. The gear menu still has the current version and **Check for update**; after a check, click the latest version or **Install** to download, install, and restart. If install fails, the GitHub download page opens
-- Status / tray item is the text **UB** (macOS). Click the gear, right-click the bar, or click **UB** for the same menu
+- **App icon** in the gear menu: Dock, menu bar, or neither (default). Menu-bar **UB** is quit-only. With neither, open settings from the gear, or reopen the app from Applications / the Start menu
 - Auto-refresh every 60 seconds (configurable)
 - Official brand icons; red when remaining ≤ 20% (used ≥ 80%), yellow when remaining ≤ 40% (used ≥ 60%), green otherwise
 
@@ -106,7 +106,7 @@ Push a `v*` tag to run GitHub Actions and publish macOS (Apple Silicon + Intel),
 
 ### Menu
 
-Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
+Hover the settings gear on the bar, or right-click the bar:
 
 - Refresh now; auto-refresh 15s–10min or off
 - Lock position / click-through (**Don’t block clicks below**)
@@ -116,8 +116,9 @@ Settings gear on the bar, menu bar / tray **UB**, or right-click the bar:
 - Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
 - **Providers…**: choose 1–10 providers and their order in the same gear popover. The bar shortens or lengthens to match; no empty **—** slots.
 - Current version, **Check for update**, latest version (click to install), and auto-check (off by default). A new version pops a separate notes window beside the menu; open at login; quit
+- **App icon**: Dock / menu bar / neither (default). Menu-bar **UB** only quits
 
-All settings — edge, position, provider list and order, display style, display value, opacity, blur, language, refresh, lock, click-through, update prefs — are stored at `~/.usagebar/prefs.json` and survive restarts and app updates.
+All settings — edge, position, provider list and order, display style, display value, opacity, blur, app icon, language, refresh, lock, click-through, update prefs — are stored at `~/.usagebar/prefs.json` and survive restarts and app updates.
 
 ### FAQ
 
@@ -143,7 +144,7 @@ No. It only reads local session files / env keys and calls official usage APIs. 
 Turn on **Don’t block clicks below** (on by default). When the pointer is not over the bar, clicks pass through.
 
 **I cannot click the bar or open the menu.**  
-If click-through is on, click empty glass around the rings may pass through. Hover a ring, or use the **UB** tray item. You can also turn click-through off, then lock the position.
+If click-through is on, click empty glass around the rings may pass through. Hover a ring or the gear. You can also turn click-through off, then lock the position.
 
 **macOS: “UsageBar.app is damaged and can’t be opened” / unidentified developer.**  
 The file is not damaged. Chrome / Safari marks the download with a quarantine flag, and the release is not Apple-notarized. On Sequoia / Tahoe, right-click → Open and **Privacy & Security** usually do not help. Copy the app to `/Applications`, then:
@@ -163,7 +164,7 @@ Export `GLM_API_KEY` (or `ZAI_API_KEY` / `Z_AI_API_KEY`) in your shell, or use `
 No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. Reset cards need a signed-in ZCode session (`~/.zcode/v2/credentials.json`); UsageBar decrypts that local `enc:v1:` blob only to list cards, and never redeems them.
 
 **Windows / Linux notes.**  
-Windows needs WebView2 (the installer can bootstrap it). The tray usually shows an icon instead of title-only text. Linux needs a working system tray.
+Windows needs WebView2 (the installer can bootstrap it). The tray appears only if **App icon** is Menu bar; it is quit-only. Linux needs a working system tray for that option.
 
 ### Privacy
 

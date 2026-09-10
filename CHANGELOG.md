@@ -6,6 +6,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.27 — 2026-09-10
+
+- **Frost follows the D-shaped dock and a separate gear cabin.** Blur no longer paints a full-window rectangle with square leaks at the ends, or fuses the gap between the bar and the gear into one slab. The wall-side still hugs the screen.
+- **The gear lives in its own cabin.** It stays visible past the end of the bar. Hover the gear to open settings; move away to close. Right-click the bar pins the panel. Clicking the gear no longer leaves the menu stuck open after you move away.
+- **App icon: Dock, menu bar, or neither.** Default is neither — no Dock icon, no **UB** status item. Menu-bar **UB** is quit-only; settings stay on the gear. Clicking the Dock icon (when shown) reopens settings.
+
 ### 0.0.26 — 2026-09-10
 
 - **Edge-hug dock stays when blur is on.** Turning on frost no longer redraws the bar as a floating capsule. The wall-side stays flat and the inner dual-radius curve is the same as the unblurred dock. With blur on, that hug path runs to the window end so the gear sits inside the curve instead of leaving a leftover frost square.
@@ -138,6 +144,12 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.27 — 2026-09-10
+
+- **磨砂跟 D 形条身和独立齿轮舱走。** 不再按整窗铺一块矩形糊、两端漏直角，也不再把条和齿轮之间的缝糊成一整块。靠墙一侧仍平贴屏幕。
+- **齿轮在自己的圆舱里。** 一直显示在条末端外侧。悬停打开设置，移开关闭。右键条钉住面板。点一下齿轮再移开，菜单不会卡住。
+- **应用图标：程序坞 / 菜单栏 / 都不显示。** 默认都不显示——没有程序坞图标，也没有 **UB** 状态栏项。菜单栏 **UB** 只留退出；设置仍在齿轮。显示程序坞图标时，点图标会重新打开设置。
 
 ### 0.0.26 — 2026-09-10
 
