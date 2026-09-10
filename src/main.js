@@ -617,14 +617,15 @@ const K = 0.5523;
 const S = 0.72;
 
 function dockPath(w, h, edge) {
+  const frost = frostActive();
   if (edge === "floating") {
-    const hh = h - gearAlong(edge);
+    const hh = frost ? h : h - gearAlong(edge);
     const r = Math.min(w, hh) / 2;
     return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${hh - r} A${r},${r} 0 0 1 ${w - r},${hh} H${r} A${r},${r} 0 0 1 0,${hh - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
   }
   const vertical = edge === "left" || edge === "right";
-  const bw = vertical ? w : w - gearAlong(edge);
-  const bh = vertical ? h - gearAlong(edge) : h;
+  const bw = vertical ? w : frost ? w : w - gearAlong(edge);
+  const bh = vertical ? (frost ? h : h - gearAlong(edge)) : h;
   const along = vertical ? bh : bw;
   const [f, r] = radii(bw, bh, along);
   const pad = 1;
@@ -914,12 +915,7 @@ function applyOverlayLook() {
 
 function applyBarLook() {
   applyOverlayTokens();
-  const svg = document.getElementById("dock-shape");
-  if (svg) {
-    svg.querySelectorAll("path, circle.pod").forEach((el) => {
-      paintFill(el, dockFill());
-    });
-  }
+  paintDock(prefs.edge);
   paintInkChrome();
   pushBarFrost();
 }
@@ -1113,7 +1109,7 @@ function paintDock(edge) {
   const body = dockPath(size.w, size.h, edge);
   const c = gearCenter(size.w, size.h, edge);
   const fill = dockFill();
-  const geomKey = `${size.w}x${size.h}:${edge}`;
+  const geomKey = `${size.w}x${size.h}:${edge}:${frostActive() ? 1 : 0}`;
   const ns = "http://www.w3.org/2000/svg";
   svg.style.display = "";
   let path = svg.querySelector("path");

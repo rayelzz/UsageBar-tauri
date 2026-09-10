@@ -6,6 +6,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
 
+### 0.0.26 — 2026-09-10
+
+- **Edge-hug dock stays when blur is on.** Turning on frost no longer redraws the bar as a floating capsule. The wall-side stays flat and the inner dual-radius curve is the same as the unblurred dock. With blur on, that hug path runs to the window end so the gear sits inside the curve instead of leaving a leftover frost square.
+
 ### 0.0.25 — 2026-09-09
 
 - **Opacity and blur in the gear menu.** Two sliders: panel opacity (0–100%) and blur radius (0–100%). Default is fully opaque, no blur. Below 60% opacity, text and icons shift toward black so they stay readable on a light desktop. Color rings, green buttons, and expiry yellow/red stay as-is.
@@ -134,6 +138,10 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.26 — 2026-09-10
+
+- **开模糊仍走贴边弧线。** 不再因为磨砂把条收成悬浮胶囊。靠墙一侧保持平贴，内侧仍是原来的双半径弧。有模糊时这条弧收到窗端，齿轮进弧线里，底部不再单独漏出一块方糊。
 
 ### 0.0.25 — 2026-09-09
 

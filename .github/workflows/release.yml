@@ -51,9 +51,8 @@ jobs:
           releaseBody: |
             ### What’s new
 
-            - **Opacity and blur:** Gear-menu sliders (default: opaque, no blur). Below 60% opacity, text goes dark. macOS frost follows the bar and rounded cards — no extra square, ghost panel, or full-screen smear.
-            - **Settings stay in the popover:** Providers, look sliders, and **×** to close. Hovering **×** no longer highlights Refresh now.
-            - **Wider top/bottom cards** for long model names. Update check reads `latest.json` so GitHub API limits do not fail the gear check.
+            - **Edge-hug dock with blur:** Frost no longer turns the bar into a floating capsule. The wall stays flat, the inner curve matches the unblurred dock, and the gear sits inside that curve so the bottom does not leave a leftover frost square.
+            - **Opacity and blur** stay in the gear menu (default: opaque, no blur). Below 60% opacity, text goes dark. Cards keep 14px rounded frost.
 
             See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
 
@@ -77,9 +76,8 @@ jobs:
 
             ### 更新说明
 
-            - **不透明度和模糊：** 齿轮菜单里两个滑条（默认不透明、不模糊）。不透明度低于 60% 时字变深。macOS 毛玻璃贴着条和圆角卡片，不再多出方块、第二块面板或整屏糊。
-            - **设置仍在弹出层：** 提供商、外观滑条，右上角 **×** 关闭。鼠标在 × 上时不会高亮「立即刷新」。
-            - **贴顶 / 贴底详情会加宽。** 检测更新先读 `latest.json`，不再被 GitHub API 限流打成失败。
+            - **开模糊仍走贴边弧线：** 不再收成悬浮胶囊。靠墙保持平贴，内侧弧线和未模糊时一致，齿轮进弧线里，底部不再单独漏方糊。
+            - **不透明度和模糊** 仍在齿轮菜单（默认不透明、不模糊）。低于 60% 时字变深。卡片仍是 14px 圆角毛玻璃。
 
             完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
 
