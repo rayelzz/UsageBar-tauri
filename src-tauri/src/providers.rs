@@ -214,6 +214,25 @@ fn http_get_json_timeout(
     Ok((code, json))
 }
 
+fn http_get_text_timeout(
+    url: &str,
+    headers: &[(&str, String)],
+    secs: u64,
+) -> Result<(u16, String), String> {
+    let mut req = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(secs))
+        .build()
+        .map_err(|e| e.to_string())?
+        .get(url);
+    for (k, v) in headers {
+        req = req.header(*k, v);
+    }
+    let resp = req.send().map_err(|e| e.to_string())?;
+    let code = resp.status().as_u16();
+    let text = resp.text().unwrap_or_default();
+    Ok((code, text))
+}
+
 fn http_post_json(url: &str, headers: &[(&str, String)], body: &Value) -> Result<(u16, Value), String> {
     let mut req = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -565,10 +584,13 @@ fn credit_expires_at(item: &Value) -> Option<i64> {
 }
 
 fn parse_reset_credits(json: &Value) -> Vec<ResetCredit> {
+    parse_reset_credits_at(json, now_ms())
+}
+
+fn parse_reset_credits_at(json: &Value, now: i64) -> Vec<ResetCredit> {
     let root = reset_credits_root(json);
     let limits_only = root.get("limits").is_some() && !has_credit_list_key(root);
     let list = credit_list(root).cloned().unwrap_or_default();
-    let now = now_ms();
     let mut out = Vec::new();
     for item in list {
         let status = item
@@ -766,21 +788,54 @@ fn zcode_load_credential(store: &Value, key: &str, secret: &str) -> Option<Strin
     })
 }
 
-fn zcode_session_auth() -> Option<(String, String)> {
-    let path = home().join(".zcode/v2/credentials.json");
-    let store = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
-    let secret = zcode_credential_secret();
-    let jwt = zcode_load_credential(&store, "zcodejwttoken", &secret)?;
-    let active = zcode_load_credential(&store, "oauth:active_provider", &secret)
+fn zcode_session_auth_from(store: &Value, secret: &str) -> Option<(String, String, &'static str)> {
+    let jwt = zcode_load_credential(store, "zcodejwttoken", secret)?;
+    let active = zcode_load_credential(store, "oauth:active_provider", secret)
         .unwrap_or_else(|| "bigmodel".into());
     let coding = if active == "zai" {
-        zcode_load_credential(&store, "oauth:zai:access_token", &secret)
-            .or_else(|| zcode_load_credential(&store, "oauth:bigmodel:access_token", &secret))?
+        zcode_load_credential(store, "oauth:zai:access_token", secret)
+            .or_else(|| zcode_load_credential(store, "oauth:bigmodel:access_token", secret))?
     } else {
-        zcode_load_credential(&store, "oauth:bigmodel:access_token", &secret)
-            .or_else(|| zcode_load_credential(&store, "oauth:zai:access_token", &secret))?
+        zcode_load_credential(store, "oauth:bigmodel:access_token", secret)
+            .or_else(|| zcode_load_credential(store, "oauth:zai:access_token", secret))?
     };
-    Some((jwt, coding))
+    let host = if active == "zai" {
+        "https://api.z.ai"
+    } else {
+        "https://open.bigmodel.cn"
+    };
+    Some((jwt, coding, host))
+}
+
+fn zcode_session_auth() -> Option<(String, String, &'static str)> {
+    let store = zcode_credentials_store()?;
+    zcode_session_auth_from(&store, &zcode_credential_secret())
+}
+
+fn zcode_credentials_store() -> Option<Value> {
+    let path = home().join(".zcode/v2/credentials.json");
+    serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()
+}
+
+fn zcode_coding_plan_credential_from(store: &Value, secret: &str) -> Option<(String, &'static str)> {
+    let active = zcode_load_credential(store, "oauth:active_provider", secret)
+        .unwrap_or_else(|| "bigmodel".into());
+    let entries = store.as_object()?;
+    let is_plan_key = |key: &str| {
+        key.starts_with("account-provider:coding-plan:account:") && key.ends_with(":api-key")
+    };
+    let preferred_marker = format!(":{active}-");
+    let selected = entries
+        .iter()
+        .find(|(key, _)| is_plan_key(key) && key.contains(&preferred_marker))
+        .or_else(|| entries.iter().find(|(key, _)| is_plan_key(key)))?;
+    let key = zcode_load_credential(store, selected.0, secret)?;
+    let host = if selected.0.contains(":zai-") || active == "zai" {
+        "https://api.z.ai"
+    } else {
+        "https://open.bigmodel.cn"
+    };
+    Some((key, host))
 }
 
 fn append_zcode_resets(
@@ -812,13 +867,16 @@ fn append_zcode_resets(
 }
 
 fn parse_zcode_reset_status(json: &Value) -> Vec<ResetCredit> {
+    parse_zcode_reset_status_at(json, now_ms())
+}
+
+fn parse_zcode_reset_status_at(json: &Value, now: i64) -> Vec<ResetCredit> {
     if let Some(code) = json.get("code").and_then(|v| v.as_i64()) {
         if code != 0 && code != 200 {
             return vec![];
         }
     }
     let root = reset_credits_root(json);
-    let now = now_ms();
     let mut out = Vec::new();
     append_zcode_resets(
         &mut out,
@@ -840,7 +898,7 @@ fn parse_zcode_reset_status(json: &Value) -> Vec<ResetCredit> {
 }
 
 fn fetch_zcode_session_reset_credits() -> Vec<ResetCredit> {
-    let Some((jwt, coding)) = zcode_session_auth() else {
+    let Some((jwt, coding, _)) = zcode_session_auth() else {
         return vec![];
     };
     let authorization = if jwt.to_ascii_lowercase().starts_with("bearer ") {
@@ -1341,7 +1399,7 @@ fn parse_cursor_grok_bot(json: &Value) -> Option<UsageMetric> {
 
 fn fetch_grok() -> ProviderSnapshot {
     let Some((token, refresh, user_id, issuer, client_id)) = load_grok() else {
-        return empty("grok", "Grok Usage", "login_not_found");
+        return empty("grok", "Grok CLI Usage", "login_not_found");
     };
     let mut headers = vec![
         ("Authorization", format!("Bearer {token}")),
@@ -1376,7 +1434,7 @@ fn fetch_grok() -> ProviderSnapshot {
         }
     }
     if bodies.is_empty() {
-        return empty("grok", "Grok Usage", &last_error);
+        return empty("grok", "Grok CLI Usage", &last_error);
     }
     let mut snap = parse_grok_bodies(bodies);
     let authorization = headers
@@ -1515,7 +1573,7 @@ fn parse_grok_bodies(bodies: Vec<Value>) -> ProviderSnapshot {
         .map(|m| m.percent);
     ProviderSnapshot {
         id: "grok".into(),
-        title: "Grok Usage".into(),
+        title: "Grok CLI Usage".into(),
         headline_percent: headline,
         error: if metrics.is_empty() {
             Some("no_quota".into())
@@ -1853,41 +1911,87 @@ fn refresh_grok(issuer: Option<&str>, refresh: Option<&str>, client: Option<&str
 // MARK: GLM
 
 fn fetch_glm() -> ProviderSnapshot {
-    let Some(key) = glm_key() else {
-        return empty("glm", "GLM Usage", "login_not_found");
-    };
-    fetch_zhipu_quota("glm", "GLM Usage", &key, &["https://api.z.ai", "https://open.bigmodel.cn"])
+    if let Some(key) = glm_key() {
+        return fetch_zhipu_quota(
+            "glm",
+            "z.ai Usage",
+            &key,
+            &["https://api.z.ai", "https://open.bigmodel.cn"],
+        );
+    }
+    fetch_zcode_session_quota("glm", "z.ai Usage")
+        .unwrap_or_else(|| empty("glm", "z.ai Usage", "login_not_found"))
 }
 
 fn fetch_zcode() -> ProviderSnapshot {
-    let Some((key, host)) = zcode_coding_plan() else {
-        return empty("zcode", "ZCode Usage", "login_not_found");
-    };
-    let mut hosts = vec![host];
-    if host.contains("bigmodel") {
-        hosts.push("https://api.z.ai");
-    } else {
-        hosts.push("https://open.bigmodel.cn");
+    if let Some((key, host)) = zcode_coding_plan() {
+        let mut hosts = vec![host];
+        if host.contains("bigmodel") {
+            hosts.push("https://api.z.ai");
+        } else {
+            hosts.push("https://open.bigmodel.cn");
+        }
+        return fetch_zhipu_quota("zcode", "z.ai Coding Plan Usage", &key, &hosts);
     }
-    fetch_zhipu_quota("zcode", "ZCode Usage", &key, &hosts)
+    fetch_zcode_session_quota("zcode", "z.ai Coding Plan Usage")
+        .unwrap_or_else(|| empty("zcode", "z.ai Coding Plan Usage", "login_not_found"))
 }
 
-fn fetch_zhipu_quota(id: &str, title: &str, key: &str, hosts: &[&str]) -> ProviderSnapshot {
+fn fetch_zcode_session_quota(id: &str, title: &str) -> Option<ProviderSnapshot> {
+    let (jwt, coding, preferred_host) = zcode_session_auth()?;
+    let authorization = if jwt.to_ascii_lowercase().starts_with("bearer ") {
+        jwt
+    } else {
+        format!("Bearer {jwt}")
+    };
     let headers = [
-        ("Authorization", format!("Bearer {key}")),
+        ("Authorization", authorization),
+        ("X-Bigmodel-Authorization", coding),
+        ("Bigmodel-Target-Type", "PERSONAL".into()),
         ("Accept", "application/json".into()),
     ];
-    for host in hosts {
+    let alternate = if preferred_host.contains("bigmodel") {
+        "https://api.z.ai"
+    } else {
+        "https://open.bigmodel.cn"
+    };
+    for host in [preferred_host, alternate] {
         let url = format!("{host}/api/monitor/usage/quota/limit");
         if let Ok((200, json)) = http_get_json(&url, &headers) {
             let mut snap = parse_glm(id, title, json);
             if snap.reset_credits.is_empty() {
                 snap.reset_credits = pull_zcode_session_reset_credits();
             }
-            if snap.reset_credits.is_empty() {
-                snap.reset_credits = pull_zhipu_reset_credits(host, &headers);
+            return Some(snap);
+        }
+    }
+    Some(empty(id, title, "session_no_quota"))
+}
+
+fn fetch_zhipu_quota(id: &str, title: &str, key: &str, hosts: &[&str]) -> ProviderSnapshot {
+    let raw = key.trim().to_string();
+    let bearer = if raw.to_ascii_lowercase().starts_with("bearer ") {
+        raw.clone()
+    } else {
+        format!("Bearer {raw}")
+    };
+    for host in hosts {
+        for authorization in [&raw, &bearer] {
+            let headers = [
+                ("Authorization", authorization.clone()),
+                ("Accept", "application/json".into()),
+            ];
+            let url = format!("{host}/api/monitor/usage/quota/limit");
+            if let Ok((200, json)) = http_get_json(&url, &headers) {
+                let mut snap = parse_glm(id, title, json);
+                if snap.reset_credits.is_empty() {
+                    snap.reset_credits = pull_zcode_session_reset_credits();
+                }
+                if snap.reset_credits.is_empty() {
+                    snap.reset_credits = pull_zhipu_reset_credits(host, &headers);
+                }
+                return snap;
             }
-            return snap;
         }
     }
     empty(id, title, "login_not_found")
@@ -2005,6 +2109,11 @@ fn glm_key() -> Option<String> {
 }
 
 fn zcode_coding_plan() -> Option<(String, &'static str)> {
+    if let Some(store) = zcode_credentials_store() {
+        if let Some(pair) = zcode_coding_plan_credential_from(&store, &zcode_credential_secret()) {
+            return Some(pair);
+        }
+    }
     let path = home().join(".zcode/v2/config.json");
     let obj = serde_json::from_str::<Value>(&fs::read_to_string(path).ok()?).ok()?;
     zcode_coding_plan_from(&obj)
@@ -2435,7 +2544,21 @@ fn copilot_token() -> Option<String> {
     if let Some(token) = copilot_token_from_gh(&home().join(".config/gh/hosts.yml")) {
         return Some(token);
     }
-    env_or_shell("GITHUB_TOKEN").or_else(|| env_or_shell("GH_TOKEN"))
+    env_or_shell("GITHUB_TOKEN")
+        .or_else(|| env_or_shell("GH_TOKEN"))
+        .or_else(copilot_token_from_gh_cli)
+}
+
+fn copilot_token_from_gh_cli() -> Option<String> {
+    let output = std::process::Command::new("gh")
+        .args(["auth", "token", "--hostname", "github.com"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    (!token.is_empty()).then_some(token)
 }
 
 fn copilot_token_from_json(path: &Path) -> Option<String> {
@@ -2642,10 +2765,301 @@ fn gemini_access_token() -> Option<String> {
     None
 }
 
-fn fetch_gemini() -> ProviderSnapshot {
-    let Some(token) = gemini_access_token() else {
-        return empty("gemini", "Gemini Usage", "login_not_found");
+#[cfg(target_os = "windows")]
+fn windows_dpapi_decrypt(data: &[u8]) -> Option<Vec<u8>> {
+    use std::ptr::{null, null_mut};
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
     };
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: data.len().try_into().ok()?,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    let ok = unsafe {
+        CryptUnprotectData(
+            &mut input,
+            null_mut(),
+            null(),
+            null(),
+            null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if ok == 0 || output.pbData.is_null() {
+        return None;
+    }
+    let result = unsafe {
+        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
+    };
+    unsafe {
+        LocalFree(output.pbData as _);
+    }
+    Some(result)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_dpapi_encrypt(data: &[u8]) -> Option<Vec<u8>> {
+    use std::ptr::null;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: data.len().try_into().ok()?,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    let ok = unsafe {
+        CryptProtectData(
+            &mut input,
+            null(),
+            null(),
+            null(),
+            null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if ok == 0 || output.pbData.is_null() {
+        return None;
+    }
+    let result = unsafe {
+        std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec()
+    };
+    unsafe {
+        LocalFree(output.pbData as _);
+    }
+    Some(result)
+}
+
+#[cfg(target_os = "windows")]
+fn gemini_desktop_cookie_key(root: &Path) -> Option<Vec<u8>> {
+    let state = serde_json::from_str::<Value>(&fs::read_to_string(root.join("Local State")).ok()?).ok()?;
+    let encoded = state.pointer("/os_crypt/encrypted_key")?.as_str()?;
+    let wrapped = base64::engine::general_purpose::STANDARD.decode(encoded).ok()?;
+    let protected = wrapped.strip_prefix(b"DPAPI")?;
+    windows_dpapi_decrypt(protected)
+}
+
+#[cfg(target_os = "windows")]
+fn decrypt_chromium_cookie(host: &str, encrypted: &[u8], key: &[u8]) -> Option<String> {
+    let packed = encrypted.strip_prefix(b"v10")?;
+    if packed.len() < 12 + 16 {
+        return None;
+    }
+    let (iv, ciphertext) = packed.split_at(12);
+    let cipher = Aes256Gcm::new_from_slice(key).ok()?;
+    let mut plain = cipher.decrypt(Nonce::from_slice(iv), ciphertext).ok()?;
+    let host_hash = Sha256::digest(host.as_bytes());
+    if plain.starts_with(host_hash.as_slice()) {
+        plain.drain(..host_hash.len());
+    }
+    let value = String::from_utf8(plain).ok()?;
+    (!value.is_empty()).then_some(value)
+}
+
+#[cfg(target_os = "windows")]
+fn read_gemini_desktop_cookie_header() -> Option<String> {
+    let root = dirs::config_dir()?.join("Gemini");
+    let key = gemini_desktop_cookie_key(&root)?;
+    let source = root.join("Network/Cookies");
+    let snapshot_root = std::env::temp_dir().join(format!(
+        "usagebar-gemini-cookies-{}-{}",
+        std::process::id(),
+        now_ms()
+    ));
+    fs::create_dir(&snapshot_root).ok()?;
+    let snapshot = snapshot_root.join("Cookies");
+    let copied = fs::copy(&source, &snapshot).is_ok();
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = PathBuf::from(format!("{}{suffix}", source.display()));
+        if sidecar.exists() {
+            let target = PathBuf::from(format!("{}{suffix}", snapshot.display()));
+            let _ = fs::copy(sidecar, target);
+        }
+    }
+    if !copied {
+        let _ = fs::remove_dir_all(&snapshot_root);
+        return None;
+    }
+    let conn = match Connection::open_with_flags(
+        &snapshot,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) {
+        Ok(conn) => conn,
+        Err(_) => {
+            let _ = fs::remove_dir_all(&snapshot_root);
+            return None;
+        }
+    };
+    let header = (|| {
+        let mut stmt = conn.prepare(
+            "SELECT host_key, name, encrypted_value FROM cookies \
+             WHERE host_key = '.google.com' OR host_key = 'gemini.google.com' \
+             OR host_key = '.gemini.google.com' ORDER BY host_key, name",
+        )
+        .ok()?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })
+        .ok()?;
+        let mut cookies = Vec::new();
+        let mut has_session = false;
+        for row in rows {
+            let (host, name, encrypted) = row.ok()?;
+            let Some(value) = decrypt_chromium_cookie(&host, &encrypted, &key) else {
+                continue;
+            };
+            if matches!(name.as_str(), "SID" | "__Secure-1PSID" | "__Secure-3PSID") {
+                has_session = true;
+            }
+            cookies.push(format!("{name}={value}"));
+        }
+        (has_session && !cookies.is_empty()).then(|| cookies.join("; "))
+    })();
+    drop(conn);
+    let _ = fs::remove_dir_all(snapshot_root);
+    header
+}
+
+#[cfg(target_os = "windows")]
+fn gemini_desktop_cookie_header() -> Option<String> {
+    let cache = home().join(".usagebar/gemini-session.dpapi");
+    if let Some(header) = read_gemini_desktop_cookie_header() {
+        if let Some(protected) = windows_dpapi_encrypt(header.as_bytes()) {
+            if let Some(parent) = cache.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(&cache, protected);
+        }
+        return Some(header);
+    }
+    fs::read(cache)
+        .ok()
+        .and_then(|protected| windows_dpapi_decrypt(&protected))
+        .and_then(|plain| String::from_utf8(plain).ok())
+        .filter(|header| !header.is_empty())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn gemini_desktop_cookie_header() -> Option<String> {
+    None
+}
+
+fn parse_gemini_web_usage(json: Value) -> Option<ProviderSnapshot> {
+    let results = json.as_array()?;
+    let usage = results.iter().find_map(|result| {
+        result
+            .pointer("/data/viewer/rpcs/getUsageInfo")
+            .filter(|value| value.is_object())
+    })?;
+    let pools = usage.get("pools")?.as_array()?;
+    let mut metrics = Vec::new();
+    for (kind, id, label) in [
+        ("GXU_FIVE_HOURLY", "five-hour", "5-hour window"),
+        ("GXU_WEEKLY", "weekly", "Weekly limit"),
+    ] {
+        let Some(pool) = pools
+            .iter()
+            .find(|pool| pool.get("poolType").and_then(Value::as_str) == Some(kind))
+        else {
+            continue;
+        };
+        let Some(fraction) = json_f64(pool.get("percentageUsed")) else {
+            continue;
+        };
+        metrics.push(UsageMetric {
+            id: id.into(),
+            label: label.into(),
+            percent: (fraction * 100.0).clamp(0.0, 100.0),
+            resets_at: pool.pointer("/gxu/windowRefreshesAt").and_then(parse_date),
+        });
+    }
+    if metrics.is_empty() {
+        return None;
+    }
+    Some(ProviderSnapshot {
+        id: "gemini".into(),
+        title: "Gemini Usage".into(),
+        headline_percent: metrics.first().map(|metric| metric.percent),
+        error: None,
+        metrics,
+        updated_at: now_ms(),
+        reset_notice: None,
+        credit_notice: None,
+        reset_credits: vec![],
+    })
+}
+
+fn fetch_gemini_web() -> Option<ProviderSnapshot> {
+    const SIGNATURE: &str = "2/dWbCvkVB0X16r9NPnxifeOAAqdCqMf0xeWvau9yPy7g=";
+    let cookie = gemini_desktop_cookie_header()?;
+    let variables = json!({
+        "g1Request": { "entrypoints": ["GEMINI_USAGE_SETTINGS_UPGRADE_BANNER"] },
+        "workspaceRequest": { "recommendationsForSurfaceRequests": [] }
+    })
+    .to_string();
+    for account in [None, Some(0), Some(1), Some(2), Some(3), Some(4)] {
+        let base = account.map_or_else(
+            || "https://gemini.google.com".to_string(),
+            |index| format!("https://gemini.google.com/u/{index}"),
+        );
+        let mut url = reqwest::Url::parse(&format!(
+            "{base}/_/BardChatUi/graphql/schemas/GEMINI_WEB_GRAPHQL/executeQuery"
+        ))
+        .ok()?;
+        url.query_pairs_mut()
+            .append_pair("query_signature", SIGNATURE)
+            .append_pair("variables", &variables);
+        let mut headers = vec![
+            ("Accept", "application/json".into()),
+            ("Referer", format!("{base}/usage")),
+            ("Cookie", cookie.clone()),
+        ];
+        if let Some(index) = account {
+            headers.push(("X-Goog-AuthUser", index.to_string()));
+        }
+        let Ok((status, body)) = http_get_text_timeout(url.as_str(), &headers, 12) else {
+            continue;
+        };
+        if status != 200 || body.trim_start().starts_with('<') {
+            continue;
+        }
+        let text = body
+            .trim_start()
+            .strip_prefix(")]}'")
+            .unwrap_or(body.trim_start())
+            .trim_start();
+        let Ok(json) = serde_json::from_str::<Value>(text) else {
+            continue;
+        };
+        if let Some(snapshot) = parse_gemini_web_usage(json) {
+            return Some(snapshot);
+        }
+    }
+    None
+}
+
+fn fetch_gemini() -> ProviderSnapshot {
+    let cli = gemini_access_token().map(|token| fetch_gemini_code_assist(&token));
+    if let Some(snapshot) = cli.as_ref().filter(|snapshot| !snapshot.metrics.is_empty()) {
+        return snapshot.clone();
+    }
+    fetch_gemini_web()
+        .or(cli)
+        .unwrap_or_else(|| empty("gemini", "Gemini Usage", "login_not_found"))
+}
+
+fn fetch_gemini_code_assist(token: &str) -> ProviderSnapshot {
     let headers = [
         ("Authorization", format!("Bearer {token}")),
         ("Content-Type", "application/json".into()),
@@ -2877,6 +3291,8 @@ fn format_reset_offset(ms: Option<i64>, zh: bool, offset: FixedOffset) -> Option
 mod tests {
     use super::*;
 
+    const RESET_FIXTURE_NOW_MS: i64 = 1_780_000_000_000;
+
     #[test]
     fn jwt_sub_reads_auth_id() {
         let payload = "eyJzdWIiOiJhdXRoMHx1c2VyXzEifQ";
@@ -3038,6 +3454,56 @@ mod tests {
         assert_eq!(
             zcode_coding_plan_from(&obj),
             Some(("zai.plan-key".into(), "https://api.z.ai"))
+        );
+    }
+
+    #[test]
+    fn zcode_session_prefers_active_zai_and_keeps_host() {
+        let store = json!({
+            "zcodejwttoken": "jwt-token",
+            "oauth:active_provider": "zai",
+            "oauth:zai:access_token": "zai-session-token",
+            "oauth:bigmodel:access_token": "bigmodel-session-token"
+        });
+        let auth = zcode_session_auth_from(&store, "unused").expect("session auth");
+        assert_eq!(auth.0, "jwt-token");
+        assert_eq!(auth.1, "zai-session-token");
+        assert_eq!(auth.2, "https://api.z.ai");
+    }
+
+    #[test]
+    fn zcode_session_falls_back_to_other_provider_token() {
+        let store = json!({
+            "zcodejwttoken": "jwt-token",
+            "oauth:active_provider": "zai",
+            "oauth:bigmodel:access_token": "fallback-token"
+        });
+        let auth = zcode_session_auth_from(&store, "unused").expect("fallback auth");
+        assert_eq!(auth.1, "fallback-token");
+        assert_eq!(auth.2, "https://api.z.ai");
+    }
+
+    #[test]
+    fn zcode_reads_current_account_coding_plan_key() {
+        let store = json!({
+            "oauth:active_provider": "zai",
+            "account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:old:api-key": "old.plan-key",
+            "account-provider:coding-plan:account:zai-individual-coding-plan:account:current:api-key": "current.plan-key"
+        });
+        assert_eq!(
+            zcode_coding_plan_credential_from(&store, "unused"),
+            Some(("current.plan-key".into(), "https://api.z.ai"))
+        );
+    }
+
+    #[test]
+    fn zcode_current_account_key_falls_back_without_active_provider() {
+        let store = json!({
+            "account-provider:coding-plan:account:bigmodel-individual-coding-plan:account:user:api-key": "fallback.plan-key"
+        });
+        assert_eq!(
+            zcode_coding_plan_credential_from(&store, "unused"),
+            Some(("fallback.plan-key".into(), "https://open.bigmodel.cn"))
         );
     }
 
@@ -3242,7 +3708,8 @@ mod tests {
 
     #[test]
     fn codex_reset_credits_keep_available_and_drop_used() {
-        let credits = parse_reset_credits(&json!({
+        let credits = parse_reset_credits_at(
+            &json!({
             "available_count": 2,
             "credits": [
                 {
@@ -3263,7 +3730,9 @@ mod tests {
                     "expiresAt": "2026-10-04T05:34:00Z"
                 }
             ]
-        }));
+            }),
+            RESET_FIXTURE_NOW_MS,
+        );
         assert_eq!(credits.len(), 2);
         assert_eq!(credits[0].title, "Full reset (Weekly + 5 hr)");
         assert_eq!(credits[1].title, "Full reset");
@@ -3285,7 +3754,8 @@ mod tests {
 
     #[test]
     fn reset_credits_keep_usable_and_drop_used_or_expired() {
-        let credits = parse_reset_credits(&json!({
+        let credits = parse_reset_credits_at(
+            &json!({
             "data": {
                 "reset_cards": [
                     {
@@ -3314,7 +3784,9 @@ mod tests {
                     }
                 ]
             }
-        }));
+            }),
+            RESET_FIXTURE_NOW_MS,
+        );
         assert_eq!(credits.len(), 2);
         assert_eq!(credits[0].title, "5-hour reset");
         assert_eq!(credits[1].title, "Full reset");
@@ -3507,6 +3979,60 @@ mod tests {
         assert!(snap.metrics[0].resets_at.is_some());
     }
 
+    #[test]
+    fn gemini_web_maps_five_hour_and_weekly_windows() {
+        let snap = parse_gemini_web_usage(json!([{
+            "data": {
+                "viewer": { "rpcs": { "getUsageInfo": {
+                    "subscriptionTier": "TIER1",
+                    "pools": [
+                        { "poolType": "GXU_FIVE_HOURLY", "percentageUsed": 0.24, "gxu": { "windowRefreshesAt": "2026-10-25T12:00:00Z" } },
+                        { "poolType": "GXU_WEEKLY", "percentageUsed": 0.0175, "gxu": { "windowRefreshesAt": "2026-10-30T12:00:00Z" } }
+                    ]
+                } } }
+            }
+        }])).expect("Gemini web usage");
+        assert_eq!(snap.metrics.len(), 2);
+        assert_eq!(snap.metrics[0].id, "five-hour");
+        assert_eq!(snap.metrics[0].percent, 24.0);
+        assert_eq!(snap.metrics[1].id, "weekly");
+        assert!((snap.metrics[1].percent - 1.75).abs() < f64::EPSILON * 2.0);
+        assert!(snap.metrics.iter().all(|metric| metric.resets_at.is_some()));
+        assert!(parse_gemini_web_usage(json!([{ "data": { "viewer": null } }])).is_none());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn chromium_cookie_decryption_removes_host_digest() {
+        let host = ".google.com";
+        let key = [11u8; 32];
+        let iv = [7u8; 12];
+        let mut plain = Sha256::digest(host.as_bytes()).to_vec();
+        plain.extend_from_slice(b"session-value");
+        let cipher = Aes256Gcm::new_from_slice(&key).expect("cookie key");
+        let encrypted = cipher
+            .encrypt(Nonce::from_slice(&iv), plain.as_ref())
+            .expect("cookie encryption");
+        let mut packed = b"v10".to_vec();
+        packed.extend_from_slice(&iv);
+        packed.extend_from_slice(&encrypted);
+        assert_eq!(
+            decrypt_chromium_cookie(host, &packed, &key).as_deref(),
+            Some("session-value")
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_dpapi_session_cache_round_trips() {
+        let protected = windows_dpapi_encrypt(b"gemini-session").expect("protect session");
+        assert_ne!(protected, b"gemini-session");
+        assert_eq!(
+            windows_dpapi_decrypt(&protected).as_deref(),
+            Some(b"gemini-session".as_slice())
+        );
+    }
+
     fn encrypt_zcode_blob(plain: &str, secret: &str, iv: &[u8; 12]) -> String {
         let key = Sha256::digest(secret.as_bytes());
         let cipher = Aes256Gcm::new_from_slice(&key).expect("aes key");
@@ -3540,7 +4066,8 @@ mod tests {
 
     #[test]
     fn parse_zcode_reset_status_keeps_usable_and_drops_expired() {
-        let credits = parse_zcode_reset_status(&json!({
+        let credits = parse_zcode_reset_status_at(
+            &json!({
             "code": 0,
             "data": {
                 "available_five_hour_resets": [
@@ -3551,7 +4078,9 @@ mod tests {
                     { "expire_at": 1_790_870_399_000i64 }
                 ]
             }
-        }));
+            }),
+            RESET_FIXTURE_NOW_MS,
+        );
         assert_eq!(credits.len(), 2);
         assert_eq!(credits[0].title, "5-hour reset");
         assert_eq!(credits[1].title, "Weekly reset");

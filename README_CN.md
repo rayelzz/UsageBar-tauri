@@ -1,8 +1,8 @@
 # UsageBar
 
-[English](README.md) · [中文](README_CN.md)
+[English](README.md) · [中文](README_CN.md) · [Русский](README_RU.md)
 
-贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok**、**GLM**，也可在 **提供商…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
+贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok CLI**、**GLM**，也可在 **提供商…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
 
 macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
@@ -30,18 +30,19 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 
 ### 功能
 
-- 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok、GLM，可在 **提供商…** 里勾选并调整顺序
+- 条的长度随选中数量变化，**最少 1 个、最多 10 个**。默认 Codex、Cursor、Grok CLI、GLM。**提供商…** 可控制显示和顺序，但不会从完整目录中删除任何提供商
+- 每个可见提供商最多显示两个紧凑数字：贴左 / 右边缘时上下排列，贴顶 / 底边时左右排列。**自动**优先选择当前会话 / 5 小时窗口与周窗口；也可为每个提供商明确选择一到两个额度窗口
 - 悬停显示接口返回的全部窗口（5 小时、周、月 / 账期、按模型等），重置时间按本机系统时区显示具体日期和时刻。Codex / GLM / ZCode / Grok 在有库存时，详情最下面还会列出重置卡和到期时间。到期时间还剩 1 天以内变黄，8 小时以内变红
 - 某个窗口从已用百分比回到 **0%** 时，该槽位图标绿灯闪动并弹出气泡；鼠标悬停气泡出现 **×**，点了才关闭
 - 重置卡临期也会绿灯闪动并弹出 30 秒提醒（到期前 1 天一次，之后 5 / 4 / 3 / 2 / 1 小时各一次）。悬停该槽看原来的额度详情，或点 **×** 关闭；同一档位不重复弹
-- 可拖动，自动贴左 / 右 / 上 / 下
+- 可拖动，自动贴左 / 右 / 上 / 下；详情卡与设置卡始终打开在屏幕内侧，包括贴底时
 - 两种显示样式：**圆环用量**（完整圆环 + 百分比 + 黑底托）或 **透明图标**（同样的圆环和百分比，无底托）。齿轮菜单里还有**不透明度**和**模糊**；macOS 上毛玻璃跟 D 形条身、独立齿轮舱和圆角卡片走。不透明度低于 60% 时字和图标变深
 - 显示值：**已使用额度**（默认）或 **剩余额度**。圆环、百分比和详情都按这个值显示；颜色仍按剩余额度（剩余 ≤ 20% 红，≤ 40% 黄，其余绿）
 - 顶部 / 底部贴边时，百分比显示在圆环右侧
 - 鼠标不在条上时默认点穿，不挡后面窗口
 - 条末端外侧有一个独立圆舱里的设置齿轮（原来的条身形状不动）。悬停打开设置，移开关闭。右键条钉住同一套菜单。点 **×** 也可关闭
 - **自动检测更新默认关闭**。打开设置仍会检测一次；有新版本时用独立窗口弹出 GitHub Release 里的 **What’s new** / **更新说明**（跟应用语言走），不顶掉设置菜单。点 **×** 跳过该版本；悬停圆环会收起说明。齿轮菜单里仍可看当前版本、点 **检测更新**；检出后点最新版本号或 **安装** 即可下载、安装并重启。安装失败会打开 GitHub 下载页
-- 齿轮菜单里的**应用图标**：程序坞 / 菜单栏 / 都不显示（默认）。菜单栏 **UB** 只留退出。都不显示时，从齿轮打开设置，或从「应用程序」/ 开始菜单再打开本应用
+- 齿轮菜单里的**应用图标**：程序坞 / 菜单栏 / 都不显示（默认）。菜单栏 **UB** 可显示/隐藏面板、立即刷新、打开设置或退出；悬停托盘图标会显示最新缓存额度摘要，不支持原生悬停时同一摘要也会出现在菜单与 tooltip 中。都不显示时，从齿轮打开设置，或从「应用程序」/ 开始菜单再打开本应用
 - 默认 60 秒刷新，可改
 - 官方品牌图标；剩余 ≤ 20%（已用 ≥ 80%）红，剩余 ≤ 40%（已用 ≥ 60%）黄，其余绿
 
@@ -53,12 +54,12 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5 小时 + 周额度（及月 / 额外窗口）；详情底部显示重置卡和到期时间 |
 | **Cursor** | Cursor `state.vscdb` 会话（旧版 `cursorAuth/userId`，或新版 `glass.lastSignedInAuthId` / JWT `sub`） | `cursor.com/api/usage-summary` + Grok Bot 周额度 | 月度账期：套餐 + API（及按需 / 团队共享 / Grok Bot 周额度） |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | 周和/或月额度（及产品 / 按需）。重置卡来自 grok.com 库存（预付余额不是重置卡） |
+| **Grok CLI** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | 独立 Grok CLI 账户的周和/或月额度（及产品 / 按需），与 Cursor 内已经显示的 Grok Bot 额度不同。重置卡来自 grok.com 库存（预付余额不是重置卡） |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` 或智谱 quota | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。重置卡来自本机 ZCode 登录态（`zcode.z.ai` 的 coding-plan reset status），或 quota 载荷里已带的列表 |
-| **ZCode** | `~/.zcode/v2/config.json` 的 Coding Plan Key + `credentials.json` 登录态 | 与 GLM 同一套官方配额接口；重置卡走 `zcode.z.ai` `/api/v1/coding-plan/reset/status` | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。ZCode 已登录时显示 5 小时 / 周重置卡 |
+| **ZCode** | 当前 `~/.zcode/v2/credentials.json` 中加密的 Coding Plan 账户密钥，或旧版 `~/.zcode/v2/config.json`；重置卡需要登录态 | 与 GLM 同一套官方配额接口；重置卡走 `zcode.z.ai` `/api/v1/coding-plan/reset/status` | `limits[]` 里有的窗口都显示（5 小时、周、月、MCP 等）。ZCode 已登录时显示 5 小时 / 周重置卡 |
 | **Claude** | macOS 钥匙串 `Claude Code-credentials`，或 `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5 小时 + 周额度 + 模型周额度（及月超额） |
-| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
-| **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | 各模型剩余比例 + 重置 |
+| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`、已登录的 GitHub CLI（包括系统钥匙串），或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
+| **Gemini** | Gemini CLI 的 `~/.gemini/oauth_creds.json`；Windows 上也可使用已登录的 Google Gemini 桌面会话 | Cloud Code Assist `retrieveUserQuota`，或 Gemini 应用用量查询 | 优先显示 CLI / Code Assist 各模型额度；否则显示 consumer Google AI 套餐的 5 小时与周额度。桌面 cookie 只在内存中解密，且只发送给 Google；由 DPAPI 保护的本机会话缓存可在 Gemini Desktop 锁定 cookie 数据库时继续提供用量 |
 | **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | 各模型剩余比例 + 重置 |
 
 Cursor 会话文件位置：
@@ -78,6 +79,7 @@ Cursor 会话文件位置：
    - macOS Intel：`x64.dmg`
    - Windows：`x64-setup.exe`
    - Linux：`.AppImage` 或 `.deb`
+   - Windows setup 会先显示语言选择，然后进入完整安装向导。在选项页可选择是否随 Windows 登录自动启动。完成页会分别提供创建桌面快捷方式和立即启动，两项默认都不勾选；之后仍可在 UsageBar 设置中通过**登录时打开**修改自动启动。
 2. macOS 包是临时签名（未做 Apple 公证）。把 `UsageBar.app` 拖进 **应用程序** 后，在终端执行一次（Sequoia / Tahoe 上必须这样做；「右键 → 打开」常常没用）：
 
    ```bash
@@ -86,29 +88,31 @@ Cursor 会话文件位置：
    ```
 
    「UsageBar.app 已损坏」是系统隔离标记，不是文件坏了。不要点「移到废纸篓」。
-3. 照常登录要用的工具（Codex CLI、Cursor、Grok CLI、GLM、Claude Code、GitHub Copilot、Gemini CLI、Antigravity），UsageBar 会读这些登录态。
+3. 照常登录要用的工具（Codex CLI、Cursor、Grok CLI、GLM/z.ai、ZCode、Claude Code、GitHub Copilot、Gemini CLI，Windows 上也可使用 Gemini Desktop、Antigravity），UsageBar 会读这些登录态。
 
 从源码打包：
 
 ```bash
 npm install
 npm run tauri dev      # 开发
-npm run tauri build    # 本机安装包
+npm run tauri build -- --no-sign  # 未签名的本机安装包
 ```
 
 产物目录：
 
 - macOS：`src-tauri/target/release/bundle/dmg`
-- Windows：`src-tauri/target/release/bundle/nsis`
+- Windows：`src-tauri/target/release/bundle/nsis` 或 `msi`
 - Linux：`src-tauri/target/release/bundle/appimage` 或 `deb`
+
+Pull request 会运行同一套 JavaScript 与 Rust 测试，然后由 `.github/workflows/ci.yml` 构建未签名的 Windows x64、Linux x64、macOS Apple Silicon 与 macOS Intel 安装包。
 
 推送 `v*` 标签会走 GitHub Actions，同时出 macOS（苹果芯片 + Intel）、Windows 和 Linux 的包。
 
 ### 菜单
 
-悬停条上的设置齿轮，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、显示值（已使用额度 / 剩余额度）、面板不透明度、模糊半径、应用图标（程序坞 / 菜单栏 / 都不显示）、语言（默认 English，可切 中文；厂商和模型名保持英文）、**提供商…**（同一弹出层里勾选 1–10 个并上下排序，条长随数量变化）、当前版本 / **检测更新** / 最新版本（点击安装）、自动检测更新（默认关闭）、登录时打开、退出。检测到新版本时会按语言弹出 Release 里的更新说明。点右上角 **×** 或把鼠标移出面板即可关闭。菜单栏 **UB** 只留退出。
+悬停条上的设置齿轮，或右键圆环条：立即刷新、自动刷新、锁定位置、不阻挡下方点击、贴左 / 右 / 上 / 下、显示样式、显示值（已使用额度 / 剩余额度）、面板不透明度、模糊半径、应用图标（程序坞 / 菜单栏 / 都不显示）、语言（默认 English，可切 中文或 Русский；厂商和模型名保持原样）、**提供商…**（同一弹出层里勾选 1–10 个并上下排序；展开单个提供商可保留**自动**选择，或指定最多两个额度窗口）、当前版本 / **检测更新** / 最新版本（点击安装）、自动检测更新（默认关闭）、登录时打开、退出。隐藏只会移除条上的槽位，完整提供商目录仍保留。检测到新版本时会按语言弹出 Release 里的更新说明。点右上角 **×** 或把鼠标移出面板即可关闭。菜单栏 **UB** 可显示/隐藏面板、立即刷新、打开设置或退出。
 
-贴边、位置、提供商个数和顺序、显示样式、显示值、不透明度、模糊、应用图标、语言、刷新、锁定、点穿、更新等全部设置都写在本机 `~/.usagebar/prefs.json`，重启或更新应用后会按上次配置恢复。
+贴边、位置、提供商个数和顺序、每个提供商选择的额度窗口、显示样式、显示值、不透明度、模糊、应用图标、语言、刷新、锁定、点穿、更新等全部设置都写在本机 `~/.usagebar/prefs.json`，重启或更新应用后会按上次配置恢复。
 
 ### 常见问题
 
@@ -125,7 +129,11 @@ UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken`（JWT 往�
 这是预期行为。凭证只存在各自电脑上，对方需要自己登录要显示的那些工具。
 
 **Claude / Copilot / Gemini / Antigravity 显示「暂无数据」？**  
-先在这台电脑用对应官方 CLI / 编辑器登录。Claude 读钥匙串或 `~/.claude/.credentials.json`，Copilot 读 `~/.config/github-copilot`，Gemini 读 `~/.gemini/oauth_creds.json`，Antigravity 读 `~/.gemini/antigravity-cli/antigravity-oauth-token`。UsageBar 不会从本地日志估算 token。
+先在这台电脑用对应官方 CLI / 应用登录。Claude 读钥匙串或 `~/.claude/.credentials.json`；Copilot 读本地配置、已登录 GitHub CLI / 系统钥匙串或 `GITHUB_TOKEN`；Gemini 读 `~/.gemini/oauth_creds.json`，Windows 上也可读取已登录的 Gemini Desktop 会话；Antigravity 读 `~/.gemini/antigravity-cli/antigravity-oauth-token`。UsageBar 不会从本地日志估算 token。
+
+**Gemini Desktop 正在运行并锁定 cookie 数据库？**
+
+这是 Windows 上的正常行为。数据库可读时，UsageBar 会把所需会话保存到由 Windows DPAPI 保护的本地缓存；之后 Gemini 运行期间仍可读取 5 小时和周额度。若 Gemini 从未出现，请先关闭 Gemini，点一次**立即刷新**，再重新打开。
 
 **会不会上传对话，或把 token 打进安装包？**  
 不会。只读本机会话文件 / 环境变量，只请求官方用量接口。安装包里没有账号。
@@ -154,7 +162,7 @@ open /Applications/UsageBar.app
 不是。ZCode 是智谱的编程 Agent，GLM 是模型 / API Key。菜单 **提供商…** 里的 **ZCode** 读 ZCode 已经保存的 Coding Plan Key；**GLM** 读 shell / `.zai` / cc-switch 的 Key。同一套餐会显示同一组百分比，不同账号则分开。重置卡需要本机 ZCode 已登录（`~/.zcode/v2/credentials.json`）；UsageBar 只解密这份本地 `enc:v1:` 用来列出卡片，不会核销。
 
 **Windows / Linux 注意。**  
-Windows 需要 WebView2（安装器可引导下载）。只有把**应用图标**设成菜单栏时才会出现托盘，且只留退出。Linux 上这个选项也需要可用的系统托盘。
+Windows 需要 WebView2（安装器可引导下载）。只有把**应用图标**设成菜单栏时才会出现托盘。Linux 上这个选项也需要可用的系统托盘。
 
 ### 隐私
 

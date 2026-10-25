@@ -10,14 +10,16 @@ mod usage_state;
 use overlay::Overlay;
 use prefs::Prefs;
 use serde::Serialize;
-use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_opener::OpenerExt;
 
 static TRAY_GEN: AtomicU64 = AtomicU64::new(0);
+static BAR_HIDDEN_BY_TRAY: AtomicBool = AtomicBool::new(false);
+static TRAY_SUMMARY: Mutex<String> = Mutex::new(String::new());
 
 #[tauri::command]
 async fn fetch_usage(app: AppHandle) -> Vec<providers::ProviderSnapshot> {
@@ -245,6 +247,10 @@ struct TrayRect {
 
 #[tauri::command]
 fn tray_rect(app: AppHandle) -> Option<TrayRect> {
+    tray_rect_for(&app)
+}
+
+fn tray_rect_for(app: &AppHandle) -> Option<TrayRect> {
     let tray = app.tray_by_id("main")?;
     let rect = tray.rect().ok()??;
     let pos = rect.position.to_physical(1.0);
@@ -257,13 +263,204 @@ fn tray_rect(app: AppHandle) -> Option<TrayRect> {
     })
 }
 
+fn emit_tray_hover(app: &AppHandle, show: bool) {
+    let visible = app
+        .try_state::<Overlay>()
+        .and_then(|state| {
+            state
+                .prefs
+                .lock()
+                .ok()
+                .map(|prefs| prefs.app_icon == "menubar")
+        })
+        .unwrap_or(false);
+    let payload = serde_json::json!({
+        "show": show && visible,
+        "rect": if show && visible { tray_rect_for(app) } else { None },
+    });
+    let _ = app.emit("usagebar-tray-hover", payload);
+}
+
+fn handle_tray_icon_event(app: &AppHandle, event: &TrayIconEvent) {
+    match event {
+        TrayIconEvent::Enter { .. } => emit_tray_hover(app, true),
+        TrayIconEvent::Leave { .. } | TrayIconEvent::Click { .. } => emit_tray_hover(app, false),
+        _ => {}
+    }
+}
+
 fn build_tray_menu(app: &AppHandle, prefs: &Prefs) -> tauri::Result<Menu<tauri::Wry>> {
-    let quit = MenuItem::with_id(app, "quit", i18n::quit(prefs.locale.as_str()), true, Some("q"))?;
-    Menu::with_items(app, &[&quit])
+    let toggle = MenuItem::with_id(
+        app,
+        "toggle-bar",
+        if BAR_HIDDEN_BY_TRAY.load(Ordering::Acquire) {
+            i18n::show(prefs.locale.as_str())
+        } else {
+            i18n::hide(prefs.locale.as_str())
+        },
+        true,
+        None::<&str>,
+    )?;
+    let refresh = MenuItem::with_id(
+        app,
+        "refresh",
+        i18n::refresh(prefs.locale.as_str()),
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(
+        app,
+        "settings",
+        i18n::settings(prefs.locale.as_str()),
+        true,
+        None::<&str>,
+    )?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        i18n::quit(prefs.locale.as_str()),
+        true,
+        Some("q"),
+    )?;
+    let summary = TRAY_SUMMARY
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default();
+    if summary.is_empty() {
+        Menu::with_items(app, &[&toggle, &refresh, &settings, &separator, &quit])
+    } else {
+        let summary = MenuItem::with_id(
+            app,
+            "quota-summary",
+            summary.replace('\n', "  ·  "),
+            false,
+            None::<&str>,
+        )?;
+        let summary_separator = PredefinedMenuItem::separator(app)?;
+        Menu::with_items(
+            app,
+            &[
+                &summary,
+                &summary_separator,
+                &toggle,
+                &refresh,
+                &settings,
+                &separator,
+                &quit,
+            ],
+        )
+    }
+}
+
+#[tauri::command]
+fn set_tray_summary(app: AppHandle, summary: String) {
+    let summary = sanitize_tray_summary(&summary);
+    let changed = if let Ok(mut cached) = TRAY_SUMMARY.lock() {
+        if *cached == summary {
+            false
+        } else {
+            *cached = summary.clone();
+            true
+        }
+    } else {
+        true
+    };
+    if !changed {
+        return;
+    }
+    let prefs = get_prefs(app.clone());
+    if let Some(tray) = app.tray_by_id("main") {
+        let tooltip = if summary.is_empty() {
+            "UsageBar"
+        } else {
+            &summary
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
+        if let Ok(menu) = build_tray_menu(&app, &prefs) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
+}
+
+fn sanitize_tray_summary(summary: &str) -> String {
+    summary
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            line.chars()
+                .filter(|c| !c.is_control())
+                .take(160)
+                .collect::<String>()
+        })
+        .take(prefs::SLOT_MAX)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[tauri::command]
+fn set_visible_metrics(app: AppHandle, selections: std::collections::HashMap<String, Vec<String>>) {
+    let selections = prefs::normalize_visible_metrics(&selections);
+    let prefs = if let Some(state) = app.try_state::<Overlay>() {
+        let Ok(mut slot) = state.prefs.lock() else {
+            return;
+        };
+        if slot.visible_metrics == selections {
+            let current = slot.clone();
+            drop(slot);
+            let _ = app.emit("usagebar-prefs", &current);
+            return;
+        }
+        slot.visible_metrics = selections;
+        slot.clone()
+    } else {
+        let mut prefs = prefs::load();
+        prefs.visible_metrics = selections;
+        prefs
+    };
+    prefs::save(&prefs);
+    let _ = app.emit("usagebar-prefs", &prefs);
+}
+
+fn set_bar_visible(app: &AppHandle, visible: bool) {
+    BAR_HIDDEN_BY_TRAY.store(!visible, Ordering::Release);
+    if visible {
+        reveal_bar(app);
+    } else {
+        overlay::MENU_OPEN.store(false, Ordering::Relaxed);
+        overlay::set_menu_card(None);
+        for label in ["bar", "tip", "update"] {
+            if let Some(window) = app.get_webview_window(label) {
+                let _ = window.hide();
+            }
+        }
+    }
+    let prefs = get_prefs(app.clone());
+    apply_tray(app, &prefs);
+}
+
+fn handle_tray_menu_event(app: &AppHandle, id: &str) {
+    match id {
+        "toggle-bar" => {
+            let show = BAR_HIDDEN_BY_TRAY.load(Ordering::Acquire);
+            set_bar_visible(app, show);
+        }
+        "settings" => {
+            set_bar_visible(app, true);
+            let _ = app.emit("usagebar-menu", "settings");
+        }
+        _ => {
+            let _ = app.emit("usagebar-menu", id);
+        }
+    }
 }
 
 fn apply_app_icon(app: &AppHandle, prefs: &Prefs) {
     let show_tray = prefs.app_icon == "menubar";
+    if !show_tray {
+        emit_tray_hover(app, false);
+    }
     if let Some(tray) = app.tray_by_id("main") {
         let _ = tray.set_visible(show_tray);
         #[cfg(target_os = "macos")]
@@ -281,6 +478,9 @@ fn apply_app_icon(app: &AppHandle, prefs: &Prefs) {
 }
 
 fn reveal_bar(app: &AppHandle) {
+    if BAR_HIDDEN_BY_TRAY.load(Ordering::Acquire) {
+        return;
+    }
     let Some(bar) = app.get_webview_window("bar") else {
         return;
     };
@@ -334,7 +534,14 @@ fn set_macos_dock_visible(_app: &AppHandle, visible: bool) {
         low_long_of_psn: CURRENT_PROCESS,
     };
     unsafe {
-        TransformProcessType(&psn, if visible { TO_FOREGROUND } else { TO_UI_ELEMENT });
+        TransformProcessType(
+            &psn,
+            if visible {
+                TO_FOREGROUND
+            } else {
+                TO_UI_ELEMENT
+            },
+        );
     }
 }
 
@@ -384,6 +591,15 @@ pub(crate) fn apply_tray(app: &AppHandle, prefs: &Prefs) {
         }
     }
     let _ = tray.set_show_menu_on_left_click(true);
+    let summary = TRAY_SUMMARY
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default();
+    let _ = tray.set_tooltip(Some(if summary.is_empty() {
+        "UsageBar"
+    } else {
+        &summary
+    }));
     if let Ok(menu) = build_tray_menu(app, prefs) {
         let _ = tray.set_menu(Some(menu));
     }
@@ -393,16 +609,19 @@ pub(crate) fn apply_tray(app: &AppHandle, prefs: &Prefs) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::LaunchAgent,
-            Some(vec![]),
-        ))
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("UsageBar")
+                .build(),
+        )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             fetch_usage,
             get_prefs,
             set_prefs,
             set_visible_providers,
+            set_visible_metrics,
+            set_tray_summary,
             set_bar_look,
             refresh_window_blur,
             set_window_blur,
@@ -473,7 +692,10 @@ pub fn run() {
                     .menu(&menu)
                     .show_menu_on_left_click(true)
                     .on_menu_event(|app, event| {
-                        let _ = app.emit("usagebar-menu", event.id().as_ref());
+                        handle_tray_menu_event(app, event.id().as_ref());
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        handle_tray_icon_event(tray.app_handle(), &event);
                     });
                 #[cfg(target_os = "macos")]
                 {
@@ -486,6 +708,8 @@ pub fn run() {
                     }
                 }
                 let tray = tray.build(app)?;
+                #[cfg(not(target_os = "macos"))]
+                let _ = &tray;
                 #[cfg(target_os = "macos")]
                 {
                     style_macos_status_item(&tray);
@@ -495,7 +719,10 @@ pub fn run() {
                     let _ = tray.set_menu(Some(menu));
                 }
                 tray.on_menu_event(|app, event| {
-                    let _ = app.emit("usagebar-menu", event.id().as_ref());
+                    handle_tray_menu_event(app, event.id().as_ref());
+                });
+                tray.on_tray_icon_event(|tray, event| {
+                    handle_tray_icon_event(tray.app_handle(), &event);
                 });
             }
             apply_tray(app.handle(), &prefs);
@@ -528,4 +755,20 @@ pub fn run() {
                 let _ = (app, event);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_tray_summary;
+
+    #[test]
+    fn tray_summary_drops_empty_control_text_and_extra_providers() {
+        let raw = (0..14)
+            .map(|index| format!("\nProvider {index}: 5h 90%\u{0}"))
+            .collect::<String>();
+        let clean = sanitize_tray_summary(&raw);
+        assert_eq!(clean.lines().count(), crate::prefs::SLOT_MAX);
+        assert!(!clean.contains('\0'));
+        assert!(clean.lines().all(|line| line.len() <= 160));
+    }
 }

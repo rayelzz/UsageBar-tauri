@@ -1,6 +1,6 @@
 # UsageBar
 
-[English](README.md) · [中文](README_CN.md)
+[English](README.md) · [中文](README_CN.md) · [Русский](README_RU.md)
 
 A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **ZCode**, **Claude**, **Copilot**, **Gemini**, and **Antigravity**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
 
@@ -30,8 +30,9 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 
 ### Features
 
-- The bar grows with the selection: **1–10** rings. Default: Codex, Cursor, Grok, GLM. Pick providers and their order from **Providers…**
-- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …) and the reset date/time in the system timezone. Codex, GLM, ZCode, and Grok also list banked reset cards and their expiry at the bottom of the card when the inventory is present. Expiry text turns yellow when a card has ≤ 1 day left, red when ≤ 8 hours
+- The bar grows with the selection: **1–10** providers. Default: Codex, Cursor, Grok, GLM. **Providers…** controls visibility and order without removing any supported provider from the catalog
+- Each visible provider shows up to two compact numbers, stacked on a side edge or placed side by side on a top/bottom edge. **Auto** prefers the current/session window (including 5-hour windows) and the weekly window; choose one or two specific metrics per provider when you need different windows
+- Hover for every window the vendor returns (5-hour, weekly, monthly / billing cycle, per-model, …), labels, percentages, and the reset date/time in the system timezone. Codex, GLM, ZCode, and Grok also list banked reset cards and their expiry at the bottom of the card when the inventory is present. Expiry text turns yellow when a card has ≤ 1 day left, red when ≤ 8 hours
 - When a window drops from a used percent back to **0%**, that slot’s icon pulses green and a tooltip stays up; hover the card to reveal **×**, click to dismiss
 - A reset card also pulses that icon and pops a 30-second “expiring” card (1 day before, then once at 5 / 4 / 3 / 2 / 1 hours). Hover the slot for the usual usage card, or click **×**; the same milestone does not repeat
 - Drag anywhere; snap to left / right / top / bottom
@@ -40,8 +41,8 @@ macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github
 - On top / bottom edges, the percent sits to the right of each ring
 - Click-through when the mouse is not on the bar
 - A detached settings gear sits in its own circular cabin past the end of the bar (the dock shape is unchanged). Hover the gear to open settings; move away to close. Right-click the bar pins the same menu. **×** also closes it
-- Automatic update checks are **off** by default. Opening the gear menu still checks once; a new version pops a separate notes window from the GitHub release (**What’s new** / **更新说明**, matching the app language) beside the settings menu. **×** skips that version; hovering a slot hides the card. The gear menu still has the current version and **Check for update**; after a check, click the latest version or **Install** to download, install, and restart. If install fails, the GitHub download page opens
-- **App icon** in the gear menu: Dock, menu bar, or neither (default). Menu-bar **UB** is quit-only. With neither, open settings from the gear, or reopen the app from Applications / the Start menu
+- Automatic update checks are **off** by default. Opening the gear menu still checks once; a new version pops a separate notes window from the GitHub release (**What’s new** / **更新说明** / **Что нового**, matching the app language) beside the settings menu. **×** skips that version; hovering a slot hides the card. The gear menu still has the current version and **Check for update**; after a check, click the latest version or **Install** to download, install, and restart. If install fails, the GitHub download page opens
+- **App icon** in the gear menu: Dock, menu bar, or neither (default). Menu-bar **UB** can show/hide the overlay, refresh usage, open settings, or quit. Hovering the tray icon shows the latest cached quota summary. With neither, open settings from the gear, or reopen the app from Applications / the Start menu
 - Auto-refresh every 60 seconds (configurable)
 - Official brand icons; red when remaining ≤ 20% (used ≥ 80%), yellow when remaining ≤ 40% (used ≥ 60%), green otherwise
 
@@ -53,12 +54,12 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | --- | --- | --- | --- |
 | **Codex** | `~/.codex/auth.json` | ChatGPT `backend-api/wham/usage` + `wham/rate-limit-reset-credits` | 5-hour + weekly (+ monthly / extra windows if present); banked reset cards and expiry at the bottom of the card |
 | **Cursor** | Cursor `state.vscdb` session (old `cursorAuth/userId`, or newer `glass.lastSignedInAuthId` / JWT `sub`) | `cursor.com/api/usage-summary` + Grok Bot weekly status | Monthly billing cycle: included + API (+ on-demand / team pool / Grok Bot weekly if present) |
-| **Grok** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | Weekly and/or monthly (+ products / on-demand if present). Banked reset cards from the grok.com inventory (prepaid balance is not a reset card) |
+| **Grok CLI** | `~/.grok/auth.json` | `cli-chat-proxy.grok.com/v1/billing` + grok.com `GetRemainingResets` | The standalone Grok CLI account: weekly and/or monthly (+ products / on-demand if present). This is separate from the Grok Bot allowance already shown inside Cursor. Banked reset cards come from the grok.com inventory (prepaid balance is not a reset card) |
 | **GLM** | `GLM_API_KEY` / `~/.zai/config.json` / cc-switch | `api.z.ai` or `open.bigmodel.cn` quota | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Reset cards come from a ZCode login session (`zcode.z.ai` coding-plan reset status), or an embedded list on the quota payload |
-| **ZCode** | `~/.zcode/v2/config.json` Coding Plan key + `credentials.json` login | Same official quota API as GLM; reset cards from `zcode.z.ai` `/api/v1/coding-plan/reset/status` | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Banked 5-hour / weekly reset cards when ZCode is signed in |
+| **ZCode** | Current encrypted Coding Plan account key in `~/.zcode/v2/credentials.json`, or legacy `~/.zcode/v2/config.json`; signed-in session for reset cards | Same official quota API as GLM; reset cards from `zcode.z.ai` `/api/v1/coding-plan/reset/status` | All `limits[]` windows (5-hour, weekly, monthly, MCP, …). Banked 5-hour / weekly reset cards when ZCode is signed in |
 | **Claude** | macOS Keychain `Claude Code-credentials`, or `~/.claude/.credentials.json` | Anthropic `api/oauth/usage` | 5-hour + weekly + scoped weekly (+ monthly extra usage if present) |
-| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
-| **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
+| **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, authenticated GitHub CLI (including OS keychain storage), or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
+| **Gemini** | Gemini CLI `~/.gemini/oauth_creds.json`; on Windows, the signed-in Google Gemini desktop session | Cloud Code Assist `retrieveUserQuota`, or the Gemini app usage query | CLI / Code Assist per-model quota when available; otherwise the consumer Google AI plan's 5-hour and weekly windows from `gemini.google.com/usage`. Desktop cookies are decrypted in memory and are never sent anywhere except Google. A DPAPI-protected local session cache keeps usage available while Gemini Desktop locks its cookie database |
 | **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | Per-model remaining fraction + reset |
 
 Cursor session file:
@@ -78,6 +79,7 @@ Needs a working login **on that same machine** for whichever tools you show. The
    - macOS Intel: `x64.dmg`
    - Windows: `x64-setup.exe`
    - Linux: `.AppImage` or `.deb`
+   - On Windows, setup shows a language selector and a guided wizard. Choose whether UsageBar starts with Windows on the options page. The finish page separately offers a desktop shortcut and immediate launch; both are off by default. You can change autostart later with **Open at login** in UsageBar settings.
 2. macOS builds are ad-hoc signed (not Apple-notarized). After dragging `UsageBar.app` into **Applications**, run this once in Terminal (required on macOS Sequoia / Tahoe; “Right-click → Open” often does nothing):
 
    ```bash
@@ -86,21 +88,23 @@ Needs a working login **on that same machine** for whichever tools you show. The
    ```
 
    The “UsageBar.app is damaged” dialog is Gatekeeper quarantine, not a broken download. Do not move it to the Trash.
-3. Sign in to the tools you want to watch (Codex CLI, Cursor, Grok CLI, GLM, Claude Code, GitHub Copilot, Gemini CLI, Antigravity). UsageBar will pick up those sessions.
+3. Sign in to the tools you want to watch (Codex CLI, Cursor, Grok CLI, GLM/z.ai, ZCode, Claude Code, GitHub Copilot, Gemini CLI or Gemini Desktop on Windows, Antigravity). UsageBar will pick up those sessions.
 
 Build from source:
 
 ```bash
 npm install
 npm run tauri dev      # development
-npm run tauri build    # local installer
+npm run tauri build -- --no-sign  # unsigned local installer
 ```
 
 Artifacts:
 
 - macOS: `src-tauri/target/release/bundle/dmg`
-- Windows: `src-tauri/target/release/bundle/nsis`
+- Windows: `src-tauri/target/release/bundle/nsis` or `msi`
 - Linux: `src-tauri/target/release/bundle/appimage` or `deb`
+
+Pull requests run the same JavaScript and Rust tests, then build unsigned Windows x64, Linux x64, macOS Apple Silicon, and macOS Intel packages in `.github/workflows/ci.yml`.
 
 Push a `v*` tag to run GitHub Actions and publish macOS (Apple Silicon + Intel), Windows, and Linux (see `.github/workflows/release.yml`).
 
@@ -113,10 +117,10 @@ Hover the settings gear on the bar, or right-click the bar:
 - Snap left / right / top / bottom
 - Display style: Ring usage / Transparent icons
 - Display value: Used quota / Remaining quota
-- Language: English (default) / 中文 — menus and usage cards follow it; vendor and model names stay in English
-- **Providers…**: choose 1–10 providers and their order in the same gear popover. The bar shortens or lengthens to match; no empty **—** slots.
+- Language: English (default) / 中文 / Русский — menus and usage cards follow it; vendor and model names stay unchanged
+- **Providers…**: choose 1–10 providers and their order in the same gear popover. Expand a provider to keep **Auto** metric selection or choose up to two quota windows. Hiding a provider only removes its slot from the overlay; the complete provider catalog remains available.
 - Current version, **Check for update**, latest version (click to install), and auto-check (off by default). A new version pops a separate notes window beside the menu; open at login; quit
-- **App icon**: Dock / menu bar / neither (default). Menu-bar **UB** only quits
+- **App icon**: Dock / menu bar / neither (default). Menu-bar **UB** provides show/hide, refresh, settings, and quit
 
 All settings — edge, position, provider list and order, display style, display value, opacity, blur, app icon, language, refresh, lock, click-through, update prefs — are stored at `~/.usagebar/prefs.json` and survive restarts and app updates.
 
@@ -134,8 +138,13 @@ Login is `~/.grok/auth.json`. Newer Grok CLI unified-billing responses dropped `
 **I sent UsageBar to a friend and they see no Cursor / Codex data.**  
 Expected. Credentials stay on each machine. They need their own logins for the tools they show.
 
-**Claude / Copilot / Gemini / Antigravity shows “no data”.**  
-Sign in with that tool’s official CLI or editor on this computer first. Claude reads Keychain / `~/.claude/.credentials.json`. Copilot reads `~/.config/github-copilot`. Gemini reads `~/.gemini/oauth_creds.json`. Antigravity reads `~/.gemini/antigravity-cli/antigravity-oauth-token`. UsageBar does not estimate tokens from local logs.
+**Claude / Copilot / Gemini / Antigravity shows “no data”.**
+
+Sign in with that tool’s official CLI or app on this computer first. Claude reads Keychain / `~/.claude/.credentials.json`. Copilot reads its local config, authenticated GitHub CLI/keychain, or `GITHUB_TOKEN`. Gemini reads `~/.gemini/oauth_creds.json`, and on Windows can use the signed-in Gemini Desktop session. Antigravity reads `~/.gemini/antigravity-cli/antigravity-oauth-token`. UsageBar does not estimate tokens from local logs.
+
+**Gemini Desktop is running and locks its cookie database.**
+
+This is normal on Windows. When the database is available, UsageBar stores the required session in a local Windows DPAPI-protected cache, then continues reading the 5-hour and weekly limits while Gemini is running. If Gemini has never appeared, close Gemini once, choose **Refresh now**, then reopen it.
 
 **Does UsageBar upload chats or package my tokens?**  
 No. It only reads local session files / env keys and calls official usage APIs. Tokens are never bundled into the installer.
@@ -160,11 +169,11 @@ Green: used &lt; 60%. Yellow: 60%–80%. Red: ≥ 80%.
 **How do I set a GLM key?**  
 Export `GLM_API_KEY` (or `ZAI_API_KEY` / `Z_AI_API_KEY`) in your shell, or use `~/.zai/config.json`, or a GLM / 智谱 / z.ai provider in cc-switch.
 
-**ZCode vs GLM — same ring?**  
-No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan key ZCode already saved. **GLM** reads your shell / `.zai` / cc-switch key. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the rings differ. Reset cards need a signed-in ZCode session (`~/.zcode/v2/credentials.json`); UsageBar decrypts that local `enc:v1:` blob only to list cards, and never redeems them.
+**ZCode vs GLM — same numbers?**
+No. ZCode is 智谱’s coding agent; GLM is the model / API key. **Providers → ZCode** reads the Coding Plan account key ZCode already saved in `~/.zcode/v2/credentials.json` (or the legacy config). **GLM** reads your shell / `.zai` / cc-switch key, with the signed-in ZCode Coding Plan as a local fallback. If those keys belong to the same Coding Plan, the percentages match; if they are different accounts, the values differ. Reset cards need a signed-in ZCode session; UsageBar decrypts the local `enc:v1:` values only in memory and never redeems cards.
 
 **Windows / Linux notes.**  
-Windows needs WebView2 (the installer can bootstrap it). The tray appears only if **App icon** is Menu bar; it is quit-only. Linux needs a working system tray for that option.
+Windows needs WebView2 (the installer can bootstrap it). The tray appears only if **App icon** is Menu bar. Linux needs a working system tray for that option; native hover events are platform-dependent, so the same cached summary is also available from the tray menu and tooltip.
 
 ### Privacy
 

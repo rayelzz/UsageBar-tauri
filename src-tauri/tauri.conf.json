@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "UsageBar",
-  "version": "0.0.28",
+  "version": "0.0.30",
   "identifier": "com.rayel.usagebar",
   "build": {
     "frontendDist": "../src"
@@ -87,6 +87,13 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["English", "Russian", "SimpChinese"],
+        "installerHooks": "./windows/installer-hooks.nsh",
+        "installMode": "currentUser",
+        "startMenuFolder": "UsageBar"
       }
     }
   },

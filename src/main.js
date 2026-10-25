@@ -1,3 +1,6 @@
+import { clampRectToWorkArea, edgePopupRect, popupArrow } from "./geometry.js";
+import { chooseCompactMetrics, compactMetricLabel } from "./metrics.js";
+
 const ICONS = {
   codex: {
     viewBox: "0 0 256 260",
@@ -59,7 +62,7 @@ const ICONS = {
 };
 ICONS.zcode = ICONS.glm;
 
-const BAR_THICK = 46;
+const BAR_THICK = 54;
 const BAR_PAD = 44;
 const BAR_SLOT = 48;
 const BAR_H_THICK = 40;
@@ -78,9 +81,9 @@ const REFRESH_SECS = [15, 30, 60, 120, 300, 600, 0];
 const VENDORS = {
   codex: "Codex",
   cursor: "Cursor",
-  grok: "Grok",
-  glm: "GLM",
-  zcode: "ZCode",
+  grok: "Grok CLI",
+  glm: "z.ai",
+  zcode: "z.ai Coding Plan",
   claude: "Claude",
   copilot: "Copilot",
   gemini: "Gemini",
@@ -127,10 +130,40 @@ const METRIC_LABELS = {
     Completions: "Completions",
     Usage: "用量",
   },
+  ru: {
+    "Included usage": "Включено в план",
+    "API usage": "Использование API",
+    "Weekly limit": "Недельный лимит",
+    "Weekly allowance": "Недельная квота",
+    "5-hour window": "5-часовое окно",
+    "Monthly limit": "Месячный лимит",
+    "On-demand": "Сверх лимита",
+    "Current window": "Текущее окно",
+    "MCP tools": "Инструменты MCP",
+    "Weekly Opus": "Opus за неделю",
+    "Weekly Sonnet": "Sonnet за неделю",
+    "Premium requests": "Премиум-запросы",
+    "Team pooled": "Командный пул",
+    Chat: "Чат",
+    Completions: "Дополнения",
+    Usage: "Использование",
+  },
 };
 
 function isZh() {
   return prefs.locale === "zh";
+}
+
+function isRu() {
+  return prefs.locale === "ru";
+}
+
+function normalizeLocale(locale) {
+  return locale === "zh" || locale === "ru" ? locale : "en";
+}
+
+function currentLocale() {
+  return normalizeLocale(prefs.locale);
 }
 
 function t() {
@@ -200,8 +233,77 @@ function t() {
         creditRemainingExpired: "已到期",
         whatsNew: "更新说明",
         installVersion: (v) => `安装 ${v}`,
+        close: "关闭",
       }
-    : {
+    : isRu()
+      ? {
+          refreshNow: "Обновить сейчас",
+          autoRefresh: "Автообновление",
+          lock: "Закрепить панель",
+          unlock: "Перемещать панель",
+          clickThrough: "Пропускать клики",
+          snapLeft: "Прикрепить слева",
+          snapRight: "Прикрепить справа",
+          snapTop: "Прикрепить сверху",
+          snapBottom: "Прикрепить снизу",
+          displayValue: "Показывать",
+          usedQuota: "Использовано",
+          remainingQuota: "Осталось",
+          displayValueHint: "Кольца, проценты и карточка показывают выбранное значение. Цвет зависит от остатка: красный — до 20%, жёлтый — 20–40%, зелёный — больше 40%.",
+          language: "Язык",
+          appIcon: "Значок приложения",
+          appIconDock: "Панель задач",
+          appIconMenubar: "Область уведомлений",
+          appIconNeither: "Не показывать",
+          openAtLogin: "Автозапуск",
+          quit: "Выйти из UsageBar",
+          tools: "Провайдеры…",
+          toolsTitle: "Провайдеры",
+          toolsBack: "Назад",
+          barOpacity: "Непрозрачность панели",
+          barOpacityHint: "Меньше — прозрачнее",
+          barBlur: "Размытие",
+          barBlurHint: "Больше — сильнее размытие",
+          lookReset: "Сбросить",
+          toolsHint: "Выберите 1–10 провайдеров и задайте порядок. Без входа показывается «Нет данных».",
+          toolsMax: "Уже выбрано 10 провайдеров. Сначала отключите один.",
+          toolsMin: "Оставьте хотя бы одного провайдера.",
+          moveUp: "Выше",
+          moveDown: "Ниже",
+          selectedCount: (n) => `Выбрано: ${n} из 10`,
+          resetTitle: "Лимит сброшен",
+          updateLine: (v) => `Доступно обновление ${v}`,
+          autoCheckUpdate: "Автопроверка обновлений",
+          updatesTitle: "Обновления",
+          currentVersionLine: (v) => `Текущая версия: ${v}`,
+          checkUpdate: "Проверить обновления",
+          checkingUpdate: "Проверка…",
+          updateUpToDate: "Обновлений нет",
+          updateCheckFailed: "Ошибка проверки",
+          installingUpdate: "Установка обновления…",
+          updateInstallFailed: "Ошибка установки; открыта загрузка",
+          settings: "Настройки",
+          snapGroup: "Сторона экрана",
+          edgeShort: ["Слева", "Справа", "Сверху", "Снизу"],
+          off: "Выкл.",
+          noData: "Нет данных",
+          querying: "Проверка…",
+          resetCards: "Карточки сброса",
+          resetCardCount: (n) => `${n} шт.`,
+          resetCardAvailable: "Доступна",
+          resetCardFull: "Полный сброс",
+          resetCardFiveHour: "Сброс 5-часового лимита",
+          resetCardWeekly: "Сброс недельного лимита",
+          creditSoonTitle: "Карточка сброса скоро истечёт",
+          creditRemainingDays: (n) => `через ${n} дн.`,
+          creditRemainingHours: (n) => `через ${n} ч.`,
+          creditRemainingMinutes: (n) => `через ${n} мин.`,
+          creditRemainingExpired: "Истекла",
+          whatsNew: "Что нового",
+          installVersion: (v) => `Установить ${v}`,
+          close: "Закрыть",
+        }
+      : {
         refreshNow: "Refresh now",
         autoRefresh: "Auto refresh",
         lock: "Lock position",
@@ -266,6 +368,7 @@ function t() {
         creditRemainingExpired: "Expired",
         whatsNew: "What’s new",
         installVersion: (v) => `Install ${v}`,
+        close: "Close",
       };
 }
 
@@ -276,6 +379,12 @@ function intervalLabel(sec) {
     if (sec === 300) return "5 分钟";
     if (sec === 600) return "10 分钟";
     return `${sec} 秒`;
+  }
+  if (isRu()) {
+    if (sec === 120) return "2 мин.";
+    if (sec === 300) return "5 мин.";
+    if (sec === 600) return "10 мин.";
+    return `${sec} с`;
   }
   if (sec === 120) return "2min";
   if (sec === 300) return "5min";
@@ -343,17 +452,53 @@ function isQuerying(snap) {
 
 function usageTitle(id) {
   const name = vendorName(id);
-  return isZh() ? `${name} 用量` : `${name} Usage`;
+  if (isZh()) return `${name} 用量`;
+  if (isRu()) return `${name}: использование`;
+  return `${name} Usage`;
+}
+
+function normalizeVisibleMetrics(selections) {
+  const out = {};
+  if (!selections || typeof selections !== "object" || Array.isArray(selections)) return out;
+  for (const [provider, ids] of Object.entries(selections)) {
+    if (!CATALOG_IDS.includes(provider) || !Array.isArray(ids)) continue;
+    const clean = [];
+    for (const raw of ids) {
+      const id = typeof raw === "string" ? raw.trim() : "";
+      if (id && id.length <= 96 && !/\s/.test(id) && !clean.includes(id)) clean.push(id);
+      if (clean.length === 2) break;
+    }
+    if (clean.length) out[provider] = clean;
+  }
+  return out;
+}
+
+function metricSelectionText() {
+  if (isZh()) {
+    return { auto: "\u81ea\u52a8", title: "\u9762\u677f\u4e0a\u7684\u989d\u5ea6", unavailable: "\u8fde\u63a5\u540e\u53ef\u9009\u62e9\u989d\u5ea6", max: "\u6700\u591a\u9009 2 \u4e2a" };
+  }
+  if (isRu()) {
+    return { auto: "\u0410\u0432\u0442\u043e", title: "\u041b\u0438\u043c\u0438\u0442\u044b \u043d\u0430 \u043f\u0430\u043d\u0435\u043b\u0438", unavailable: "\u041b\u0438\u043c\u0438\u0442\u044b \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f", max: "\u041c\u043e\u0436\u043d\u043e \u0432\u044b\u0431\u0440\u0430\u0442\u044c \u043d\u0435 \u0431\u043e\u043b\u044c\u0448\u0435 2" };
+  }
+  return { auto: "Auto", title: "Quotas on the bar", unavailable: "Connect to choose quotas", max: "Choose up to 2" };
 }
 
 function localizeMetricLabel(label) {
   if (!label) return "";
-  const dict = isZh() ? METRIC_LABELS.zh : METRIC_LABELS.en;
+  const dict = METRIC_LABELS[currentLocale()] || METRIC_LABELS.en;
   if (dict[label]) return dict[label];
   const hour = label.match(/^(\d+)-hour window$/);
-  if (hour) return isZh() ? `${hour[1]} 小时窗口` : label;
+  if (hour) {
+    if (isZh()) return `${hour[1]} 小时窗口`;
+    if (isRu()) return `${hour[1]}-часовое окно`;
+    return label;
+  }
   const day = label.match(/^(\d+)-day window$/);
-  if (day) return isZh() ? `${day[1]} 天窗口` : label;
+  if (day) {
+    if (isZh()) return `${day[1]} 天窗口`;
+    if (isRu()) return `${day[1]}-дневное окно`;
+    return label;
+  }
   const idx = label.lastIndexOf(" · ");
   if (idx >= 0) {
     const head = label.slice(0, idx);
@@ -369,14 +514,24 @@ function localizeError(snap) {
   const err = snap.error || "";
   if (!err || err === "no_quota") return t().noData;
   if (err === "login_not_found") {
-    return isZh() ? `未找到 ${name} 登录信息` : `${name} login not found`;
+    if (isZh()) return `未找到 ${name} 登录信息`;
+    if (isRu()) return `Вход в ${name} не найден`;
+    return `${name} login not found`;
+  }
+  if (err === "session_no_quota") {
+    if (isZh()) return `已找到 ${name} 会话，但无法读取额度；请在 ZCode 中启用 Coding Plan`;
+    if (isRu()) return `Сессия ${name} найдена, но лимиты недоступны — включите Coding Plan в ZCode`;
+    return `${name} session found, but quota is unavailable; enable Coding Plan in ZCode`;
   }
   if (err === "auth") {
-    return isZh() ? "登录已过期" : "Session expired";
+    if (isZh()) return "登录已过期";
+    if (isRu()) return "Сеанс истёк";
+    return "Session expired";
   }
   if (err.startsWith("api_error")) {
     const code = err.split(":")[1];
     if (isZh()) return code ? `${name} 接口异常 (${code})` : `${name} 接口异常`;
+    if (isRu()) return code ? `Ошибка запроса ${name} (${code})` : `Ошибка запроса ${name}`;
     return code ? `${name} request failed (${code})` : `${name} request failed`;
   }
   return err;
@@ -400,12 +555,18 @@ function quotaText(used) {
   const shown = shownPct(used);
   if (shown == null) return "";
   const n = Math.round(shown);
-  if (isRemaining()) return isZh() ? `剩余 ${n}%` : `${n}% Left`;
-  return isZh() ? `已用 ${n}%` : `${n}% Used`;
+  if (isRemaining()) {
+    if (isZh()) return `剩余 ${n}%`;
+    if (isRu()) return `Осталось ${n}%`;
+    return `${n}% Left`;
+  }
+  if (isZh()) return `已用 ${n}%`;
+  if (isRu()) return `Использовано ${n}%`;
+  return `${n}% Used`;
 }
 
 function applyLocale() {
-  document.documentElement.lang = isZh() ? "zh-CN" : "en";
+  document.documentElement.lang = isZh() ? "zh-CN" : isRu() ? "ru" : "en";
   syncUpdateBadge();
 }
 
@@ -413,8 +574,9 @@ function normalizeLoadedPrefs(p) {
   const next = { ...p };
   if (next.displayStyle !== "icons") next.displayStyle = "full";
   next.displayValue = next.displayValue === "remaining" ? "remaining" : "used";
-  next.locale = next.locale === "zh" ? "zh" : "en";
+  next.locale = normalizeLocale(next.locale);
   next.visibleProviders = normalizeVisible(next.visibleProviders);
+  next.visibleMetrics = normalizeVisibleMetrics(next.visibleMetrics);
   next.autoCheckUpdate = !!next.autoCheckUpdate;
   next.skippedUpdateVersion = next.skippedUpdateVersion || "";
   if (typeof next.lastX !== "number" || Number.isNaN(next.lastX)) next.lastX = -1;
@@ -435,6 +597,11 @@ function appIconNeitherHint() {
     if (osName === "windows") return "没有图标。可从开始菜单再打开，或点条上的齿轮改回来。";
     if (osName === "linux") return "没有图标。可从应用程序列表再打开，或点条上的齿轮改回来。";
     return "没有图标。可从「应用程序」再打开，或点条上的齿轮改回来。";
+  }
+  if (isRu()) {
+    if (osName === "windows") return "Значок скрыт. Откройте UsageBar из меню «Пуск» или нажмите шестерёнку на панели.";
+    if (osName === "linux") return "Значок скрыт. Откройте UsageBar из списка приложений или нажмите шестерёнку на панели.";
+    return "Значок скрыт. Откройте UsageBar из папки «Программы» или нажмите шестерёнку на панели.";
   }
   if (osName === "windows") {
     return "No icon anywhere. Open UsageBar from the Start menu, or click the gear on the bar.";
@@ -526,6 +693,14 @@ function formatReset(ms) {
       : `${Number(p.month)}月${Number(p.day)}日`;
     return `重置 ${date} ${hh}:${mm}`;
   }
+  if (isRu()) {
+    const date = new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "short",
+      ...(showYear ? { year: "numeric" } : {}),
+    }).format(d);
+    return `Сброс ${date}, ${hh}:${mm}`;
+  }
   const mon = localParts(ms, { month: "short" }).month;
   const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
   return `Resets ${date}, ${hh}:${mm}`;
@@ -593,6 +768,14 @@ function formatCreditExpiry(ms) {
       ? `${p.year}年${Number(p.month)}月${Number(p.day)}日`
       : `${Number(p.month)}月${Number(p.day)}日`;
     return `到期 ${date} ${hh}:${mm}`;
+  }
+  if (isRu()) {
+    const date = new Intl.DateTimeFormat("ru-RU", {
+      day: "numeric",
+      month: "short",
+      ...(showYear ? { year: "numeric" } : {}),
+    }).format(d);
+    return `Истекает ${date}, ${hh}:${mm}`;
   }
   const mon = localParts(ms, { month: "short" }).month;
   const date = showYear ? `${mon} ${p.day}, ${p.year}` : `${mon} ${p.day}`;
@@ -1051,6 +1234,7 @@ let prefs = {
   displayValue: "used",
   locale: "en",
   visibleProviders: DEFAULT_VISIBLE.slice(),
+  visibleMetrics: {},
   autoCheckUpdate: false,
   skippedUpdateVersion: "",
   lastX: -1,
@@ -1064,11 +1248,12 @@ let osName = "macos";
 let snaps = [
   { id: "codex", title: "Codex Usage", headlinePercent: null, metrics: [], error: null, loading: true },
   { id: "cursor", title: "Cursor Usage", headlinePercent: null, metrics: [], error: null, loading: true },
-  { id: "grok", title: "Grok Usage", headlinePercent: null, metrics: [], error: null, loading: true },
+  { id: "grok", title: "Grok CLI Usage", headlinePercent: null, metrics: [], error: null, loading: true },
   { id: "glm", title: "GLM Usage", headlinePercent: null, metrics: [], error: null, loading: true },
 ];
 let hovered = null;
 let hoverGen = 0;
+let providerMetricOptions = {};
 let tipSlideGen = 0;
 let tipSlideFrame = null;
 let tipStageFrame = null;
@@ -1108,6 +1293,9 @@ const RESET_ICON =
   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 8a4.6 4.6 0 1 0 1.3-3.2"/><path d="M3.2 2.6v2.8h2.8"/></svg>';
 let barHot = false;
 let pointerOver = false;
+let traySummaryOpen = false;
+let traySummaryHot = false;
+let trayLeaveTimer = null;
 
 function setBarHot(on) {
   if (typeof on === "boolean") pointerOver = on;
@@ -1173,6 +1361,41 @@ function paintDock(edge) {
   svg.querySelectorAll("path, circle.pod").forEach((el) => paintFill(el, fill));
 }
 
+function compactValue(used) {
+  const shown = shownPct(used);
+  return shown == null ? "—" : `${Math.round(shown)}%`;
+}
+
+function compactBarValue(used) {
+  const shown = shownPct(used);
+  return shown == null ? "—" : String(Math.round(shown));
+}
+
+function safeTrayStatus(snap) {
+  if (snap?.loading) return t().querying;
+  if (!snap?.error || snap.error === "no_quota") return t().noData;
+  if (["login_not_found", "session_no_quota", "auth"].includes(snap.error) || snap.error.startsWith("api_error")) {
+    return localizeError(snap);
+  }
+  return t().noData;
+}
+
+function traySummaryLines() {
+  return snaps.map((snap) => {
+    const metrics = chooseCompactMetrics(snap, prefs.visibleMetrics?.[snap.id] || []);
+    const values = metrics.map(
+      (metric) => `${compactMetricLabel(metric, currentLocale())} ${compactValue(metric.percent)}`,
+    );
+    if (!values.length && snap.headlinePercent != null) values.push(compactValue(snap.headlinePercent));
+    return `${vendorName(snap.id)}: ${values.length ? values.join(" · ") : safeTrayStatus(snap)}`;
+  });
+}
+
+function syncTraySummary() {
+  const summary = traySummaryLines().join("\n");
+  invoke("set_tray_summary", { summary }).catch((err) => console.error(err));
+}
+
 function renderBar() {
   const barEl = document.getElementById("bar");
   const cells = document.getElementById("cells");
@@ -1186,27 +1409,40 @@ function renderBar() {
   placeGearBtn(edge);
   cells.innerHTML = snaps
     .map((s) => {
-      const unknown = s.headlinePercent == null;
-      const shown = shownPct(s.headlinePercent);
-      const text = unknown || shown == null ? "—" : `${Math.round(shown)}%`;
+      const metrics = chooseCompactMetrics(s, prefs.visibleMetrics?.[s.id] || []);
+      const shownMetrics = metrics.length
+        ? metrics
+        : s.headlinePercent != null
+          ? [{ id: "__headline", label: isZh() ? "总" : isRu() ? "все" : "all", percent: s.headlinePercent }]
+          : [];
+      const ringUsed = s.headlinePercent ?? shownMetrics[0]?.percent ?? null;
+      const shown = shownPct(ringUsed);
+      const unknown = ringUsed == null;
       const spec = ICONS[s.id];
       const empty = !s.id || !spec;
       const c = 13;
       const r = 10.25;
       const circ = 2 * Math.PI * r;
-      const color = empty || unknown ? "transparent" : usageColor(s.headlinePercent);
+      const color = empty || unknown ? "transparent" : usageColor(ringUsed);
       const dash = empty || unknown || shown == null ? 0 : (Math.min(Math.max(shown, 0), 100) / 100) * circ;
       if (empty) {
         return `<div class="cell empty-slot unknown">
-          <div class="ring">
-            <svg viewBox="0 0 26 26">
-              ${ringTrack(c, r)}
-            </svg>
-          </div>
-          <div class="pct">—</div>
+          <div class="ring"><svg viewBox="0 0 26 26">${ringTrack(c, r)}</svg></div>
+          <div class="compact-metrics single"><div class="compact-metric"><span></span><b>—</b></div></div>
         </div>`;
       }
       const rule = spec.evenOdd ? 'fill-rule="evenodd"' : "";
+      const rows = shownMetrics.length
+        ? shownMetrics
+            .map((metric) => {
+              const label = metric.id === "__headline" ? metric.label : compactMetricLabel(metric, currentLocale());
+              return `<div class="compact-metric" data-compact-id="${escapeHtml(metric.id)}" title="${escapeHtml(localizeMetricLabel(metric.label))}: ${compactValue(metric.percent)}"><b>${compactBarValue(metric.percent)}</b><span class="sr-only">${escapeHtml(label)}</span></div>`;
+            })
+            .join("")
+        : `<div class="compact-metric"><b>—</b></div>`;
+      const ariaMetrics = shownMetrics.length
+        ? shownMetrics.map((metric) => `${localizeMetricLabel(metric.label)} ${compactValue(metric.percent)}`).join(", ")
+        : t().noData;
       return `<div class="cell${hovered === s.id ? " hovered" : ""}${unknown ? " unknown" : ""}${s.resetNotice || s.creditNotice ? " reset" : ""}" data-id="${s.id}">
         <div class="ring">
           <svg viewBox="0 0 26 26">
@@ -1218,7 +1454,7 @@ function renderBar() {
             .map((p) => `<path ${rule} d="${p}"/>`)
             .join("")}</svg></div>
         </div>
-        <div class="pct">${text}</div>
+        <div class="compact-metrics${shownMetrics.length < 2 ? " single" : ""}" aria-label="${escapeHtml(`${vendorName(s.id)}: ${ariaMetrics}`)}">${rows}</div>
       </div>`;
     })
     .join("");
@@ -1253,7 +1489,7 @@ function tipHeight(snap) {
 }
 
 function tipArrow() {
-  return prefs.edge === "left" ? "left" : prefs.edge === "top" ? "up" : prefs.edge === "bottom" ? "down" : "right";
+  return popupArrow(prefs.edge);
 }
 
 function tipContentPayload(extra = {}) {
@@ -1264,7 +1500,7 @@ function tipContentPayload(extra = {}) {
     snap,
     resets: (snap.metrics || []).map((m) => formatReset(m.resetsAt)),
     arrow: tipArrow(),
-    locale: prefs.locale === "zh" ? "zh" : "en",
+    locale: currentLocale(),
     displayValue: prefs.displayValue === "remaining" ? "remaining" : "used",
     resetNotice: snap.resetNotice || null,
     creditNotice: snap.creditNotice || null,
@@ -1275,7 +1511,9 @@ function tipContentPayload(extra = {}) {
 
 function updateNotesText(info) {
   if (!info) return "";
-  return isZh() ? info.notesZh || info.notesEn || "" : info.notesEn || info.notesZh || "";
+  if (isZh()) return info.notesZh || info.notesEn || info.notesRu || "";
+  if (isRu()) return info.notesRu || info.notesEn || info.notesZh || "";
+  return info.notesEn || info.notesZh || info.notesRu || "";
 }
 
 function updateTipHeight(notes) {
@@ -1302,7 +1540,7 @@ function updateTipPayload() {
     latest: info.latest,
     notes: updateNotesText(info),
     arrow: tipArrow(),
-    locale: prefs.locale === "zh" ? "zh" : "en",
+    locale: currentLocale(),
   };
 }
 
@@ -1318,12 +1556,7 @@ function rectsOverlap(a, b, gap = 8) {
 }
 
 function clampRectToScreen(rect, screen) {
-  if (!rect || !screen) return rect;
-  return {
-    ...rect,
-    x: clamp(rect.x, screen.wx + 6, Math.max(screen.wx + 6, screen.wx + screen.ww - rect.w - 6)),
-    y: clamp(rect.y, screen.wy + 6, Math.max(screen.wy + 6, screen.wy + screen.wh - rect.h - 6)),
-  };
+  return clampRectToWorkArea(rect, screen);
 }
 
 function overlapArea(a, b) {
@@ -1417,36 +1650,27 @@ function tipTargetFrame(frame, opts = {}) {
   const inner = Math.max(along - start - end, 1);
   const slot = inner / count;
   const mid = start + (idx + 0.5) * slot;
-  let x = 0;
-  let y = 0;
-  if (prefs.edge === "right" || prefs.edge === "floating") {
-    x = frame.x - tw - 6;
-    y = frame.y + mid - th / 2;
-  } else if (prefs.edge === "left") {
-    x = frame.x + frame.w + 6;
-    y = frame.y + mid - th / 2;
-  } else if (prefs.edge === "top") {
-    x = frame.x + mid - tw / 2;
-    y = frame.y + frame.h + 6;
-  } else {
-    x = frame.x + mid - tw / 2;
-    y = frame.y - th - 6;
-  }
-  return { x, y, w: tw, h: th };
+  const target = edgePopupRect({
+    bar: frame,
+    edge: prefs.edge,
+    card: { w: tw, h: th },
+    along: mid,
+  });
+  return opts.screen ? clampRectToScreen(target, opts.screen) : target;
 }
 
-function tipTravelBounds(frame) {
+function tipTravelBounds(frame, screen) {
   let bounds = null;
   for (const s of snaps) {
-    const f = tipTargetFrame(frame, { id: s.id, travel: true });
+    const f = tipTargetFrame(frame, { id: s.id, travel: true, screen });
     if (f) bounds = unionRects(bounds, f);
   }
   return bounds;
 }
 
-function tipHostRect(barFrame, target) {
+function tipHostRect(barFrame, target, screen) {
   if (frostActive()) return { ...target };
-  return tipTravelBounds(barFrame) || target;
+  return tipTravelBounds(barFrame, screen) || target;
 }
 
 function tipSlideFrom(target, stage, extra = {}) {
@@ -1601,6 +1825,16 @@ async function placeTipWindow(tipWin, rect) {
 
 let lastTipPaintKey = "";
 
+function invalidatePopupGeometry() {
+  cancelTipSlide();
+  updateLayoutGen += 1;
+  tipSlideFrame = null;
+  tipStageFrame = null;
+  menuCardFrame = null;
+  menuScreenBox = null;
+  lastTipPaintKey = "";
+}
+
 function tipPaintKey(snap) {
   if (!snap) return "";
   return [
@@ -1639,6 +1873,8 @@ async function showUsageTip(barFrame, opts = {}) {
     return;
   }
   const gen = ++tipSlideGen;
+  const list = await monitors();
+  const screen = await monitorAt({ x: barFrame.x + barFrame.w / 2, y: barFrame.y + barFrame.h / 2 }, list);
   if (frostActive()) {
     setWindowBlur("tip", 0);
     lastTipPaintKey = tipPaintKey(payload.snap);
@@ -1647,10 +1883,8 @@ async function showUsageTip(barFrame, opts = {}) {
     const measured = await ready;
     if (gen !== tipSlideGen) return;
     const snap = payload.snap;
-    const list = await monitors();
-    const screen = await monitorAt({ x: barFrame.x + barFrame.w / 2, y: barFrame.y + barFrame.h / 2 }, list);
     const size = clampTipSize(measured?.w || TIP_W, measured?.h || tipHeight(snap), screen);
-    const target = clampRectToScreen(tipTargetFrame(barFrame, size), screen);
+    const target = tipTargetFrame(barFrame, { ...size, screen });
     if (!target) return;
     await placeTipWindow(tipWin, target);
     if (gen !== tipSlideGen) return;
@@ -1660,12 +1894,12 @@ async function showUsageTip(barFrame, opts = {}) {
     await api().event.emit("usagebar-frost-sync");
     return;
   }
-  const target = tipTargetFrame(barFrame);
+  const target = tipTargetFrame(barFrame, { screen });
   if (!target) {
     await tipWin.hide();
     return;
   }
-  const stage = tipHostRect(barFrame, target);
+  const stage = tipHostRect(barFrame, target, screen);
   const first = !tipStageFrame;
   const barMoved = !first && !rectsClose(tipStageFrame, stage);
   const switching = !first && !barMoved && !!opts.from;
@@ -1784,12 +2018,13 @@ async function placeWindows() {
     /* older runtime */
   }
   const frame = await invoke("place_bar");
-  if (!frame) return;
+  if (!frame) return null;
   prefs.lastX = frame.x;
   prefs.lastY = frame.y;
   prefs.along = isVertical(prefs.edge) ? frame.y : frame.x;
   if (!menuOpen) await layoutTip(frame, { w: frame.w, h: frame.h });
   if (updateToastOpen) await layoutUpdateCard();
+  return frame;
 }
 
 async function currentBarFrame() {
@@ -2221,6 +2456,7 @@ async function setHovered(id) {
   if (resetToastId) return;
   if (creditToastId && !id) return;
   if (hovered === id) return;
+  if (id) releaseTraySummary();
   const prev = hovered;
   hovered = id;
   const gen = ++hoverGen;
@@ -2255,31 +2491,109 @@ async function savePrefs() {
 }
 
 function paintShownPercents() {
-  const root = document.getElementById("cells");
-  if (!root) return;
-  const items = root.querySelectorAll("[data-id]");
-  if (!items.length) {
-    renderBar();
-    return;
+  renderBar();
+}
+
+function logicalTrayAnchor(rect, screens) {
+  if (!rect) return null;
+  const screen = screens.find((item) => {
+    const raw = item.raw;
+    return (
+      rect.x + rect.w / 2 >= raw.position.x &&
+      rect.x + rect.w / 2 <= raw.position.x + raw.size.width &&
+      rect.y + rect.h / 2 >= raw.position.y &&
+      rect.y + rect.h / 2 <= raw.position.y + raw.size.height
+    );
+  }) || screens[0];
+  if (!screen) return null;
+  const scale = screen.scale || 1;
+  return {
+    screen,
+    frame: { x: rect.x / scale, y: rect.y / scale, w: rect.w / scale, h: rect.h / scale },
+  };
+}
+
+function trayAnchorEdge(frame, screen) {
+  const distances = [
+    ["left", Math.abs(frame.x - screen.x)],
+    ["right", Math.abs(screen.x + screen.w - (frame.x + frame.w))],
+    ["top", Math.abs(frame.y - screen.y)],
+    ["bottom", Math.abs(screen.y + screen.h - (frame.y + frame.h))],
+  ];
+  distances.sort((a, b) => a[1] - b[1]);
+  return distances[0][0];
+}
+
+function cancelTraySummaryClose() {
+  if (trayLeaveTimer) clearTimeout(trayLeaveTimer);
+  trayLeaveTimer = null;
+}
+
+function releaseTraySummary() {
+  cancelTraySummaryClose();
+  traySummaryOpen = false;
+  traySummaryHot = false;
+}
+
+async function hideTraySummary() {
+  if (!traySummaryOpen || traySummaryHot) return;
+  traySummaryOpen = false;
+  cancelTraySummaryClose();
+  await api().event.emit("usagebar-tip", { show: false });
+  const tipWin = await getWindow("tip");
+  await tipWin?.hide();
+  try {
+    await tipWin?.setIgnoreCursorEvents(true);
+  } catch {
+    /* optional */
   }
-  items.forEach((el) => {
-    const snap = snaps.find((s) => s.id === el.dataset.id);
-    if (!snap) return;
-    const unknown = snap.headlinePercent == null;
-    const shown = shownPct(snap.headlinePercent);
-    const pctEl = el.querySelector(".pct");
-    if (pctEl) pctEl.textContent = unknown || shown == null ? "—" : `${Math.round(shown)}%`;
-    const ring = el.querySelector("circle:not(.ring-track-outer):not(.ring-track-inner)");
-    if (ring && !unknown && shown != null) {
-      const r = Number(ring.getAttribute("r"));
-      if (r > 0) {
-        const circ = 2 * Math.PI * r;
-        const dash = (Math.min(Math.max(shown, 0), 100) / 100) * circ;
-        ring.setAttribute("stroke-dasharray", `${dash} ${circ}`);
-      }
-    }
+}
+
+function scheduleTraySummaryClose() {
+  cancelTraySummaryClose();
+  trayLeaveTimer = setTimeout(() => {
+    trayLeaveTimer = null;
+    hideTraySummary().catch((err) => console.error(err));
+  }, 260);
+}
+
+async function showTraySummary(rawRect) {
+  if (prefs.appIcon !== "menubar" || menuOpen || !rawRect) return;
+  const list = await monitors();
+  const anchor = logicalTrayAnchor(rawRect, list);
+  if (!anchor) return;
+  const edge = trayAnchorEdge(anchor.frame, anchor.screen);
+  const width = 310;
+  const height = Math.min(72 + snaps.length * 40, Math.max(150, anchor.screen.wh - 12));
+  const along = isVertical(edge) ? anchor.frame.h / 2 : anchor.frame.w / 2;
+  const target = clampRectToScreen(
+    edgePopupRect({ bar: anchor.frame, edge, card: { w: width, h: height }, along, gap: 6 }),
+    anchor.screen,
+  );
+  const tipWin = await getWindow("tip");
+  if (!tipWin) return;
+  cancelTraySummaryClose();
+  invalidatePopupGeometry();
+  await placeTipWindow(tipWin, target);
+  tipStageFrame = { ...target };
+  traySummaryOpen = true;
+  try {
+    await tipWin.setIgnoreCursorEvents(false);
+    await tipWin.setFocusable(false);
+  } catch {
+    /* optional */
+  }
+  await api().event.emit("usagebar-tip", {
+    show: true,
+    kind: "tray-summary",
+    snaps,
+    locale: currentLocale(),
+    displayValue: prefs.displayValue,
+    visibleMetrics: normalizeVisibleMetrics(prefs.visibleMetrics),
+    arrow: popupArrow(edge),
   });
-  paintInkChrome();
+  await tipWin.show();
+  refreshWindowBlur();
 }
 
 function applyIncomingSnap(snap) {
@@ -2294,6 +2608,7 @@ function applyIncomingSnap(snap) {
     el.classList.toggle("reset", !!(next.resetNotice || next.creditNotice));
     paintShownPercents();
   }
+  syncTraySummary();
   if (hovered === next.id) renderTip().catch((err) => console.error(err));
 }
 
@@ -2357,6 +2672,7 @@ async function refresh() {
       if (Array.isArray(got)) {
         snaps = slotsFrom(got).map((s) => ({ ...s, loading: false }));
       }
+      syncTraySummary();
       await finishRefreshPaint();
     } while (refreshQueued);
   } finally {
@@ -2373,7 +2689,7 @@ function restartTimer() {
 }
 
 async function setLocale(next) {
-  const locale = next === "zh" ? "zh" : "en";
+  const locale = normalizeLocale(next);
   if (prefs.locale === locale) return;
   prefs.locale = locale;
   applyLocale();
@@ -2392,6 +2708,8 @@ function setDisplayValue(value) {
 }
 
 async function snapTo(edge) {
+  const edgeChanged = prefs.edge !== edge;
+  if (edgeChanged) invalidatePopupGeometry();
   prefs.edge = edge;
   const pos = await getCurrentWindow().outerPosition();
   const size = barSize(edge);
@@ -2445,6 +2763,9 @@ async function onNativeMenu(id) {
   } else if (id === "tools") {
     await showProvidersPanel(true);
     return;
+  } else if (id === "settings") {
+    await showPanelMenu(true, "pin");
+    return;
   } else if (id === "quit") {
     await invoke("quit");
     return;
@@ -2454,6 +2775,10 @@ async function onNativeMenu(id) {
 const MENU_W = 216;
 const PROVIDERS_W = 260;
 let menuCardFrame = null;
+
+function menuWidth(locale = currentLocale()) {
+  return locale === "ru" ? 280 : MENU_W;
+}
 
 function menuSpec(st) {
   const ui = t();
@@ -2512,7 +2837,11 @@ function menuSpec(st) {
       [st.displayValue !== "remaining", st.displayValue === "remaining"]
     ),
     { k: "label", label: ui.language },
-    chips(["locale:en", "locale:zh"], ["English", "中文"], [st.locale !== "zh", st.locale === "zh"]),
+    chips(
+      ["locale:en", "locale:zh", "locale:ru"],
+      ["English", "中文", "Русский"],
+      [st.locale === "en", st.locale === "zh", st.locale === "ru"]
+    ),
     { k: "label", label: ui.appIcon },
     chips(
       ["icon:dock", "icon:menubar", "icon:neither"],
@@ -2549,7 +2878,7 @@ function menuSpec(st) {
 }
 
 function menuPanelHtml(st) {
-  const closeLabel = st.locale === "zh" ? "关闭" : "Close";
+  const closeLabel = t().close;
   return `<button type="button" class="tip-close" data-mid="close" aria-label="${closeLabel}">×</button>${menuSpec(st)
     .map((r) => {
       if (r.k === "sep") return `<div class="m-sep"></div>`;
@@ -2600,13 +2929,19 @@ function menuPanelHeight(st) {
   return menuSpec(st).reduce((sum, r) => sum + (H[r.k] || 0), 0) + 16;
 }
 
-function providersPanelHeight() {
-  return 28 + 60 + 20 + CATALOG_IDS.length * 40 + 16;
+function providersPanelHeight(st) {
+  const activeWithChoices = normalizeVisible(st.visibleProviders).filter(
+    (id) => (st.providerMetrics?.[id] || []).length,
+  ).length;
+  return 28 + 60 + 20 + CATALOG_IDS.length * 40 + activeWithChoices * 38 + 16;
 }
 
 function providersPanelHtml(st) {
   const ui = t();
+  const metricUi = metricSelectionText();
   const vis = normalizeVisible(st.visibleProviders);
+  const selections = normalizeVisibleMetrics(st.visibleMetrics);
+  const options = st.providerMetrics || {};
   const selected = new Set(vis);
   const rest = CATALOG_IDS.filter((id) => !selected.has(id));
   const warn = vis.length >= SLOT_MAX || vis.length <= SLOT_MIN;
@@ -2625,7 +2960,33 @@ function providersPanelHtml(st) {
             .map((p) => `<path ${rule} d="${p}"/>`)
             .join("")}</svg></span>`
         : "";
-      return `<div class="settings-row" data-id="${id}">
+      const available = (options[id] || []).filter(
+        (metric, pos, all) => metric?.id && all.findIndex((item) => item.id === metric.id) === pos,
+      );
+      const configured = (selections[id] || []).filter((metricId) =>
+        available.some((metric) => metric.id === metricId),
+      );
+      const auto = configured.length === 0;
+      const choices = available
+        .map((metric) => {
+          const checked = configured.includes(metric.id);
+          const disabled = !checked && configured.length >= 2;
+          return `<label class="quota-chip${checked ? " selected" : ""}" title="${escapeHtml(localizeMetricLabel(metric.label))}">
+            <input type="checkbox" data-metric="${escapeHtml(metric.id)}" data-provider="${id}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}/>
+            <span>${escapeHtml(localizeMetricLabel(metric.label))}</span>
+          </label>`;
+        })
+        .join("");
+      const picker = on
+        ? `<div class="quota-picker" data-provider-picker="${id}">
+            <div class="quota-picker-head"><span>${metricUi.title}</span><span>${configured.length >= 2 ? metricUi.max : ""}</span></div>
+            <div class="quota-options">
+              <label class="quota-chip${auto ? " selected" : ""}"><input type="checkbox" data-metric-auto="${id}" ${auto ? "checked" : ""}/><span>${metricUi.auto}</span></label>
+              ${choices || `<span class="quota-unavailable">${metricUi.unavailable}</span>`}
+            </div>
+          </div>`
+        : "";
+      return `<div class="provider-setting"><div class="settings-row" data-id="${id}">
         <label>
           <input type="checkbox" data-toggle="${id}" ${on ? "checked" : ""} ${
             !on && vis.length >= SLOT_MAX ? "disabled" : ""
@@ -2635,7 +2996,7 @@ function providersPanelHtml(st) {
         </label>
         <button type="button" data-move="${id}" data-dir="-1" ${upOff ? "disabled" : ""} title="${ui.moveUp}">↑</button>
         <button type="button" data-move="${id}" data-dir="1" ${downOff ? "disabled" : ""} title="${ui.moveDown}">↓</button>
-      </div>`;
+      </div>${picker}</div>`;
     })
     .join("");
   return `
@@ -2652,7 +3013,7 @@ function providersPanelHtml(st) {
 
 function menuStateNow() {
   return {
-    locale: isZh() ? "zh" : "en",
+    locale: currentLocale(),
     refreshInterval: prefs.refreshInterval,
     locked: !!prefs.locked,
     clickThrough: !!prefs.clickThrough,
@@ -2708,8 +3069,7 @@ async function placeMenuOverlay(winW, needH, reposition) {
     await setHovered(null);
     await setTipClickable(true);
   }
-  const arrow =
-    prefs.edge === "left" ? "left" : prefs.edge === "top" ? "up" : prefs.edge === "bottom" ? "down" : "right";
+  const arrow = popupArrow(prefs.edge);
   const tipWin = await getWindow("tip");
   let pointerAt = menuCardFrame?.pointerAt ?? null;
   const sizeChanged =
@@ -2727,15 +3087,15 @@ async function placeMenuOverlay(winW, needH, reposition) {
     const gx = frame.x + g.x;
     const gy = frame.y + g.y;
     const winH = Math.min(needH, Math.max(160, screen.wh - 12));
-    let x;
-    let y;
-    if (prefs.edge === "left") x = frame.x + frame.w - 2;
-    else if (prefs.edge === "top" || prefs.edge === "bottom")
-      x = clamp(gx - winW + 26, screen.wx + 6, screen.wx + screen.ww - winW - 6);
-    else x = frame.x - winW + 2;
-    if (prefs.edge === "top") y = frame.y + frame.h - 2;
-    else if (prefs.edge === "bottom") y = frame.y - winH + 2;
-    else y = clamp(gy - winH + 26, screen.wy + 6, screen.wy + screen.wh - winH - 6);
+    const raw = edgePopupRect({
+      bar: frame,
+      edge: prefs.edge,
+      card: { w: winW, h: winH },
+      along: isVertical(prefs.edge) ? g.y : g.x,
+      gap: -2,
+    });
+    const placed = clampRectToScreen(raw, screen);
+    const { x, y } = placed;
     pointerAt = prefs.edge === "top" || prefs.edge === "bottom" ? gx - x : gy - y;
     menuScreenBox = { x, y, w: winW, h: winH };
     menuCardFrame = {
@@ -2793,12 +3153,13 @@ function refreshMenuIfOpen(reposition = false) {
 }
 
 async function showPanelMenu(reposition = true, hold) {
+  releaseTraySummary();
   if (hold === "pin") menuHold = "pin";
   else if (!menuHold) menuHold = hold || "hover";
   menuPage = "menu";
   const st = menuStateNow();
   const { wasOpen, tipWin, arrow, pointerAt } = await placeMenuOverlay(
-    MENU_W,
+    menuWidth(st.locale),
     menuPanelHeight(st),
     reposition
   );
@@ -2833,16 +3194,24 @@ async function showPanelMenu(reposition = true, hold) {
 }
 
 async function showProvidersPanel(reposition = true) {
+  releaseTraySummary();
   // 提供商面板要改窗口宽高；悬停态在 Windows 上会因误报 leave 闪一下关掉。
   pinOpenMenu();
   menuPage = "providers";
   const st = {
-    locale: isZh() ? "zh" : "en",
+    locale: currentLocale(),
     visibleProviders: normalizeVisible(prefs.visibleProviders),
+    visibleMetrics: normalizeVisibleMetrics(prefs.visibleMetrics),
+    providerMetrics: Object.fromEntries(
+      snaps.map((snap) => [
+        snap.id,
+        (snap.metrics || []).map((metric) => ({ id: metric.id, label: metric.label })),
+      ]),
+    ),
   };
   const { wasOpen, tipWin, arrow, pointerAt } = await placeMenuOverlay(
     PROVIDERS_W,
-    providersPanelHeight(),
+    providersPanelHeight(st),
     reposition
   );
   await api().event.emit("usagebar-tip", {
@@ -3091,6 +3460,8 @@ async function startBar() {
   await api().event.listen("usagebar-prefs", (e) => {
     if (!e.payload) return;
     const prev = (prefs.visibleProviders || []).join(",");
+    const prevMetrics = JSON.stringify(normalizeVisibleMetrics(prefs.visibleMetrics));
+    const prevEdge = prefs.edge;
     const prevAuto = !!prefs.autoCheckUpdate;
     const prevValue = prefs.displayValue;
     const prevBlurOn = clampBarBlur(prefs.barBlur) > 0;
@@ -3098,11 +3469,19 @@ async function startBar() {
     applyLocale();
     applyBarLook();
     if (prevAuto !== prefs.autoCheckUpdate) applyAutoUpdatePref();
-    if (prev !== prefs.visibleProviders.join(",")) {
+    if (prevEdge !== prefs.edge) {
+      invalidatePopupGeometry();
+      renderBar();
+      placeWindows()
+        .then(() => (menuOpen ? showPanelMenu(true) : null))
+        .catch((err) => console.error(err));
+    } else if (prev !== prefs.visibleProviders.join(",")) {
       snaps = slotsFrom(snaps.filter((s) => s.id), true);
       renderBar();
       placeWindows().catch((err) => console.error(err));
       refresh().catch((err) => console.error(err));
+    } else if (prevMetrics !== JSON.stringify(prefs.visibleMetrics)) {
+      renderBar();
     } else if (prevValue !== prefs.displayValue) {
       paintShownPercents();
       if (hovered) renderTip().catch((err) => console.error(err));
@@ -3112,6 +3491,7 @@ async function startBar() {
         .then((frame) => showUsageTip(frame))
         .catch((err) => console.error(err));
     }
+    syncTraySummary();
   });
   await api().event.listen("usagebar-over", (e) => {
     setBarHot(!!e.payload);
@@ -3158,9 +3538,22 @@ async function startBar() {
     setHovered(id).catch((err) => console.error(err));
   });
   await api().event.listen("usagebar-tip-hover", (e) => {
+    if (traySummaryOpen) {
+      traySummaryHot = !!e.payload;
+      if (traySummaryHot) cancelTraySummaryClose();
+      else scheduleTraySummaryClose();
+      return;
+    }
     if (menuHold !== "hover") return;
     if (e.payload) cancelHoverMenuClose();
     else scheduleHoverMenuClose();
+  });
+  await api().event.listen("usagebar-tray-hover", (e) => {
+    if (e.payload?.show) {
+      showTraySummary(e.payload.rect).catch((err) => console.error(err));
+    } else {
+      scheduleTraySummaryClose();
+    }
   });
   await api().event.listen("usagebar-reset-ack", (e) => {
     closeResetToast(e.payload).catch((err) => console.error(err));
@@ -3436,7 +3829,7 @@ function paintUsageCard(payload) {
   const card = document.getElementById("tip-card");
   card.dataset.resetId = notice ? snap.id : "";
   card.dataset.creditId = soon ? snap.id : "";
-  card.classList.remove("update-only", "update-notes", "menu-card", "tip-card-fade");
+  card.classList.remove("update-only", "update-notes", "menu-card", "tray-summary-card", "tip-card-fade");
   card.innerHTML = `
     ${close}
     <div class="card-head">
@@ -3453,18 +3846,59 @@ function paintUsageCard(payload) {
   tip.classList.toggle("hot", tipHot);
 }
 
+function traySummaryHtml(items) {
+  const rows = (items || [])
+    .map((snap) => {
+      const metrics = chooseCompactMetrics(snap, prefs.visibleMetrics?.[snap.id] || []);
+      const values = metrics.length
+        ? metrics
+            .map(
+              (metric) => `<span><small>${escapeHtml(compactMetricLabel(metric, currentLocale()))}</small><b>${compactValue(metric.percent)}</b></span>`,
+            )
+            .join("")
+        : snap.headlinePercent != null
+          ? `<span><b>${compactValue(snap.headlinePercent)}</b></span>`
+          : `<em>${escapeHtml(safeTrayStatus(snap))}</em>`;
+      return `<div class="tray-provider">
+        <span class="tray-provider-name">${escapeHtml(vendorName(snap.id))}</span>
+        <span class="tray-provider-values">${values}</span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="tray-summary-title">UsageBar</div><div class="tray-summary-list">${rows}</div>`;
+}
+
 function paintTip(payload) {
   if (!payload?.show) {
     resetTipLayout();
     setWindowBlur("tip", 0);
     return;
   }
-  prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  prefs.locale = normalizeLocale(payload.locale);
   if (payload.displayValue) {
     prefs.displayValue = payload.displayValue === "remaining" ? "remaining" : "used";
   }
+  if (payload.kind === "tray-summary") {
+    prefs.visibleMetrics = normalizeVisibleMetrics(payload.visibleMetrics);
+    applyLocale();
+    clearTipSlide();
+    const root = document.getElementById("tip-root");
+    const tip = document.getElementById("tip");
+    const card = document.getElementById("tip-card");
+    root.classList.remove("menu-backdrop");
+    card.dataset.resetId = "";
+    card.dataset.creditId = "";
+    card.className = "card tray-summary-card";
+    card.innerHTML = traySummaryHtml(payload.snaps);
+    tip.className = "tip tray-summary-tip arrow-" + (payload.arrow || "down");
+    document.getElementById("tip-pointer").hidden = true;
+    paintOverlayChrome();
+    return;
+  }
   if (payload.kind === "providers" && payload.state?.visibleProviders) {
     prefs.visibleProviders = normalizeVisible(payload.state.visibleProviders);
+    prefs.visibleMetrics = normalizeVisibleMetrics(payload.state.visibleMetrics);
+    providerMetricOptions = payload.state.providerMetrics || {};
   }
   applyLocale();
   const ptr = document.getElementById("tip-pointer");
@@ -3475,7 +3909,7 @@ function paintTip(payload) {
     const card = document.getElementById("tip-card");
     root.classList.add("menu-backdrop");
     card.dataset.resetId = "";
-    card.classList.remove("update-only", "update-notes");
+    card.classList.remove("update-only", "update-notes", "tray-summary-card");
     card.classList.add("menu-card");
     card.classList.toggle("providers-card", payload.kind === "providers");
     card.innerHTML =
@@ -3484,7 +3918,7 @@ function paintTip(payload) {
     if (payload.cardX != null && payload.cardY != null) {
       tip.style.left = `${payload.cardX}px`;
       tip.style.top = `${payload.cardY}px`;
-      tip.style.width = `${payload.cardW || MENU_W}px`;
+      tip.style.width = `${payload.cardW || menuWidth(payload.locale)}px`;
       tip.style.height = `${payload.cardH || 0}px`;
     }
     if (ptr) {
@@ -3520,18 +3954,18 @@ function paintUpdateCard(payload) {
     setWindowBlur("update", 0);
     return;
   }
-  prefs.locale = payload.locale === "zh" ? "zh" : "en";
+  prefs.locale = normalizeLocale(payload.locale);
   applyLocale();
   const ptr = document.getElementById("tip-pointer");
   if (ptr) ptr.hidden = true;
   const card = document.getElementById("tip-card");
   card.dataset.resetId = "";
   card.dataset.creditId = "";
-  card.classList.remove("menu-card", "update-only", "tip-card-fade");
+  card.classList.remove("menu-card", "tray-summary-card", "update-only", "tip-card-fade");
   card.classList.add("update-notes");
   const notes = notesHtml(payload.notes);
   card.innerHTML = `
-    <button type="button" class="tip-close" data-close-update="1" aria-label="Close">×</button>
+    <button type="button" class="tip-close" data-close-update="1" aria-label="${t().close}">×</button>
     <div class="card-head">
       <div class="title">${t().whatsNew}</div>
     </div>
@@ -3642,12 +4076,20 @@ async function startTip() {
     if (!card?.classList.contains("providers-card")) return;
     card.innerHTML = providersPanelHtml({
       visibleProviders: normalizeVisible(prefs.visibleProviders),
+      visibleMetrics: normalizeVisibleMetrics(prefs.visibleMetrics),
+      providerMetrics: providerMetricOptions,
     });
     paintOverlayChrome();
   };
   const saveVisibleProviders = (next) => {
     prefs.visibleProviders = normalizeVisible(next);
     invoke("set_visible_providers", { ids: prefs.visibleProviders })
+      .then(() => paintProvidersCard())
+      .catch((err) => console.error(err));
+  };
+  const saveVisibleMetrics = (next) => {
+    prefs.visibleMetrics = normalizeVisibleMetrics(next);
+    invoke("set_visible_metrics", { selections: prefs.visibleMetrics })
       .then(() => paintProvidersCard())
       .catch((err) => console.error(err));
   };
@@ -3687,6 +4129,30 @@ async function startTip() {
     applyLookSlider(range.dataset.look, Number(range.value));
   });
   tipRoot.addEventListener("change", (e) => {
+    const auto = e.target.closest("input[data-metric-auto]");
+    if (auto && document.getElementById("tip-card")?.classList.contains("providers-card")) {
+      const next = normalizeVisibleMetrics(prefs.visibleMetrics);
+      delete next[auto.dataset.metricAuto];
+      saveVisibleMetrics(next);
+      return;
+    }
+    const metric = e.target.closest("input[data-metric]");
+    if (metric && document.getElementById("tip-card")?.classList.contains("providers-card")) {
+      const provider = metric.dataset.provider;
+      const next = normalizeVisibleMetrics(prefs.visibleMetrics);
+      let selected = (next[provider] || []).filter((id) =>
+        (providerMetricOptions[provider] || []).some((option) => option.id === id),
+      );
+      if (metric.checked) {
+        if (!selected.includes(metric.dataset.metric) && selected.length < 2) selected.push(metric.dataset.metric);
+      } else {
+        selected = selected.filter((id) => id !== metric.dataset.metric);
+      }
+      if (selected.length) next[provider] = selected;
+      else delete next[provider];
+      saveVisibleMetrics(next);
+      return;
+    }
     const input = e.target.closest("input[data-toggle]");
     if (!input || !document.getElementById("tip-card")?.classList.contains("providers-card")) return;
     const id = input.dataset.toggle;
