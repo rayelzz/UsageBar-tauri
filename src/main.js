@@ -63,7 +63,7 @@ const BAR_THICK = 46;
 const BAR_PAD = 44;
 const BAR_SLOT = 48;
 const BAR_H_THICK = 40;
-const BAR_H_BASE = 24;
+const BAR_H_BASE = 42;
 const BAR_H_SLOT = 59;
 const GEAR_R = 14;
 const GEAR_CARVE = GEAR_R + 4.5;
@@ -710,8 +710,8 @@ function padding(edge) {
   switch (edge) {
     case "right": return { t: 20, b: 20 + g, l: 6, r: 4 };
     case "left": return { t: 20, b: 20 + g, l: 4, r: 6 };
-    case "top": return { t: 5, b: 7, l: 18, r: 12 + g };
-    case "bottom": return { t: 7, b: 5, l: 18, r: 12 + g };
+    case "top": return { t: 5, b: 7, l: 24, r: 24 + g };
+    case "bottom": return { t: 7, b: 5, l: 24, r: 24 + g };
     default: return { t: 16, b: 16 + g, l: 5, r: 5 };
   }
 }
@@ -3241,6 +3241,7 @@ function clearTipSlide() {
   mover.style.transform = "";
   mover.style.left = "";
   mover.style.top = "";
+  mover.style.width = "";
   mover.style.height = "";
   delete mover.dataset.sliding;
   document.getElementById("tip-card")?.classList.remove("tip-card-fade");
@@ -3252,6 +3253,7 @@ function applyTipSlide(s) {
   if (!root || !mover || !s) return;
   root.classList.add("tip-slide-stage");
   root.classList.toggle("tip-pin-bottom", s.pin === "bottom");
+  mover.style.width = `${s.w}px`;
   const x = s.x;
   const y = s.pin === "bottom" ? 0 : s.y;
   const ease = "cubic-bezier(0.16, 1, 0.3, 1)";

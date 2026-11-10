@@ -12,7 +12,7 @@ const BAR_THICK: f64 = 46.0;
 const BAR_PAD: f64 = 44.0;
 const BAR_SLOT: f64 = 48.0;
 const BAR_H_THICK: f64 = 40.0;
-const BAR_H_BASE: f64 = 24.0;
+const BAR_H_BASE: f64 = 42.0;
 const BAR_H_SLOT: f64 = 59.0;
 /// 圆环样式末尾追加的设置区长度：0.0.9 条身原样结束，其后留空放悬空齿轮舱。
 const GEAR_ALONG: f64 = 22.0;
@@ -359,7 +359,7 @@ fn hover_id(
     let (inset_start, inset_end) = if vertical {
         (20.0, 20.0 + GEAR_ALONG)
     } else {
-        (18.0, 12.0 + GEAR_ALONG)
+        (24.0, 24.0 + GEAR_ALONG)
     };
     let along = if vertical { ph / scale } else { pw / scale };
     let coord = if vertical { local_y } else { local_x };
