@@ -62,6 +62,7 @@ pub const CATALOG: &[&str] = &[
     "copilot",
     "gemini",
     "antigravity",
+    "opencode-go",
 ];
 pub const SLOT_MIN: usize = 1;
 pub const SLOT_MAX: usize = 10;
