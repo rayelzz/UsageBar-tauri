@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README_CN.md)
 
-A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **ZCode**, **Claude**, **Copilot**, **Gemini**, and **Antigravity**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
+A tiny edge bar that shows AI plan usage for **Codex**, **Cursor**, **Grok**, **GLM**, and optionally **ZCode**, **Claude**, **Copilot**, **Gemini**, **Antigravity**, and **OpenCode Go**. It reads local login state only, talks to each official API, and never sends your chats through a third-party server.
 
 macOS 12+ · Windows · Linux · MIT License · [Download latest](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
@@ -60,6 +60,7 @@ UsageBar does **not** estimate anything. It reuses credentials already on this c
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`, or `gh` `hosts.yml`, or `GITHUB_TOKEN` | GitHub `copilot_internal/user` | Monthly capped snapshots (usually Premium) + reset date |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | Per-model remaining fraction + reset |
 | **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | Per-model remaining fraction + reset |
+| **OpenCode Go** | `~/.local/share/opencode/opencode.db` credential, `~/.local/share/opencode/auth.json`, or `OPENCODE_API_KEY` | `opencode.ai/zen/go/v1/usage` | 5-hour + weekly + monthly limits, each with its reset time |
 
 Cursor session file:
 
@@ -86,7 +87,7 @@ Needs a working login **on that same machine** for whichever tools you show. The
    ```
 
    The “UsageBar.app is damaged” dialog is Gatekeeper quarantine, not a broken download. Do not move it to the Trash.
-3. Sign in to the tools you want to watch (Codex CLI, Cursor, Grok CLI, GLM, Claude Code, GitHub Copilot, Gemini CLI, Antigravity). UsageBar will pick up those sessions.
+3. Sign in to the tools you want to watch (Codex CLI, Cursor, Grok CLI, GLM, Claude Code, GitHub Copilot, Gemini CLI, Antigravity, OpenCode Go). UsageBar will pick up those sessions.
 
 Build from source:
 
@@ -136,6 +137,9 @@ Expected. Credentials stay on each machine. They need their own logins for the t
 
 **Claude / Copilot / Gemini / Antigravity shows “no data”.**  
 Sign in with that tool’s official CLI or editor on this computer first. Claude reads Keychain / `~/.claude/.credentials.json`. Copilot reads `~/.config/github-copilot`. Gemini reads `~/.gemini/oauth_creds.json`. Antigravity reads `~/.gemini/antigravity-cli/antigravity-oauth-token`. UsageBar does not estimate tokens from local logs.
+
+**OpenCode Go shows “no data” or “login not found”.**  
+UsageBar reads the key OpenCode saved in `~/.local/share/opencode/opencode.db` (or `~/.local/share/opencode/auth.json`), then `OPENCODE_API_KEY`. Run `/connect` in OpenCode and choose OpenCode Go, or export the key yourself. A key without an active Go plan shows no data.
 
 **Does UsageBar upload chats or package my tokens?**  
 No. It only reads local session files / env keys and calls official usage APIs. Tokens are never bundled into the installer.

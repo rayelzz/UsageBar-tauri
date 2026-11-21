@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README_CN.md)
 
-贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok**、**GLM**，也可在 **提供商…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
+贴在屏幕边缘的 AI 用量圆环条。默认显示 **Codex**、**Cursor**、**Grok**、**GLM**，也可在 **提供商…** 里换成 **ZCode**、**Claude**、**Copilot**、**Gemini**、**Antigravity**、**OpenCode Go**。平时占位很小，悬停某个圆环看明细和重置时间。可拖到任意位置，靠近边缘自动吸附。只读本机登录态，只请求各家官方接口，不会把对话发到第三方服务器。
 
 macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github.com/rayelzz/UsageBar-tauri/releases/latest)
 
@@ -60,6 +60,7 @@ macOS 12+ · Windows · Linux · MIT License · [下载最新版](https://github
 | **Copilot** | `~/.config/github-copilot/apps.json` / `hosts.json`，或 `gh` 的 `hosts.yml`，或 `GITHUB_TOKEN` | GitHub `copilot_internal/user` | 有上限的月额度（通常是 Premium）+ 重置日期 |
 | **Gemini** | `~/.gemini/oauth_creds.json` | Cloud Code Assist `retrieveUserQuota` | 各模型剩余比例 + 重置 |
 | **Antigravity** | `~/.gemini/antigravity-cli/antigravity-oauth-token` | Cloud Code Assist `fetchAvailableModels` | 各模型剩余比例 + 重置 |
+| **OpenCode Go** | `~/.local/share/opencode/opencode.db` 里的凭证、`~/.local/share/opencode/auth.json`，或 `OPENCODE_API_KEY` | `opencode.ai/zen/go/v1/usage` | 5 小时 + 周 + 月额度，各自带重置时间 |
 
 Cursor 会话文件位置：
 
@@ -86,7 +87,7 @@ Cursor 会话文件位置：
    ```
 
    「UsageBar.app 已损坏」是系统隔离标记，不是文件坏了。不要点「移到废纸篓」。
-3. 照常登录要用的工具（Codex CLI、Cursor、Grok CLI、GLM、Claude Code、GitHub Copilot、Gemini CLI、Antigravity），UsageBar 会读这些登录态。
+3. 照常登录要用的工具（Codex CLI、Cursor、Grok CLI、GLM、Claude Code、GitHub Copilot、Gemini CLI、Antigravity、OpenCode Go），UsageBar 会读这些登录态。
 
 从源码打包：
 
@@ -126,6 +127,9 @@ UsageBar 从 Cursor 本机 `state.vscdb` 读 `cursorAuth/accessToken`（JWT 往�
 
 **Claude / Copilot / Gemini / Antigravity 显示「暂无数据」？**  
 先在这台电脑用对应官方 CLI / 编辑器登录。Claude 读钥匙串或 `~/.claude/.credentials.json`，Copilot 读 `~/.config/github-copilot`，Gemini 读 `~/.gemini/oauth_creds.json`，Antigravity 读 `~/.gemini/antigravity-cli/antigravity-oauth-token`。UsageBar 不会从本地日志估算 token。
+
+**OpenCode Go 显示「暂无数据」或「未找到登录信息」？**  
+UsageBar 先读 OpenCode 保存在 `~/.local/share/opencode/opencode.db` 里的 Key（找不到再读 `~/.local/share/opencode/auth.json`），最后读 `OPENCODE_API_KEY`。请在 OpenCode 里运行 `/connect` 选择 OpenCode Go，或自己导出 Key。Key 有效但没有 Go 套餐时显示暂无数据。
 
 **会不会上传对话，或把 token 打进安装包？**  
 不会。只读本机会话文件 / 环境变量，只请求官方用量接口。安装包里没有账号。

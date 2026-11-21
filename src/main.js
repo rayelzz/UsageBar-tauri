@@ -56,6 +56,14 @@ const ICONS = {
       "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2.4a7.6 7.6 0 1 1 0 15.2 7.6 7.6 0 0 1 0-15.2zM3.2 12c2.2-3.6 6.2-5.8 8.8-5.8s6.6 2.2 8.8 5.8c-2.2 3.6-6.2 5.8-8.8 5.8S5.4 15.6 3.2 12z",
     ],
   },
+  "opencode-go": {
+    viewBox: "0 0 240 300",
+    evenOdd: false,
+    d: [
+      "M180 240H60V120H180V240Z",
+      "M180 60H60V240H180V60ZM240 300H0V0H240V300Z",
+    ],
+  },
 };
 ICONS.zcode = ICONS.glm;
 
@@ -85,6 +93,7 @@ const VENDORS = {
   copilot: "Copilot",
   gemini: "Gemini",
   antigravity: "Antigravity",
+  "opencode-go": "OpenCode Go",
 };
 const CATALOG_IDS = Object.keys(VENDORS);
 const SLOT_MIN = 1;

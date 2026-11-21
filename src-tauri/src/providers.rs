@@ -2100,6 +2100,113 @@ fn cc_switch_glm_key() -> Option<String> {
     None
 }
 
+// MARK: OpenCode Go
+
+fn opencode_key_from_entry(entry: &Value) -> Option<String> {
+    entry
+        .get("key")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn opencode_key_from_credential(text: &str) -> Option<String> {
+    opencode_key_from_entry(&serde_json::from_str(text).ok()?)
+}
+
+fn opencode_go_key_from_db() -> Option<String> {
+    let db = home().join(".local/share/opencode/opencode.db");
+    if !db.exists() {
+        return None;
+    }
+    let conn = Connection::open_with_flags(&db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let value = conn
+        .query_row(
+            "SELECT value FROM credential \
+             WHERE integration_id = 'opencode-go' AND (active IS NULL OR active = 1) \
+             ORDER BY time_updated DESC LIMIT 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()?;
+    opencode_key_from_credential(&value)
+}
+
+fn opencode_go_key_from_auth() -> Option<String> {
+    let text = fs::read_to_string(home().join(".local/share/opencode/auth.json")).ok()?;
+    let auth: Value = serde_json::from_str(&text).ok()?;
+    auth.get("opencode-go").and_then(opencode_key_from_entry)
+}
+
+fn opencode_go_key() -> Option<String> {
+    opencode_go_key_from_db()
+        .or_else(opencode_go_key_from_auth)
+        .or_else(|| env_or_shell("OPENCODE_API_KEY"))
+}
+
+fn fetch_opencode_go() -> ProviderSnapshot {
+    let Some(key) = opencode_go_key() else {
+        return empty("opencode-go", "OpenCode Go Usage", "login_not_found");
+    };
+    let headers = [
+        ("Authorization", format!("Bearer {key}")),
+        ("Accept", "application/json".into()),
+        ("User-Agent", "UsageBar/1.1".into()),
+    ];
+    match http_get_json("https://opencode.ai/zen/go/v1/usage", &headers) {
+        Ok((200, json)) => parse_opencode_go(json),
+        Ok((401, _)) => empty("opencode-go", "OpenCode Go Usage", "auth"),
+        Ok((403, _)) => empty("opencode-go", "OpenCode Go Usage", "no_quota"),
+        Ok((code, _)) => empty(
+            "opencode-go",
+            "OpenCode Go Usage",
+            &format!("api_error:{code}"),
+        ),
+        Err(e) => empty("opencode-go", "OpenCode Go Usage", &e),
+    }
+}
+
+fn parse_opencode_go(json: Value) -> ProviderSnapshot {
+    let usage = json.get("usage").unwrap_or(&json);
+    let mut metrics = Vec::new();
+    for (id, label) in [
+        ("rolling", "5-hour window"),
+        ("weekly", "Weekly limit"),
+        ("monthly", "Monthly limit"),
+    ] {
+        let Some(window) = usage.get(id) else {
+            continue;
+        };
+        let Some(percent) = json_f64(window.get("percent")) else {
+            continue;
+        };
+        metrics.push(UsageMetric {
+            id: id.into(),
+            label: label.into(),
+            percent,
+            resets_at: window.get("resetsAt").and_then(parse_date),
+        });
+    }
+    ProviderSnapshot {
+        id: "opencode-go".into(),
+        title: "OpenCode Go Usage".into(),
+        headline_percent: metrics
+            .iter()
+            .find(|m| m.id == "rolling")
+            .map(|m| m.percent),
+        error: if metrics.is_empty() {
+            Some("no_quota".into())
+        } else {
+            None
+        },
+        metrics,
+        updated_at: now_ms(),
+        reset_notice: None,
+        credit_notice: None,
+        reset_credits: vec![],
+    }
+}
+
 pub fn fetch_selected_each(
     ids: &[String],
     mut on_each: impl FnMut(&ProviderSnapshot),
@@ -2146,6 +2253,7 @@ fn fetch_one(id: &str) -> ProviderSnapshot {
         "copilot" => fetch_copilot(),
         "gemini" => fetch_gemini(),
         "antigravity" => fetch_antigravity(),
+        "opencode-go" => fetch_opencode_go(),
         other => empty(other, "Usage", "login_not_found"),
     }
 }
@@ -3250,17 +3358,17 @@ mod tests {
                     "title": "Full reset (Weekly + 5 hr)",
                     "status": "available",
                     "granted_at": "2026-09-01T00:16:00Z",
-                    "expires_at": "2026-09-21T00:16:00Z"
+                    "expires_at": "2099-09-21T00:16:00Z"
                 },
                 {
                     "title": "Full reset",
                     "status": "used",
-                    "expires_at": "2026-10-04T05:34:00Z"
+                    "expires_at": "2099-10-04T05:34:00Z"
                 },
                 {
                     "name": "Full reset",
                     "status": "active",
-                    "expiresAt": "2026-10-04T05:34:00Z"
+                    "expiresAt": "2099-10-04T05:34:00Z"
                 }
             ]
         }));
@@ -3292,7 +3400,7 @@ mod tests {
                         "id": "a",
                         "cardType": "FIVE_HOUR",
                         "status": "available",
-                        "expireAt": "2026-10-04T05:34:00Z"
+                        "expireAt": "2099-10-04T05:34:00Z"
                     },
                     {
                         "id": "b",
@@ -3310,7 +3418,7 @@ mod tests {
                         "id": "d",
                         "cardType": "full",
                         "status": "available",
-                        "expireTime": "2026-12-01T00:00:00Z"
+                        "expireTime": "2099-12-01T00:00:00Z"
                     }
                 ]
             }
@@ -3545,18 +3653,18 @@ mod tests {
             "data": {
                 "available_five_hour_resets": [
                     { "expire_at": 1_600_000_000_000i64 },
-                    { "expire_at": 1_790_870_399_000i64 }
+                    { "expire_at": 4_100_000_000_000i64 }
                 ],
                 "available_week_resets": [
-                    { "expire_at": 1_790_870_399_000i64 }
+                    { "expire_at": 4_100_000_000_000i64 }
                 ]
             }
         }));
         assert_eq!(credits.len(), 2);
         assert_eq!(credits[0].title, "5-hour reset");
         assert_eq!(credits[1].title, "Weekly reset");
-        assert_eq!(credits[0].expires_at, Some(1_790_870_399_000));
-        assert_eq!(credits[1].expires_at, Some(1_790_870_399_000));
+        assert_eq!(credits[0].expires_at, Some(4_100_000_000_000));
+        assert_eq!(credits[1].expires_at, Some(4_100_000_000_000));
     }
 
     #[test]
@@ -3650,5 +3758,70 @@ mod tests {
             &[]
         )
         .is_none());
+    }
+
+    #[test]
+    fn opencode_go_maps_all_three_windows() {
+        let json = json!({
+            "usage": {
+                "rolling": {
+                    "status": "ok",
+                    "percent": 3,
+                    "resetsAt": "2026-11-19T13:23:27.000Z"
+                },
+                "weekly": {
+                    "status": "rate-limited",
+                    "percent": 55.5,
+                    "resetsAt": "2026-11-23T00:00:00.000Z"
+                },
+                "monthly": {
+                    "status": "ok",
+                    "percent": 2,
+                    "resetsAt": "2026-12-18T05:33:17.000Z"
+                }
+            }
+        });
+        let snap = parse_opencode_go(json);
+        assert_eq!(snap.id, "opencode-go");
+        assert_eq!(snap.error, None);
+        assert_eq!(snap.headline_percent, Some(3.0));
+        assert_eq!(snap.metrics.len(), 3);
+        assert_eq!(snap.metrics[0].id, "rolling");
+        assert_eq!(snap.metrics[0].label, "5-hour window");
+        assert_eq!(snap.metrics[0].percent, 3.0);
+        assert!(snap.metrics[0].resets_at.is_some());
+        assert_eq!(snap.metrics[1].label, "Weekly limit");
+        assert_eq!(snap.metrics[1].percent, 55.5);
+        assert_eq!(snap.metrics[2].label, "Monthly limit");
+    }
+
+    #[test]
+    fn opencode_go_without_windows_is_empty() {
+        let snap = parse_opencode_go(json!({ "usage": {} }));
+        assert_eq!(snap.headline_percent, None);
+        assert_eq!(snap.error.as_deref(), Some("no_quota"));
+        assert!(snap.metrics.is_empty());
+    }
+
+    #[test]
+    fn opencode_go_without_rolling_keeps_the_ring_unknown() {
+        let snap = parse_opencode_go(json!({
+            "usage": { "weekly": { "percent": 10 } }
+        }));
+        assert_eq!(snap.headline_percent, None);
+        assert_eq!(snap.error, None);
+        assert_eq!(snap.metrics.len(), 1);
+        assert_eq!(snap.metrics[0].id, "weekly");
+    }
+
+    #[test]
+    fn opencode_go_reads_key_credentials() {
+        assert_eq!(
+            opencode_key_from_credential(r#"{"type":"key","key":"oc_sk_a"}"#).as_deref(),
+            Some("oc_sk_a")
+        );
+        assert!(opencode_key_from_credential(r#"{"type":"key","key":""}"#).is_none());
+        assert!(opencode_key_from_credential(r#"{"type":"oauth","access":"oauth_tok"}"#).is_none());
+        assert!(opencode_key_from_credential("not json").is_none());
     }
 }
