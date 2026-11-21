@@ -19,6 +19,8 @@ pub struct UpdateInfo {
     pub notes_en: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes_zh: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes_ru: Option<String>,
 }
 
 fn norm_heading(line: &str) -> String {
@@ -27,7 +29,7 @@ fn norm_heading(line: &str) -> String {
         .trim()
         .replace('\u{2019}', "'")
         .replace('\u{2018}', "'")
-        .to_ascii_lowercase()
+        .to_lowercase()
 }
 
 fn is_notes_start(line: &str, lang: &str) -> bool {
@@ -35,6 +37,7 @@ fn is_notes_start(line: &str, lang: &str) -> bool {
     match lang {
         "en" => h == "what's new" || h == "whats new",
         "zh" => h == "更新说明",
+        "ru" => h == "что нового",
         _ => false,
     }
 }
@@ -47,7 +50,15 @@ fn is_notes_stop(line: &str) -> bool {
     let h = norm_heading(line);
     matches!(
         h.as_str(),
-        "download" | "downloads" | "下载" | "what's new" | "whats new" | "更新说明"
+        "download"
+            | "downloads"
+            | "下载"
+            | "скачать"
+            | "загрузки"
+            | "what's new"
+            | "whats new"
+            | "更新说明"
+            | "что нового"
     )
 }
 
@@ -77,10 +88,11 @@ fn extract_notes_section(body: &str, lang: &str) -> Option<String> {
     None
 }
 
-pub fn parse_release_notes(body: &str) -> (Option<String>, Option<String>) {
+pub fn parse_release_notes(body: &str) -> (Option<String>, Option<String>, Option<String>) {
     (
         extract_notes_section(body, "en"),
         extract_notes_section(body, "zh"),
+        extract_notes_section(body, "ru"),
     )
 }
 
@@ -132,7 +144,7 @@ fn http_client() -> Option<reqwest::blocking::Client> {
 fn update_info(latest: &str, url: &str, notes: &str) -> UpdateInfo {
     let current = env!("CARGO_PKG_VERSION");
     let latest = latest.trim().trim_start_matches('v').to_string();
-    let (notes_en, notes_zh) = parse_release_notes(notes);
+    let (notes_en, notes_zh, notes_ru) = parse_release_notes(notes);
     UpdateInfo {
         current: current.into(),
         latest: latest.clone(),
@@ -144,6 +156,7 @@ fn update_info(latest: &str, url: &str, notes: &str) -> UpdateInfo {
         has_update: is_newer(&latest, current),
         notes_en,
         notes_zh,
+        notes_ru,
     }
 }
 
@@ -267,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_bilingual_release_notes_and_drops_download() {
+    fn parses_localized_release_notes_and_drops_download() {
         let body = r#"### What’s new
 
 - **Reset cards:** GLM and ZCode read the signed-in ZCode session.
@@ -291,10 +304,24 @@ See [CHANGELOG.md](https://example.com) for the full history.
 ### 下载
 
 - **macOS：** `aarch64.dmg`
+
+---
+
+### Что нового
+
+- **Карты сброса:** GLM и ZCode читают локальную сессию ZCode.
+- Предоплаченный баланс не является картой сброса.
+
+Полная история — в [CHANGELOG.md](https://example.com).
+
+### Скачать
+
+- **macOS:** `aarch64.dmg`
 "#;
-        let (en, zh) = parse_release_notes(body);
+        let (en, zh, ru) = parse_release_notes(body);
         let en = en.expect("en notes");
         let zh = zh.expect("zh notes");
+        let ru = ru.expect("ru notes");
         assert!(en.contains("What’s new") || en.contains("What's new"));
         assert!(en.contains("Reset cards"));
         assert!(en.contains("CHANGELOG.md"));
@@ -305,13 +332,19 @@ See [CHANGELOG.md](https://example.com) for the full history.
         assert!(zh.contains("CHANGELOG.md"));
         assert!(!zh.contains("aarch64.dmg"));
         assert!(!zh.contains("What’s new") && !zh.contains("What's new"));
+        assert!(ru.contains("Что нового"));
+        assert!(ru.contains("Карты сброса"));
+        assert!(ru.contains("CHANGELOG.md"));
+        assert!(!ru.contains("aarch64.dmg"));
+        assert!(!ru.contains("What’s new") && !ru.contains("更新说明"));
     }
 
     #[test]
     fn missing_section_is_none() {
-        let (en, zh) = parse_release_notes("### Download\n\n- dmg\n");
+        let (en, zh, ru) = parse_release_notes("### Download\n\n- dmg\n");
         assert!(en.is_none());
         assert!(zh.is_none());
+        assert!(ru.is_none());
     }
 
     #[test]
@@ -319,12 +352,17 @@ See [CHANGELOG.md](https://example.com) for the full history.
         let info = update_info(
             "v0.0.25",
             RELEASES_PAGE,
-            "### What’s new\n\n- English note.\n\n### 更新说明\n\n- 中文说明。\n",
+            "### What’s new\n\n- English note.\n\n### 更新说明\n\n- 中文说明。\n\n### Что нового\n\n- Русское описание.\n",
         );
         assert_eq!(info.latest, "0.0.25");
         assert_eq!(info.current, current_version());
         assert_eq!(info.has_update, is_newer("0.0.25", &info.current));
         assert!(info.notes_en.as_deref().unwrap_or("").contains("English note"));
         assert!(info.notes_zh.as_deref().unwrap_or("").contains("中文说明"));
+        assert!(info
+            .notes_ru
+            .as_deref()
+            .unwrap_or("")
+            .contains("Русское описание"));
     }
 }

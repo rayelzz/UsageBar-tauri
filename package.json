@@ -1,12 +1,13 @@
 {
   "name": "usagebar",
   "private": true,
-  "version": "0.0.28",
+  "version": "0.0.30",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "test": "node --check src/main.js && node --test tests/*.test.js"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

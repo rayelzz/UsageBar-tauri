@@ -4842,7 +4842,7 @@ dependencies = [
 
 [[package]]
 name = "usagebar"
-version = "0.0.28"
+version = "0.0.30"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -4863,6 +4863,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

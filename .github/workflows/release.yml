@@ -36,7 +36,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - run: npm install
+      - run: npm ci
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,21 +45,24 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: UsageBar v__VERSION__
-          # What’s new / 更新说明 are shown in the in-app update card.
-          # Keep those two sections short. Put download / xattr / Gatekeeper
-          # text only under Download / 下载, never in the notes sections.
+          # What’s new / 更新说明 / Что нового are shown in the in-app update card.
+          # Keep those sections short. Put download / xattr / Gatekeeper
+          # text only under Download / 下载 / Скачать, never in the notes sections.
           releaseBody: |
             ### What’s new
 
-            - **Windows: Providers panel stays open.** Opening **Providers…** from a hover-opened gear menu no longer flashes shut when the tip window resizes ([#7](https://github.com/rayelzz/UsageBar-tauri/issues/7)). Hover the gear still closes on move-away; clicking in the panel or right-clicking the bar pins it.
+            - Add a guided multilingual Windows installer with an explicit Start with Windows option and no automatic post-install launch.
+            - Show the session / 5-hour and weekly quotas together as two compact values, with per-provider Auto or explicit metric selection.
+            - Add cached quota summaries and full controls to the tray, Russian localization, and edge-aware cards for every dock position.
+            - Improve current ZCode/z.ai, GitHub Copilot, and Windows Gemini Desktop session discovery while preserving every existing provider.
 
-            See [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md) for the full history.
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for the full history.
 
             ### Download
 
             - **macOS Apple Silicon (M1/M2/M3/M4):** `aarch64.dmg`
             - **macOS Intel:** `x64.dmg`
-            - **Windows:** `x64-setup.exe`
+            - **Windows:** `x64-setup.exe` (guided installer)
             - **Linux:** `.AppImage` or `.deb`
 
             macOS builds are ad-hoc signed (not notarized). After copying `UsageBar.app` to Applications, run:
@@ -75,15 +78,18 @@ jobs:
 
             ### 更新说明
 
-            - **Windows 上提供商面板不再闪关。** 悬停打开齿轮菜单后再点 **提供商…**，tip 改尺寸时不会立刻关掉（[#7](https://github.com/rayelzz/UsageBar-tauri/issues/7)）。悬停齿轮仍是移开关闭；点进面板或右键条会钉住。
+            - 新增多语言 Windows 安装向导，可明确选择随 Windows 启动，并且安装完成后不会自动运行应用。
+            - 同时显示会话 / 5 小时与周额度两个紧凑数字，并可为每个提供商使用自动或明确的额度窗口选择。
+            - 托盘加入缓存额度摘要和完整控制，新增俄语界面，所有贴边方向的卡片都会朝屏幕内侧打开。
+            - 改进新版 ZCode/z.ai、GitHub Copilot 与 Windows Gemini Desktop 会话发现，同时保留全部现有提供商。
 
-            完整记录见 [CHANGELOG.md](https://github.com/rayelzz/UsageBar-tauri/blob/main/CHANGELOG.md)。
+            完整记录见 [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)。
 
             ### 下载
 
             - **macOS 苹果芯片（M 系列）：** `aarch64.dmg`
             - **macOS Intel：** `x64.dmg`
-            - **Windows：** `x64-setup.exe`
+            - **Windows：** `x64-setup.exe`（引导式安装程序）
             - **Linux：** `.AppImage` 或 `.deb`
 
             macOS 第一次请先拖到「应用程序」，再在终端执行：
@@ -94,6 +100,35 @@ jobs:
             ```
 
             弹「已损坏」是隔离标记，不是文件坏了。
+
+            ---
+
+            ### Что нового
+
+            - Добавлен полноценный многоязычный мастер установки Windows с выбором автозапуска и без автоматического запуска приложения после установки.
+            - Одновременно показываются два компактных значения: текущая/5-часовая сессия и недельный лимит. Для каждого провайдера доступны автоматический или явный выбор окон.
+            - В трее появились сводка лимитов и полное управление, добавлена русская локализация, а карточки открываются внутрь экрана при любом положении панели.
+            - Улучшено определение актуальных сессий ZCode/z.ai, GitHub Copilot и Gemini Desktop в Windows без удаления существующих провайдеров.
+
+            Полная история — в [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
+
+            ### Скачать
+
+            - **macOS Apple Silicon (M1/M2/M3/M4):** `aarch64.dmg`
+            - **macOS Intel:** `x64.dmg`
+            - **Windows:** `x64-setup.exe` (мастер установки)
+            - **Linux:** `.AppImage` или `.deb`
+
+            Сборки macOS подписаны ad-hoc и не нотарифицированы Apple. После копирования `UsageBar.app` в Applications выполните:
+
+            ```
+            xattr -cr /Applications/UsageBar.app
+            open /Applications/UsageBar.app
+            ```
+
+            Сообщение о повреждении приложения означает карантин Gatekeeper, а не повреждённый файл.
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          # Upstream uses its updater signing secret. Forks without that secret
+          # still publish installable, unsigned packages on their Releases page.
+          args: ${{ matrix.args }} ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' && '--no-sign' || '' }}

@@ -1,10 +1,27 @@
 # Changelog
 
-[English](#english) · [中文](#中文)
+[English](#english) · [中文](#中文) · [Русский README](README_RU.md)
 
 Notable changes to UsageBar. Dates are UTC+8.
 
 ## English
+
+### 0.0.30 — 2026-10-25
+
+- **Guided Windows setup.** The NSIS package now opens a visible multilingual wizard with an explicit startup-options page, install directory, Start Menu folder, progress, and finish steps.
+- **Autostart at install time.** A fresh installation can register UsageBar to start with Windows. The choice is reflected by the existing **Open at login** setting, preserved by passive updates, and removed on uninstall.
+- **No surprise launch.** **Launch UsageBar** and **Create desktop shortcut** remain explicit finish-page choices and are unchecked by default, so closing setup does not silently turn into running the application.
+
+### 0.0.29 — 2026-10-25
+
+- **Two compact quota values.** Each provider can show the session / 5-hour and weekly values together as two plain numbers. Per-provider metric selection supports Auto or up to two explicit windows; provider visibility and order still use the complete existing catalog.
+- **Tray quota summary.** Hovering the tray icon shows cached limits, and the tray menu carries the same summary where native hover events are unavailable.
+- **Current ZCode credentials.** z.ai / ZCode now reads the encrypted Coding Plan account key used by current ZCode releases while retaining the legacy config and existing GLM key sources.
+- **Installed Copilot and Gemini sessions.** Copilot can use GitHub CLI credentials stored in the OS keychain. On Windows, Gemini can fall back from CLI OAuth to the signed-in Gemini desktop session and show the consumer Google AI plan's 5-hour and weekly limits. The standalone provider is labeled Grok CLI to distinguish it from Cursor's built-in Grok Bot allowance.
+- **Reliable Gemini Desktop reads.** UsageBar now handles multiple signed-in Google account routes and keeps a DPAPI-protected local session cache because the running desktop app locks its Chromium cookie database.
+- **Edge-aware cards.** Detail and settings cards move to the inward side after the bar is snapped to another edge, including the bottom edge.
+- **Russian documentation and update notes.** Added a complete Russian README, native Russian release-note parsing, and synchronized provider credentials, build instructions, Gemini Desktop behavior, and troubleshooting across all language versions.
+- **Fork release builds.** Tag-driven GitHub Releases use the upstream signing secret when available and automatically build unsigned installable packages in forks where that secret is intentionally unavailable.
 
 ### 0.0.28 — 2026-09-11
 
@@ -148,6 +165,23 @@ Notable changes to UsageBar. Dates are UTC+8.
 - First public build: Codex, Cursor, Grok, GLM edge bar.
 
 ## 中文
+
+### 0.0.30 — 2026-10-25
+
+- **Windows 引导式安装。** NSIS 安装包现在会显示多语言向导，包含独立的启动选项、安装目录、开始菜单目录、安装进度和完成页面。
+- **安装时选择自动启动。** 全新安装可选择让 UsageBar 随 Windows 登录自动启动；该选择会同步到应用内的**登录时打开**设置，被静默更新保留，并在卸载时删除。
+- **不再意外启动。** **启动 UsageBar**和**创建桌面快捷方式**仍是完成页面上的明确选项，并且默认不勾选；关闭安装程序不会直接变成启动应用。
+
+### 0.0.29 — 2026-10-25
+
+- **双额度紧凑显示。** 每个提供商可同时显示会话 / 5 小时额度与周额度，只保留上下排列的两个数字。每个提供商可使用自动选择，或指定最多两个额度窗口；原有完整提供商目录、显示开关和排序均保留。
+- **托盘额度摘要。** 鼠标悬停托盘图标时显示缓存额度；系统不提供原生悬停事件时，托盘菜单和提示文本仍显示同一摘要。
+- **新版 ZCode 凭据。** z.ai / ZCode 现可读取新版 ZCode 保存的加密 Coding Plan 账户密钥，同时保留旧版配置和已有 GLM 密钥来源。
+- **已安装的 Copilot 与 Gemini 会话。** Copilot 可读取由 GitHub CLI 保存在系统钥匙串中的凭据。Windows 上的 Gemini 可在 CLI OAuth 不可用时读取已登录的 Gemini 桌面会话，并显示 consumer Google AI 套餐的 5 小时与周额度。独立提供商标为 Grok CLI，以区别于 Cursor 内置的 Grok Bot 额度。
+- **可靠读取 Gemini Desktop。** UsageBar 现在会尝试多个已登录 Google 帐号路由，并保留由 DPAPI 保护的本机会话缓存，以便桌面应用锁定 Chromium cookie 数据库时仍能读取用量。
+- **贴边方向感知。** 将栏吸附到其他边缘（包括底边）后，详情卡和设置卡会移动到屏幕内侧。
+- **俄文文档与更新说明。** 新增完整俄文 README 和原生俄文 Release Notes 解析，并同步各语言版本中的提供商凭据、构建说明、Gemini Desktop 行为与故障排查。
+- **Fork 发布构建。** 标签触发的 GitHub Release 在上游签名密钥可用时照常签名；Fork 没有该密钥时会自动构建并发布可安装的未签名包。
 
 ### 0.0.28 — 2026-09-11
 

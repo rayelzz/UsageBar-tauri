@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 const SNAP: f64 = 32.0;
 const SNAP_KEEP: f64 = 48.0;
 const SNAP_SWITCH: f64 = 16.0;
-const BAR_THICK: f64 = 46.0;
+const BAR_THICK: f64 = 54.0;
 const BAR_PAD: f64 = 44.0;
 const BAR_SLOT: f64 = 48.0;
 const BAR_H_THICK: f64 = 40.0;
